@@ -1,0 +1,32 @@
+# Config (machine/env specific)
+config/dev.yaml
+config/prod.yaml
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Local scratch
+/tmp/
+scratch/

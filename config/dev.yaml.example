@@ -1,0 +1,47 @@
+# Disc Ripper - Dev environment configuration
+# Copy this file to config/dev.yaml and fill in real values.
+# config/dev.yaml is gitignored - never commit real credentials/paths if sensitive.
+
+environment: dev
+
+database:
+  host: "app-db-host"        # hostname/IP of the app/db machine
+  port: 5432
+  name: "discripper_dev"
+  user: "discripper"
+  password: "changeme"
+
+storage:
+  # NFS mount root for this environment (mounted on both ripper and app/db machines)
+  datastore_root: "/mnt/datastoredev"
+  dvd_store: "dvd_store"
+  cd_store: "cd_store"
+  raw_subfolder: "raw"
+  # Local scratch space on the RIPPER machine for dvdbackup intermediate files
+  scratch_dir: "/tmp/discripper_scratch"
+
+# Drive mappings - only relevant on the ripper machine.
+# Each drive is assigned to exactly one environment (dev or prod).
+# The ripper service for this environment will only manage drives listed here.
+drives:
+  - device: "/dev/sr0"
+    type: "dvd"
+    label: "DVD Drive 1"
+    active: true
+  - device: "/dev/sr1"
+    type: "cd"
+    label: "CD Drive 1"
+    active: true
+
+# Flask API settings
+api:
+  host: "0.0.0.0"
+  port: 5000
+  debug: true
+
+# My Movies sync (ODBC -> SQL Server, read-only)
+mymovies:
+  odbc_dsn: "MyMoviesDSN"
+  odbc_user: "myuser"
+  odbc_password: "changeme"
+  sync_interval_hours: 24

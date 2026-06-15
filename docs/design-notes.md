@@ -1,0 +1,92 @@
+# Design Notes
+
+Captures key decisions from initial planning, for context when picking up
+development (especially useful for Claude Code's `/init`).
+
+## Scope / phases
+
+1. **Phase 1 (current)**: repo skeleton, DB schema, Flask API, React tab
+   layout — done. Next: DVD ripper (dvdbackup → ISO), CD ripper
+   (cdparanoia → WAV).
+2. **Phase 2**: configurable audio encoder (WAV → MP3/FLAC), CDDB/MusicBrainz
+   metadata lookup with candidate selection UI.
+3. **Phase 3**: DVD content extraction — identify main movie title (longest
+   VTS by duration heuristic) or series episodes, transcode to configurable
+   video formats (MP4/MKV), subtitle/audio track selection. Initial focus on
+   movies (one disc per catalog entry); series/multi-disc later.
+4. **Future**: build symlink trees from metadata (human-readable names) for
+   other frontends to consume the library.
+
+## Environments
+
+- `dev` and `prod` are fully separate: separate Postgres DBs, separate NFS
+  mounts (`/mnt/datastoredev` vs `/mnt/datastore`), separate config files,
+  separate ripper service instances (each only manages drives assigned to
+  it in config).
+- Same git repo deployed as two copies of `main`
+  (`/projects/ripperdev` and `/projects/ripper`).
+- Same machine type (Fedora) for ripper and app/db machines; trusted LAN, no
+  encryption between services.
+
+## DVD ripping
+
+- Use `dvdbackup` (handles CSS decryption via libdvdcss, more resilient to
+  bad sectors than raw `dd`) to copy VIDEO_TS/AUDIO_TS to local scratch
+  (`/tmp`), then `mkisofs -dvd-video` to build the ISO, written to
+  `dvd_store/raw/{disc_id}/`.
+- Capture the disc's Volume ID / Volume Set ID as `disc_fingerprint` for
+  dedup/matching.
+
+## CD ripping
+
+- `cdparanoia` for bit-accurate WAV extraction with error correction.
+- Capture CDDB/MusicBrainz disc ID as `disc_fingerprint`.
+- Per-track `rip_quality` (good/imperfect/failed) from cdparanoia output. If
+  any track is imperfect/failed, set `discs.needs_rerip = true`. When a disc
+  with a matching fingerprint and `needs_rerip = true` is reinserted, offer
+  to re-rip (ideally just the affected tracks).
+
+## Metadata
+
+- CDDB/MusicBrainz lookups often return multiple candidates — store all of
+  them in `lookup_candidates`, let the user pick via the Data Editing tab.
+  Selection populates `discs.album_title`/`album_artist` and `cd_tracks`.
+- Compilations: `album_artist = "Various"`, per-track `artist` set
+  individually.
+- DVDs: My Movies (SQL Server via ODBC) is the source of truth for the movie
+  catalog. `mymovies_sync` periodically pulls into the `catalog` table.
+  When a DVD is ripped, the user maps the `disc` to a `catalog` entry via the
+  Data Editing tab. One catalog entry can map to multiple discs (re-rips,
+  special editions).
+
+## Storage layout
+
+```
+/mnt/datastore(dev)/
+├── dvd_store/
+│   ├── raw/{disc_id}/             # .iso
+│   └── <encode_profile>/{disc_id}/  # later phases
+└── cd_store/
+    ├── raw/{disc_id}/track01.wav...
+    └── <encode_profile>/{disc_id}/  # later phases (flac, mp3_320, ...)
+```
+
+`<encode_profile>` subfolder names come from `encode_profiles.output_subfolder`
+so adding a new encoding target doesn't require code changes.
+
+## UI tabs
+
+- **Drive Status**: one section per configured drive, current job/progress.
+- **DVD Encoders** / **CD Encoders**: active/queued encode jobs (Phase 2/3).
+- **DB Health**: library counts (DVDs, CDs, tracks), unmatched DVDs, discs
+  needing re-rip, etc. — expand over time.
+- **Data Editing**: match ripped DVDs to My Movies catalog entries, resolve
+  CDDB/MusicBrainz candidates for CDs, edit track/album metadata.
+
+## Open items for later
+
+- Ripper service implementation (drive detection, job queue worker).
+- Encoder service implementation.
+- MusicBrainz/CDDB client integration.
+- ODBC connector setup for My Movies sync (SQL Server).
+- Symlink tree generation from metadata.

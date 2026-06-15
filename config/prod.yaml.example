@@ -1,0 +1,40 @@
+# Disc Ripper - Production environment configuration
+# Copy this file to config/prod.yaml and fill in real values.
+# config/prod.yaml is gitignored - never commit real credentials/paths if sensitive.
+
+environment: prod
+
+database:
+  host: "app-db-host"
+  port: 5432
+  name: "discripper_prod"
+  user: "discripper"
+  password: "changeme"
+
+storage:
+  datastore_root: "/mnt/datastore"
+  dvd_store: "dvd_store"
+  cd_store: "cd_store"
+  raw_subfolder: "raw"
+  scratch_dir: "/tmp/discripper_scratch"
+
+drives:
+  - device: "/dev/sr0"
+    type: "dvd"
+    label: "DVD Drive 1"
+    active: true
+  - device: "/dev/sr1"
+    type: "cd"
+    label: "CD Drive 1"
+    active: true
+
+api:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+mymovies:
+  odbc_dsn: "MyMoviesDSN"
+  odbc_user: "myuser"
+  odbc_password: "changeme"
+  sync_interval_hours: 24
