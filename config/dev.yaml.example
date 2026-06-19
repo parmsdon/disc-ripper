@@ -20,18 +20,21 @@ storage:
   # Local scratch space on the RIPPER machine for dvdbackup intermediate files
   scratch_dir: "/tmp/discripper_scratch"
 
-# Drive mappings - only relevant on the ripper machine.
+# Drive mappings - only relevant on the ripper/drive machine, not the app/db machine.
 # Each drive is assigned to exactly one environment (dev or prod).
 # The ripper service for this environment will only manage drives listed here.
-drives:
-  - device: "/dev/sr0"
-    type: "dvd"
-    label: "DVD Drive 1"
-    active: true
-  - device: "/dev/sr1"
-    type: "cd"
-    label: "CD Drive 1"
-    active: true
+# On the app/db machine, leave this as an empty list.
+drives: []
+# Example drive entries (uncomment and edit on the ripper machine):
+# drives:
+#   - device: "/dev/sr0"
+#     type: "dvd"
+#     label: "DVD Drive 1"
+#     active: true
+#   - device: "/dev/sr1"
+#     type: "cd"
+#     label: "CD Drive 1"
+#     active: true
 
 # Flask API settings
 api:

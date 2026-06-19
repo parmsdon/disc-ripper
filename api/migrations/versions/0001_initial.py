@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 
 
 # revision identifiers, used by Alembic.
@@ -19,13 +20,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 # Enum type names match common/models.py
-disc_type_enum = sa.Enum("cd", "dvd", name="disctype")
-disc_status_enum = sa.Enum("queued", "ripping", "ripped", "encoding", "done", "error", name="discstatus")
-job_status_enum = sa.Enum("queued", "running", "done", "error", name="jobstatus")
-rip_quality_enum = sa.Enum("good", "imperfect", "failed", name="ripquality")
-media_type_enum = sa.Enum("movie", "series", name="mediatype")
-encode_target_enum = sa.Enum("audio", "video", name="encodetarget")
+def _enum(*values, name):
+    return PGEnum(*values, name=name, create_type=False)
 
+disc_type_enum = _enum("cd", "dvd", name="disctype")
+disc_status_enum = _enum("queued", "ripping", "ripped", "encoding", "done", "error", name="discstatus")
+job_status_enum = _enum("queued", "running", "done", "error", name="jobstatus")
+rip_quality_enum = _enum("good", "imperfect", "failed", name="ripquality")
+media_type_enum = _enum("movie", "series", name="mediatype")
+encode_target_enum = _enum("audio", "video", name="encodetarget")
+
+ALL_ENUMS = [
+    disc_type_enum,
+    disc_status_enum,
+    job_status_enum,
+    rip_quality_enum,
+    media_type_enum,
+    encode_target_enum,
+]
 
 def upgrade() -> None:
     bind = op.get_bind()

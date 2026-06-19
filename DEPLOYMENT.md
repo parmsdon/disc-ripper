@@ -19,7 +19,7 @@ sudo dnf install -y git
 ### System packages
 
 ```bash
-sudo dnf install -y python3 python3-pip postgresql postgresql-server nodejs npm
+sudo dnf install -y python3 python3-pip python3-psycopg2 postgresql postgresql-server nodejs npm
 sudo postgresql-setup --initdb
 sudo systemctl enable --now postgresql
 ```
@@ -44,8 +44,12 @@ cd ripperdev
 
 ### Python environment
 
+> **Note:** `psycopg2-binary` fails to build on newer Fedora/Python. Install
+> `python3-psycopg2` via dnf (above) and create the venv with
+> `--system-site-packages` so pip-installed packages can use it.
+
 ```bash
-python3 -m venv venv
+python3 -m venv venv --system-site-packages
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -101,7 +105,7 @@ Open `http://<app-db-host>:5173`.
 ### System packages
 
 ```bash
-sudo dnf install -y python3 python3-pip dvdbackup genisoimage cdparanoia
+sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia
 
 # libdvdcss via RPM Fusion (needed for dvdbackup to read commercial DVDs)
 sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
@@ -118,8 +122,12 @@ cd ripperdev
 
 ### Python environment
 
+> **Note:** `psycopg2-binary` fails to build on newer Fedora/Python. Install
+> `python3-psycopg2` via dnf (above) and create the venv with
+> `--system-site-packages` so pip-installed packages can use it.
+
 ```bash
-python3 -m venv venv
+python3 -m venv venv --system-site-packages
 source venv/bin/activate
 pip install -r requirements-ripper.txt
 ```
