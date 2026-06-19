@@ -21,4 +21,11 @@ export const api = {
   disc: (id) => request(`/discs/${id}`),
   drives: () => request("/drives/"),
   encodeProfiles: () => request("/encode-profiles/"),
+  saveTempName: (discId, name) =>
+    request(`/discs/${discId}/temp-name`, {
+      method: "PATCH",
+      body: JSON.stringify({ temp_name: name }),
+    }),
+  ejectDisc: (discId) =>
+    request(`/discs/${discId}/eject`, { method: "POST" }),
 };

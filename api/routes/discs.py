@@ -8,7 +8,7 @@ metadata editing endpoints will be expanded in later phases.
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import select
 
-from common.models import Disc, DiscType, DiscStatus, CDTrack
+from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -28,6 +28,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "album_title": disc.album_title,
         "album_artist": disc.album_artist,
         "needs_rerip": disc.needs_rerip,
+        "temp_name": disc.temp_name,
     }
 
 
@@ -80,3 +81,31 @@ def get_disc(disc_id):
         data["tracks"] = [_track_to_dict(t) for t in sorted(disc.tracks, key=lambda t: t.track_number)]
 
     return jsonify(data)
+
+
+@discs_bp.route("/<int:disc_id>/temp-name", methods=["PATCH"])
+def update_temp_name(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "temp_name" not in body:
+        return jsonify({"error": "Missing field: temp_name"}), 400
+
+    disc.temp_name = body["temp_name"] or None
+    session.commit()
+    return jsonify(_disc_to_dict(disc))
+
+
+@discs_bp.route("/<int:disc_id>/eject", methods=["POST"])
+def eject_disc(disc_id):
+    # Eject must run on the ripper machine where the drive is physically attached.
+    # The ripper service will expose this via its own local API in a later phase.
+    return jsonify({
+        "status": "not_implemented",
+        "message": "eject must run on ripper machine",
+    })

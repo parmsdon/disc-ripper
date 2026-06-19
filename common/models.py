@@ -134,6 +134,7 @@ class Disc(Base):
     # Set true if any track came back imperfect/failed during ripping,
     # so a re-rip can be triggered next time the disc is inserted.
     needs_rerip = Column(Boolean, default=False, nullable=False)
+    temp_name = Column(String, nullable=True)
 
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")
