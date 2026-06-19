@@ -63,9 +63,12 @@ def seed(env: str):
                 Drive.env == cfg["environment"],
             )
         )
+        raw_type = drive_cfg.get("type")
+        drive_type = DiscType(raw_type) if raw_type else None
+
         if existing:
             existing.label = drive_cfg.get("label")
-            existing.drive_type = DiscType(drive_cfg["type"])
+            existing.drive_type = drive_type
             existing.active = drive_cfg.get("active", True)
             print(f"Updated drive '{drive_cfg['device']}'")
             continue
@@ -73,7 +76,7 @@ def seed(env: str):
         session.add(Drive(
             device_path=drive_cfg["device"],
             env=cfg["environment"],
-            drive_type=DiscType(drive_cfg["type"]),
+            drive_type=drive_type,
             label=drive_cfg.get("label"),
             active=drive_cfg.get("active", True),
         ))

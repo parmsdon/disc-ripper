@@ -28,6 +28,19 @@ development (especially useful for Claude Code's `/init`).
 - Same machine type (Fedora) for ripper and app/db machines; trusted LAN, no
   encryption between services.
 
+## Media type detection
+
+At rip time, the ripper service detects what kind of disc is inserted using:
+
+```bash
+udevadm info --query=all --name=/dev/srX | grep ID_CDROM
+```
+
+Key udev properties: `ID_CDROM_DVD=1` indicates a DVD, `ID_CDROM_CD=1` indicates a CD.
+`drives.drive_type` is only a capability hint (nullable) — it can be used to exclude a drive
+from DVD or CD jobs if it's known to be CD-only, but is not required. Omitting `type` in config
+leaves it NULL and the drive is eligible for both media types.
+
 ## DVD ripping
 
 - Use `dvdbackup` (handles CSS decryption via libdvdcss, more resilient to

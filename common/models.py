@@ -83,7 +83,7 @@ class Drive(Base):
     id = Column(Integer, primary_key=True)
     device_path = Column(String, nullable=False)       # e.g. /dev/sr0
     env = Column(String, nullable=False)               # "dev" or "prod"
-    drive_type = Column(Enum(DiscType), nullable=False)
+    drive_type = Column(Enum(DiscType), nullable=True)
     label = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
 

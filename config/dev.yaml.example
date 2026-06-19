@@ -28,12 +28,12 @@ drives: []
 # Example drive entries (uncomment and edit on the ripper machine):
 # drives:
 #   - device: "/dev/sr0"
-#     type: "dvd"
-#     label: "DVD Drive 1"
+#     label: "Drive 1"
 #     active: true
+#     # type: "dvd"   # optional capability hint: "dvd" for DVD-capable, "cd" for CD-only,
+#                     # omit entirely for auto-detect at rip time
 #   - device: "/dev/sr1"
-#     type: "cd"
-#     label: "CD Drive 1"
+#     label: "Drive 2"
 #     active: true
 
 # Flask API settings
