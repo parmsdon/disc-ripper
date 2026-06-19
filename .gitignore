@@ -30,3 +30,6 @@ logs/
 # Local scratch
 /tmp/
 scratch/
+
+# Filesystem
+lost+found/
