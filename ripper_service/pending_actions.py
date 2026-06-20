@@ -41,17 +41,17 @@ def process_pending_actions(session, cfg: dict) -> None:
 
 def _handle_read_region(drive: Drive, label: str) -> None:
     result = read_region(drive.device_path)
-    region = result.get("region")
+    regions = result.get("regions")
 
     if drive.physical_drive is None:
         logger.warning("Drive %s has no linked physical_drive - cannot record region", label)
-    elif region is not None:
-        drive.physical_drive.region = region
+    elif regions is not None:
+        drive.physical_drive.region = regions
         drive.physical_drive.region_known = True
-        logger.info("Region read for %s: region %s", label, region)
+        logger.info("Region read for %s: region(s) %s", label, regions)
     else:
         logger.warning(
-            "Could not determine a single region for %s - leaving region_known unset "
+            "Could not parse region(s) for %s - leaving region_known unset "
             "for manual review. Raw output: %s",
             label, result.get("raw_output"),
         )

@@ -87,7 +87,11 @@ class PhysicalDrive(Base):
 
     id = Column(Integer, primary_key=True)
     hardware_id = Column(String, nullable=False, unique=True)
-    region = Column(Integer, nullable=True)        # 1-6, null = unknown
+    # Space-separated region digits the drive is capable of playing, e.g.
+    # "2" for a locked drive or "1 2 3 4 5 6 7 8" for a region-free drive.
+    # Not a single integer - regionset can report multiple supported
+    # regions. null = unknown.
+    region = Column(String, nullable=True)
     region_known = Column(Boolean, nullable=False, default=False)
     last_seen_at = Column(DateTime, nullable=True)
     notes = Column(String, nullable=True)           # e.g. "Samsung SH-224 - replaced 2026-06"
@@ -161,9 +165,11 @@ class Disc(Base):
     needs_rerip = Column(Boolean, default=False, nullable=False)
     temp_name = Column(String, nullable=True)
 
-    # Region of the physical drive this disc was ripped on, captured at
-    # rip time for historical record even if the drive's region changes later.
-    ripped_in_region = Column(Integer, nullable=True)
+    # Region(s) the drive supported at the time this disc was ripped, as a
+    # space-separated digit string (same format as PhysicalDrive.region).
+    # Captured as a snapshot for historical record even though the drive's
+    # region could theoretically change later (discouraged, but possible).
+    ripped_in_region = Column(String, nullable=True)
 
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")

@@ -41,6 +41,22 @@ Key udev properties: `ID_CDROM_DVD=1` indicates a DVD, `ID_CDROM_CD=1` indicates
 from DVD or CD jobs if it's known to be CD-only, but is not required. Omitting `type` in config
 leaves it NULL and the drive is eligible for both media types.
 
+## DVD region detection
+
+- `regionset <device>` (piped "n" to stdin - we only ever read, never set)
+  reports the region(s) a drive is *capable* of playing, not a single
+  fixed value. Region-locked drives report one digit (e.g. "2");
+  region-free or multi-region drives report several, e.g. "Drive plays
+  discs from this region(s): 1 2 3 4 5 6 7 8".
+- Because of this, `PhysicalDrive.region` and `Disc.ripped_in_region` are
+  stored as a space-separated digit string, not a single integer.
+  `ripped_in_region` is a snapshot of the drive's supported regions at
+  rip time, since the drive's region could theoretically be changed later
+  even though we discourage it.
+- Future region mismatch detection should check whether the disc's region
+  is a *member* of the drive's supported region list (substring/token
+  membership on the space-separated digits), not an exact match.
+
 ## DVD ripping
 
 - Use `dvdbackup` (handles CSS decryption via libdvdcss, more resilient to

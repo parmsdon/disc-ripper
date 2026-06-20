@@ -3,9 +3,12 @@ regionset-based DVD region detection.
 
 We only ever read, never set, the region - `regionset` prompts to change
 it, so stdin is always fed "n". Output format varies slightly across
-`regionset` builds, so parsing is best-effort and tolerant; ambiguous
-output (multiple regions, unset/mask, unparseable) is left as None for a
-human to review via raw_output rather than guessed at.
+`regionset` builds, so parsing is best-effort and tolerant.
+
+Drives can support more than one region (region-free or multi-region
+drives report several digits, e.g. "Drive plays discs from this
+region(s): 1 2 3 4 5 6 7 8"), so the parsed result is a space-separated
+digit string, not a single integer.
 """
 
 import logging
@@ -19,8 +22,6 @@ _RPC_PHASE_COLON_RE = re.compile(r"rpc\s*phase\s*:\s*([A-Za-z0-9]+)", re.IGNOREC
 # "...(RPC-II)" / "...(RPC II)" - parenthetical form, e.g. "Phase 2 (RPC-II)"
 _RPC_PHASE_PAREN_RE = re.compile(r"\(\s*rpc[\s-]*([A-Za-z0-9]+)\s*\)", re.IGNORECASE)
 
-_REGION_LINE_RE = re.compile(r"region\(?s?\)?[:\s]+([0-9][0-9,\s]*)", re.IGNORECASE)
-
 
 def _extract_rpc_phase(output: str):
     # Colon and parenthetical forms are unambiguous; anything looser (e.g.
@@ -29,14 +30,39 @@ def _extract_rpc_phase(output: str):
     return match.group(1) if match else None
 
 
+def _extract_regions(output: str):
+    # Confirmed real-world phrasing: "Drive plays discs from this
+    # region(s): 1 2 3 4 5 6 7 8" - space-separated, not comma-separated.
+    # Prefer a line explicitly mentioning "region(s)"; fall back to any
+    # line mentioning "region" at all, to tolerate minor wording variants.
+    lines = output.splitlines()
+
+    for line in lines:
+        if "region(s)" in line.lower():
+            digits = re.findall(r"\d+", line)
+            if digits:
+                return " ".join(digits)
+
+    for line in lines:
+        if "region" in line.lower():
+            digits = re.findall(r"\d+", line)
+            if digits:
+                return " ".join(digits)
+
+    return None
+
+
 def read_region(device_path: str) -> dict:
     """
-    Read the DVD region of the drive at device_path via `regionset`.
+    Read the DVD region(s) supported by the drive at device_path via
+    `regionset`.
 
     Returns:
         rpc_phase: str or None (e.g. "II")
-        region: int or None (None if unset, multiple regions, or
-                unparseable - raw_output has the detail for manual review)
+        regions: str or None - space-separated region digits the drive
+                 supports (e.g. "2" for a locked drive, "1 2 3 4 5 6 7 8"
+                 for a region-free drive). None if unparseable -
+                 raw_output has the detail for manual review.
         raw_output: full stdout (or an error message if the command failed)
         error: True if the command failed to run or exited nonzero
 
@@ -53,24 +79,16 @@ def read_region(device_path: str) -> dict:
     except (OSError, subprocess.TimeoutExpired) as exc:
         message = f"Failed to run regionset for {device_path}: {exc}"
         logger.warning(message)
-        return {"rpc_phase": None, "region": None, "raw_output": message, "error": True}
+        return {"rpc_phase": None, "regions": None, "raw_output": message, "error": True}
 
     output = proc.stdout or ""
 
     if proc.returncode != 0:
         message = output.strip() or proc.stderr.strip() or f"regionset exited {proc.returncode}"
         logger.warning("regionset failed for %s: %s", device_path, message)
-        return {"rpc_phase": None, "region": None, "raw_output": message, "error": True}
+        return {"rpc_phase": None, "regions": None, "raw_output": message, "error": True}
 
     rpc_phase = _extract_rpc_phase(output)
+    regions = _extract_regions(output)
 
-    region = None
-    region_match = _REGION_LINE_RE.search(output)
-    if region_match:
-        numbers = re.findall(r"\d+", region_match.group(1))
-        if len(numbers) == 1:
-            region = int(numbers[0])
-        # Multiple numbers (multi-region disc) or none parsed -> leave
-        # region=None; raw_output carries the detail for manual review.
-
-    return {"rpc_phase": rpc_phase, "region": region, "raw_output": output, "error": False}
+    return {"rpc_phase": rpc_phase, "regions": regions, "raw_output": output, "error": False}
