@@ -223,6 +223,13 @@ body {
   font-style: italic;
 }
 
+button:disabled {
+  color: var(--text-dim);
+  border-color: var(--panel-border);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .max-rippers-input {
   width: 3em;
   text-align: center;

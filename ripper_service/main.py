@@ -15,6 +15,7 @@ import os
 import time
 
 from common.config import load_config
+from common.models import Drive
 from ripper_service.db import get_session_factory
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.pending_actions import process_pending_actions
@@ -40,33 +41,44 @@ def run(cfg: dict) -> None:
             with Session() as session:
                 drive_states = sync_physical_drives(session, cfg)
 
-            for drive_cfg in cfg.get("drives", []):
-                if not drive_cfg.get("active", True):
-                    continue
+            with Session() as session:
+                for drive_cfg in cfg.get("drives", []):
+                    if not drive_cfg.get("active", True):
+                        continue
 
-                device_path = drive_cfg["device"]
-                label = drive_cfg.get("label") or device_path
-                state = drive_states.get(device_path, {})
+                    device_path = drive_cfg["device"]
+                    label = drive_cfg.get("label") or device_path
+                    state = drive_states.get(device_path, {})
 
-                info = get_drive_info(device_path)
-                media_present = info["media_present"]
-                media_type = info["media_type"]
+                    info = get_drive_info(device_path)
+                    media_present = info["media_present"]
+                    media_type = info["media_type"]
 
-                was_present = media_present_by_device.get(device_path, False)
+                    was_present = media_present_by_device.get(device_path, False)
 
-                if media_present and not was_present:
-                    if not state.get("region_known", False):
-                        logger.info(
-                            "Drive %s has unknown region - disc inserted but will NOT be "
-                            "processed for ripping. Use Read Region in the UI.",
-                            label,
-                        )
-                    else:
-                        logger.info("Disc detected in %s, type=%s", label, media_type)
-                elif was_present and not media_present:
-                    logger.info("Disc removed from %s", label)
+                    if media_present and not was_present:
+                        if not state.get("region_known", False):
+                            logger.info(
+                                "Drive %s has unknown region - disc inserted but will NOT be "
+                                "processed for ripping. Use Read Region in the UI.",
+                                label,
+                            )
+                        else:
+                            logger.info("Disc detected in %s, type=%s", label, media_type)
+                    elif was_present and not media_present:
+                        logger.info("Disc removed from %s", label)
 
-                media_present_by_device[device_path] = media_present
+                    media_present_by_device[device_path] = media_present
+
+                    # Persist current media presence so the API/UI (which has
+                    # no direct hardware access) can reflect it.
+                    drive_id = state.get("drive_id")
+                    if drive_id is not None:
+                        drive = session.get(Drive, drive_id)
+                        if drive is not None:
+                            drive.media_present = media_present
+
+                session.commit()
 
             with Session() as session:
                 process_pending_actions(session, cfg)

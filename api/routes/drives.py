@@ -28,6 +28,7 @@ def _drive_summary(drive: Drive) -> dict:
         "region": drive.physical_drive.region if drive.physical_drive else None,
         "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
         "pending_action": drive.pending_action,
+        "media_present": drive.media_present,
     }
 
 
@@ -37,7 +38,9 @@ def list_drives():
     session = Session()
     cfg = current_app.config["DISCRIPPER_CFG"]
 
-    drives = session.scalars(select(Drive).where(Drive.env == cfg["environment"])).all()
+    drives = session.scalars(
+        select(Drive).where(Drive.env == cfg["environment"]).order_by(Drive.id)
+    ).all()
 
     result = []
     for drive in drives:

@@ -109,9 +109,11 @@ function RegionBadge({ drive, onRefresh }) {
   return (
     <div className="region-row">
       <span className="status-pill queued">Region: Unknown</span>
-      {/* Always enabled for now — no disc-presence detection until the ripper
-          service exists. Once it does, disable with "Insert a disc first". */}
-      <button onClick={handleStartRead}>Read Region</button>
+      {drive.media_present ? (
+        <button onClick={handleStartRead}>Read Region</button>
+      ) : (
+        <button disabled>Insert disc to read drive region</button>
+      )}
     </div>
   );
 }

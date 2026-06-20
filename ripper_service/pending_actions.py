@@ -26,38 +26,49 @@ def process_pending_actions(session, cfg: dict) -> None:
 
     for drive in drives:
         label = drive.label or drive.device_path
+        action = drive.pending_action
 
-        if drive.pending_action == "read_region":
-            _handle_read_region(drive, label)
-        elif drive.pending_action == "eject":
-            _handle_eject(drive, label)
-        else:
-            logger.warning("Drive %s has unknown pending_action %r - clearing", label, drive.pending_action)
-
-        drive.pending_action = None
-        drive.pending_action_requested_at = None
-        session.commit()
+        try:
+            if action == "read_region":
+                _handle_read_region(drive, label)
+            elif action == "eject":
+                _handle_eject(drive, label)
+            else:
+                logger.warning("Drive %s has unknown pending_action %r - clearing", label, action)
+        except Exception:
+            # pending_action must always be cleared below, even if a handler
+            # misbehaves - otherwise the drive gets stuck showing "in
+            # progress" in the UI forever.
+            logger.exception("Unexpected error processing pending_action %r for drive %s", action, label)
+        finally:
+            drive.pending_action = None
+            drive.pending_action_requested_at = None
+            session.commit()
 
 
 def _handle_read_region(drive: Drive, label: str) -> None:
     result = read_region(drive.device_path)
     regions = result.get("regions")
+    raw_output = result.get("raw_output")
 
-    if drive.physical_drive is None:
-        logger.warning("Drive %s has no linked physical_drive - cannot record region", label)
-    elif regions is not None:
-        drive.physical_drive.region = regions
-        drive.physical_drive.region_known = True
-        logger.info("Region read for %s: region(s) %s", label, regions)
+    if regions is not None:
+        if drive.physical_drive is None:
+            logger.warning("Drive %s has no linked physical_drive - cannot record region", label)
+        else:
+            drive.physical_drive.region = regions
+            drive.physical_drive.region_known = True
+            logger.info("Region read for %s: region(s) %s", label, regions)
     else:
-        logger.warning(
-            "Could not parse region(s) for %s - leaving region_known unset "
-            "for manual review. Raw output: %s",
-            label, result.get("raw_output"),
-        )
-        drive.physical_drive.notes = result.get("raw_output")
+        # Covers both hard failures (no disc, regionset missing, nonzero
+        # exit) and successful-but-unparseable output - either way there's
+        # nothing to record automatically, so leave region_known unset and
+        # surface raw_output for manual review.
+        logger.warning("Region read failed for drive %s: %s", label, raw_output)
+        if drive.physical_drive is not None:
+            drive.physical_drive.notes = raw_output
 
-    # The disc used for the region read wasn't queued for ripping - eject it.
+    # Eject whatever was in the drive for the region read - it wasn't queued
+    # for ripping. Harmless no-op if there was no disc to begin with.
     if not eject_drive(drive.device_path):
         logger.warning("Failed to eject %s after region read", label)
 

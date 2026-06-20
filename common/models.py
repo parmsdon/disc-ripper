@@ -110,6 +110,11 @@ class Drive(Base):
     active = Column(Boolean, default=True, nullable=False)
     physical_drive_id = Column(Integer, ForeignKey("physical_drives.id"), nullable=True)
 
+    # Whether a disc is currently physically present, as last observed by
+    # the ripper service's udev poll. Null = not yet observed (e.g. no
+    # ripper service has polled this drive yet).
+    media_present = Column(Boolean, nullable=True)
+
     # DB-based command queue: the API sets these, the ripper service picks
     # them up on its next poll and clears them once executed.
     pending_action = Column(String, nullable=True)     # "read_region" or "eject", null = none
