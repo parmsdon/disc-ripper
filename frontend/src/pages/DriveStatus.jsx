@@ -87,6 +87,10 @@ function RippingToggle({ rippingEnabled, saving, onToggle }) {
   );
 }
 
+function formatRegionDisplay(region) {
+  return region ? region.replace(/\s+/g, "") : region;
+}
+
 function RegionBadge({ drive, onRefresh }) {
   const [rereading, setRereading] = useState(false);
 
@@ -111,7 +115,7 @@ function RegionBadge({ drive, onRefresh }) {
     return (
       <div className="region-cell">
         <span className={`status-pill ${drive.region_known ? "good" : "queued"}`}>
-          Region: {drive.region_known ? drive.region : "Unknown"}
+          Region: {drive.region_known ? formatRegionDisplay(drive.region) : "Unknown"}
         </span>
         <span className="pending-action-label">Reading…</span>
       </div>
@@ -121,7 +125,7 @@ function RegionBadge({ drive, onRefresh }) {
   if (drive.region_known) {
     return (
       <div className="region-cell">
-        <span className="status-pill good">Region: {drive.region}</span>
+        <span className="status-pill good">Region: {formatRegionDisplay(drive.region)}</span>
         <button className="region-reread-link" onClick={handleReread} disabled={rereading}>
           {rereading ? "Clearing…" : "Re-read"}
         </button>
