@@ -204,6 +204,10 @@ class RipJob(Base):
     error_message = Column(Text, nullable=True)
     log = Column(Text, nullable=True)
 
+    # When the countdown ends and ripping is allowed to begin. Recomputed
+    # if the job is rolled back to queued (e.g. max_rippers decreased).
+    scheduled_start = Column(DateTime, nullable=True)
+
     disc = relationship("Disc", back_populates="rip_jobs")
     drive = relationship("Drive", back_populates="rip_jobs")
 
@@ -224,3 +228,11 @@ class EncodeJob(Base):
 
     disc = relationship("Disc", back_populates="encode_jobs")
     profile = relationship("EncodeProfile", back_populates="encode_jobs")
+
+
+class Setting(Base):
+    """Generic key/value app settings (e.g. max_rippers)."""
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)

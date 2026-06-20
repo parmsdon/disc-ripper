@@ -8,12 +8,22 @@ metadata editing endpoints will be expanded in later phases.
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import select
 
-from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive
+from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus
 
 discs_bp = Blueprint("discs", __name__)
 
+_ACTIVE_JOB_STATUSES = (JobStatus.queued, JobStatus.running)
+
+
+def _active_rip_job(disc: Disc):
+    active_jobs = [j for j in disc.rip_jobs if j.status in _ACTIVE_JOB_STATUSES]
+    if not active_jobs:
+        return None
+    return max(active_jobs, key=lambda j: j.created_at)
+
 
 def _disc_to_dict(disc: Disc) -> dict:
+    active_job = _active_rip_job(disc)
     return {
         "id": disc.id,
         "type": disc.type.value if disc.type else None,
@@ -29,6 +39,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "album_artist": disc.album_artist,
         "needs_rerip": disc.needs_rerip,
         "temp_name": disc.temp_name,
+        "scheduled_start": active_job.scheduled_start.isoformat() if active_job and active_job.scheduled_start else None,
     }
 
 

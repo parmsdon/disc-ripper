@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
-from common.models import Drive, EncodeProfile, DiscType, EncodeTarget
+from common.models import Drive, EncodeProfile, DiscType, EncodeTarget, Setting
 
 
 DEFAULT_ENCODE_PROFILES = [
@@ -37,6 +37,10 @@ DEFAULT_ENCODE_PROFILES = [
     },
 ]
 
+DEFAULT_SETTINGS = [
+    {"key": "max_rippers", "value": "1"},
+]
+
 
 def seed(env: str):
     cfg = load_config(env)
@@ -54,6 +58,17 @@ def seed(env: str):
             continue
         session.add(EncodeProfile(**profile_data))
         print(f"Added encode profile '{profile_data['name']}'")
+
+    # Settings
+    for setting_data in DEFAULT_SETTINGS:
+        existing = session.scalar(
+            select(Setting).where(Setting.key == setting_data["key"])
+        )
+        if existing:
+            print(f"Setting '{setting_data['key']}' already exists, skipping")
+            continue
+        session.add(Setting(**setting_data))
+        print(f"Added setting '{setting_data['key']}' = '{setting_data['value']}'")
 
     # Drives from config
     for drive_cfg in cfg.get("drives", []):

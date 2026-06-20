@@ -1,6 +1,68 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 
+function Countdown({ scheduledStart }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!scheduledStart) {
+    return <p className="countdown">Starting…</p>;
+  }
+
+  const remainingSeconds = Math.ceil((new Date(scheduledStart).getTime() - now) / 1000);
+
+  if (remainingSeconds <= 0) {
+    return <p className="countdown">Starting…</p>;
+  }
+
+  return <p className="countdown">Starting in {remainingSeconds}s</p>;
+}
+
+function MaxRippersControl({ maxRippers, driveCount, onChange }) {
+  const [saving, setSaving] = useState(false);
+
+  async function update(newValue) {
+    const clamped = Math.max(1, newValue);
+    if (clamped === maxRippers) return;
+    setSaving(true);
+    try {
+      await api.setMaxRippers(clamped);
+      onChange();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="panel max-rippers-control">
+      <label>
+        Max simultaneous rips:{" "}
+        <button onClick={() => update(maxRippers - 1)} disabled={saving || maxRippers <= 1}>
+          −
+        </button>
+        <input
+          type="number"
+          min="1"
+          value={maxRippers}
+          disabled={saving}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            if (!Number.isNaN(parsed)) update(parsed);
+          }}
+        />
+        <button onClick={() => update(maxRippers + 1)} disabled={saving}>
+          +
+        </button>
+      </label>
+      <span className="text-dim"> (currently {maxRippers} of {driveCount} drives)</span>
+    </div>
+  );
+}
+
 function TempNameInput({ disc, onSaved }) {
   const [value, setValue] = useState(disc.temp_name || "");
   const [saving, setSaving] = useState(false);
@@ -70,7 +132,7 @@ function DrivePanel({ drive, onRefresh }) {
           </p>
 
           {disc.status === "queued" && (
-            <p className="countdown">Starting in 10s</p>
+            <Countdown scheduledStart={disc.scheduled_start} />
           )}
 
           {disc.status === "ripping" && (
@@ -96,6 +158,7 @@ function DrivePanel({ drive, onRefresh }) {
 
 export default function DriveStatus() {
   const [drives, setDrives] = useState(null);
+  const [maxRippers, setMaxRippers] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchDrives = useCallback(() => {
@@ -104,11 +167,18 @@ export default function DriveStatus() {
       .catch((e) => setError(e.message));
   }, []);
 
+  const fetchMaxRippers = useCallback(() => {
+    api.getMaxRippers()
+      .then((data) => setMaxRippers(data.max_rippers))
+      .catch((e) => setError(e.message));
+  }, []);
+
   useEffect(() => {
     fetchDrives();
+    fetchMaxRippers();
     const interval = setInterval(fetchDrives, 5000);
     return () => clearInterval(interval);
-  }, [fetchDrives]);
+  }, [fetchDrives, fetchMaxRippers]);
 
   if (error) {
     return <div className="panel"><h2>Drive Status</h2><div className="empty-state">Error loading drives: {error}</div></div>;
@@ -132,6 +202,11 @@ export default function DriveStatus() {
 
   return (
     <div>
+      <MaxRippersControl
+        maxRippers={maxRippers ?? 1}
+        driveCount={drives.length}
+        onChange={fetchMaxRippers}
+      />
       {drives.map((drive) => (
         <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} />
       ))}

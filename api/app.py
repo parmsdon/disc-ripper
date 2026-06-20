@@ -24,6 +24,7 @@ from api.routes.discs import discs_bp
 from api.routes.drives import drives_bp
 from api.routes.health import health_bp
 from api.routes.encode_profiles import encode_profiles_bp
+from api.routes.settings import settings_bp
 
 
 def create_app(env: str | None = None) -> Flask:
@@ -49,6 +50,7 @@ def create_app(env: str | None = None) -> Flask:
     app.register_blueprint(discs_bp, url_prefix="/api/discs")
     app.register_blueprint(drives_bp, url_prefix="/api/drives")
     app.register_blueprint(encode_profiles_bp, url_prefix="/api/encode-profiles")
+    app.register_blueprint(settings_bp, url_prefix="/api/settings")
 
     @app.route("/api/ping")
     def ping():

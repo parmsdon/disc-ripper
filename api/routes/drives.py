@@ -51,6 +51,7 @@ def list_drives():
                 "temp_name": current_disc_row.temp_name,
                 "ripped_at": current_disc_row.ripped_at.isoformat() if current_disc_row.ripped_at else None,
                 "created_at": current_disc_row.created_at.isoformat() if current_disc_row.created_at else None,
+                "scheduled_start": current_job.scheduled_start.isoformat() if current_job and current_job.scheduled_start else None,
             }
 
         result.append({

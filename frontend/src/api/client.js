@@ -28,4 +28,10 @@ export const api = {
     }),
   ejectDisc: (discId) =>
     request(`/discs/${discId}/eject`, { method: "POST" }),
+  getMaxRippers: () => request("/settings/max-rippers"),
+  setMaxRippers: (n) =>
+    request("/settings/max-rippers", {
+      method: "PUT",
+      body: JSON.stringify({ max_rippers: n }),
+    }),
 };
