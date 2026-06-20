@@ -16,9 +16,16 @@ const TABS = [
   { path: "/data-editing", label: "Data Editing" },
 ];
 
+const THEME_STORAGE_KEY = "discripper-theme";
+
+function loadStoredTheme() {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  return stored === "dark" || stored === "light" ? stored : "dark";
+}
+
 export default function App() {
   const [env, setEnv] = useState(null);
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(loadStoredTheme);
 
   useEffect(() => {
     api.ping()
@@ -28,6 +35,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   return (
