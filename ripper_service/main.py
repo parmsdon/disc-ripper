@@ -17,6 +17,7 @@ import time
 from common.config import load_config
 from ripper_service.db import get_session_factory
 from ripper_service.drive_registry import sync_physical_drives
+from ripper_service.pending_actions import process_pending_actions
 from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
@@ -66,6 +67,9 @@ def run(cfg: dict) -> None:
                     logger.info("Disc removed from %s", label)
 
                 media_present_by_device[device_path] = media_present
+
+            with Session() as session:
+                process_pending_actions(session, cfg)
 
         except Exception:
             logger.exception("Error during poll iteration - continuing")

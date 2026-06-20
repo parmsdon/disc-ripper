@@ -6,6 +6,8 @@ Phase 1: list configured drives and their current status, for the
 tail) will be populated once the ripper service writes job state.
 """
 
+from datetime import datetime
+
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import select
 
@@ -14,6 +16,19 @@ from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus
 drives_bp = Blueprint("drives", __name__)
 
 _ACTIVE_STATUSES = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.ripped, DiscStatus.encoding]
+
+
+def _drive_summary(drive: Drive) -> dict:
+    return {
+        "id": drive.id,
+        "device_path": drive.device_path,
+        "label": drive.label,
+        "drive_type": drive.drive_type.value if drive.drive_type else None,
+        "active": drive.active,
+        "region": drive.physical_drive.region if drive.physical_drive else None,
+        "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
+        "pending_action": drive.pending_action,
+    }
 
 
 @drives_bp.route("/", methods=["GET"])
@@ -54,22 +69,16 @@ def list_drives():
                 "scheduled_start": current_job.scheduled_start.isoformat() if current_job and current_job.scheduled_start else None,
             }
 
-        result.append({
-            "id": drive.id,
-            "device_path": drive.device_path,
-            "label": drive.label,
-            "drive_type": drive.drive_type.value if drive.drive_type else None,
-            "active": drive.active,
-            "region": drive.physical_drive.region if drive.physical_drive else None,
-            "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
-            "current_job": {
-                "id": current_job.id,
-                "disc_id": current_job.disc_id,
-                "status": current_job.status.value,
-                "started_at": current_job.started_at.isoformat() if current_job.started_at else None,
-            } if current_job else None,
-            "current_disc": current_disc,
-        })
+        drive_dict = _drive_summary(drive)
+        drive_dict["current_job"] = {
+            "id": current_job.id,
+            "disc_id": current_job.disc_id,
+            "status": current_job.status.value,
+            "started_at": current_job.started_at.isoformat() if current_job.started_at else None,
+        } if current_job else None
+        drive_dict["current_disc"] = current_disc
+
+        result.append(drive_dict)
 
     return jsonify(result)
 
@@ -83,10 +92,13 @@ def start_region_read(drive_id):
     if drive is None:
         return jsonify({"error": "Drive not found"}), 404
 
-    # Actual region reading happens in the ripper service (not yet
-    # implemented). This just validates the drive exists so the UI flow
-    # can be wired up ahead of that.
-    return jsonify({"status": "ready"})
+    # Actual region reading happens in the ripper service - it picks this
+    # up via the pending_action command queue on its next poll.
+    drive.pending_action = "read_region"
+    drive.pending_action_requested_at = datetime.utcnow()
+    session.commit()
+
+    return jsonify(_drive_summary(drive))
 
 
 @drives_bp.route("/<int:drive_id>/region/reread", methods=["POST"])
@@ -103,12 +115,4 @@ def reread_region(drive_id):
         drive.physical_drive.region_known = False
         session.commit()
 
-    return jsonify({
-        "id": drive.id,
-        "device_path": drive.device_path,
-        "label": drive.label,
-        "drive_type": drive.drive_type.value if drive.drive_type else None,
-        "active": drive.active,
-        "region": drive.physical_drive.region if drive.physical_drive else None,
-        "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
-    })
+    return jsonify(_drive_summary(drive))

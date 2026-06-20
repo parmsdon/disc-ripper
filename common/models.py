@@ -106,6 +106,11 @@ class Drive(Base):
     active = Column(Boolean, default=True, nullable=False)
     physical_drive_id = Column(Integer, ForeignKey("physical_drives.id"), nullable=True)
 
+    # DB-based command queue: the API sets these, the ripper service picks
+    # them up on its next poll and clears them once executed.
+    pending_action = Column(String, nullable=True)     # "read_region" or "eject", null = none
+    pending_action_requested_at = Column(DateTime, nullable=True)
+
     physical_drive = relationship("PhysicalDrive", back_populates="drives")
     rip_jobs = relationship("RipJob", back_populates="drive")
     discs = relationship("Disc", back_populates="drive")

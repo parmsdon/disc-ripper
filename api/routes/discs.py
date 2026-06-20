@@ -5,6 +5,8 @@ Phase 1: basic listing/detail/status. Rip/encode job creation and
 metadata editing endpoints will be expanded in later phases.
 """
 
+from datetime import datetime
+
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import select
 
@@ -114,9 +116,23 @@ def update_temp_name(disc_id):
 
 @discs_bp.route("/<int:disc_id>/eject", methods=["POST"])
 def eject_disc(disc_id):
-    # Eject must run on the ripper machine where the drive is physically attached.
-    # The ripper service will expose this via its own local API in a later phase.
-    return jsonify({
-        "status": "not_implemented",
-        "message": "eject must run on ripper machine",
-    })
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    if disc.drive_id is None:
+        return jsonify({"error": "Disc has no associated drive"}), 400
+
+    drive = session.get(Drive, disc.drive_id)
+
+    # Eject must run on the ripper machine where the drive is physically
+    # attached - queue it via pending_action for the ripper service to pick
+    # up on its next poll.
+    drive.pending_action = "eject"
+    drive.pending_action_requested_at = datetime.utcnow()
+    session.commit()
+
+    return jsonify({"status": "requested"})

@@ -65,17 +65,11 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
 }
 
 function RegionBadge({ drive, onRefresh }) {
-  const [reading, setReading] = useState(false);
   const [rereading, setRereading] = useState(false);
 
   async function handleStartRead() {
-    setReading(true);
-    try {
-      await api.startRegionRead(drive.id);
-      onRefresh();
-    } finally {
-      setReading(false);
-    }
+    await api.startRegionRead(drive.id);
+    onRefresh();
   }
 
   async function handleReread() {
@@ -86,6 +80,19 @@ function RegionBadge({ drive, onRefresh }) {
     } finally {
       setRereading(false);
     }
+  }
+
+  // The ripper service picks this up via pending_action on its next poll
+  // (every 3s) - the page's own 5s refresh will show the result once done.
+  if (drive.pending_action === "read_region") {
+    return (
+      <div className="region-row">
+        <span className={`status-pill ${drive.region_known ? "good" : "queued"}`}>
+          Region: {drive.region_known ? drive.region : "Unknown"}
+        </span>
+        <span className="pending-action-label">Reading region…</span>
+      </div>
+    );
   }
 
   if (drive.region_known) {
@@ -104,9 +111,7 @@ function RegionBadge({ drive, onRefresh }) {
       <span className="status-pill queued">Region: Unknown</span>
       {/* Always enabled for now — no disc-presence detection until the ripper
           service exists. Once it does, disable with "Insert a disc first". */}
-      <button onClick={handleStartRead} disabled={reading}>
-        {reading ? "Starting…" : "Read Region"}
-      </button>
+      <button onClick={handleStartRead}>Read Region</button>
     </div>
   );
 }
@@ -152,16 +157,11 @@ function TempNameInput({ disc, onSaved }) {
 
 function DrivePanel({ drive, onRefresh }) {
   const disc = drive.current_disc;
-  const [ejecting, setEjecting] = useState(false);
+  const ejecting = drive.pending_action === "eject";
 
   async function handleEject() {
-    setEjecting(true);
-    try {
-      await api.ejectDisc(disc.id);
-      onRefresh();
-    } finally {
-      setEjecting(false);
-    }
+    await api.ejectDisc(disc.id);
+    onRefresh();
   }
 
   return (
@@ -194,13 +194,13 @@ function DrivePanel({ drive, onRefresh }) {
           <TempNameInput disc={disc} onSaved={onRefresh} />
 
           {disc.status === "ripped" && (
-            <button
-              className="eject-btn"
-              onClick={handleEject}
-              disabled={ejecting}
-            >
-              {ejecting ? "Ejecting…" : "Eject"}
-            </button>
+            ejecting ? (
+              <p className="pending-action-label">Ejecting…</p>
+            ) : (
+              <button className="eject-btn" onClick={handleEject}>
+                Eject
+              </button>
+            )
           )}
         </>
       )}
