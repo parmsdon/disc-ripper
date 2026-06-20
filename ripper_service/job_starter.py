@@ -1,9 +1,13 @@
 """
 Slot-aware rip job starting: gates queued RipJobs behind the global
 ripping_enabled control, promotes them to running up to the configured
-max_rippers concurrency limit, and spawns the actual dvdbackup work in a
-background thread so the main poll loop keeps running for other
-drives/region-reads/ejects.
+max_rippers concurrency limit, and spawns the actual dvdbackup/mkisofs
+work in a background thread so the main poll loop keeps running for
+other drives/region-reads/ejects.
+
+RipJob.status stays "running" across both the dvdbackup and mkisofs
+sub-steps - it's Disc.status that distinguishes "ripping" (copying disc
+content) from "building" (constructing the ISO) for the UI.
 """
 
 import logging
@@ -15,10 +19,11 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from common.models import DiscStatus, JobStatus, RipJob, Setting
+from common.config import get_store_path
+from common.models import Disc, DiscStatus, JobStatus, RipJob, Setting
 from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
-from ripper_service.rip_worker import run_dvdbackup
+from ripper_service.rip_worker import run_dvdbackup, run_mkisofs
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +93,7 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
         thread = threading.Thread(
             target=_run_job,
-            args=(rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label),
+            args=(rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg),
             daemon=True,
         )
         active_jobs.register(rip_job.id, thread)
@@ -143,7 +148,7 @@ def _get_ripping_enabled(session) -> bool:
     return setting.value == "true" if setting else _DEFAULT_RIPPING_ENABLED
 
 
-def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label) -> None:
+def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg) -> None:
     try:
         result = run_dvdbackup(device_path, scratch_dir, disc_label, fake_rip_mode, rip_job_id, session_factory)
     except Exception:
@@ -157,34 +162,111 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         active_jobs.unregister(rip_job_id)
         return
 
+    if not result["success"]:
+        _fail_job(rip_job_id, label, result, scratch_dir, session_factory)
+        active_jobs.unregister(rip_job_id)
+        return
+
+    # dvdbackup succeeded - move on to building the ISO. Disc shows
+    # "building" (distinct from "ripping") while this runs.
+    disc_id = _mark_building(rip_job_id, label, session_factory)
+    if disc_id is None:
+        active_jobs.unregister(rip_job_id)
+        return
+
+    video_ts_parent = str(Path(scratch_dir) / disc_label)
+    iso_dir = get_store_path(cfg, "dvd_store", "raw", str(disc_id))
+    iso_path = str(iso_dir / f"{disc_label}.iso")
+
+    try:
+        mkiso_result = run_mkisofs(video_ts_parent, iso_path, fake_rip_mode, rip_job_id, session_factory)
+    except Exception:
+        logger.exception("Unexpected error running mkisofs for rip job %s", rip_job_id)
+        mkiso_result = {"success": False, "log": "Unexpected error - see service logs", "return_code": None}
+
+    if active_jobs.was_rolled_back(rip_job_id):
+        logger.info(
+            "Rip job %s was rolled back externally during mkisofs - skipping normal completion handling",
+            rip_job_id,
+        )
+        active_jobs.unregister(rip_job_id)
+        return
+
+    if mkiso_result["success"]:
+        _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory)
+    else:
+        _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
+
+    active_jobs.unregister(rip_job_id)
+
+
+def _mark_building(rip_job_id, label, session_factory):
     session = session_factory()
     try:
         rip_job = session.get(RipJob, rip_job_id)
         if rip_job is None:
-            logger.warning("RipJob %s vanished before completion handling", rip_job_id)
-            return
-
+            logger.warning("RipJob %s vanished before mkisofs step", rip_job_id)
+            return None
         disc = rip_job.disc
-        rip_job.completed_at = datetime.utcnow()
-
-        if result["success"]:
-            rip_job.status = JobStatus.done
-            if disc is not None:
-                disc.status = DiscStatus.ripped
-            logger.info("Rip job %s (%s) completed successfully", rip_job_id, label)
-        else:
-            rip_job.status = JobStatus.error
-            if disc is not None:
-                disc.status = DiscStatus.error
-            error_message = _extract_error_message(result.get("log") or "")
-            rip_job.error_message = error_message
-            logger.warning("Rip job %s (%s) failed: %s", rip_job_id, label, error_message)
-            _cleanup_scratch_dir(scratch_dir)
-
+        if disc is None:
+            logger.warning("RipJob %s has no disc - skipping mkisofs step", rip_job_id)
+            return None
+        disc.status = DiscStatus.building
         session.commit()
+        logger.info("Rip job %s (%s) entering building phase", rip_job_id, label)
+        return disc.id
     finally:
         session.close()
-        active_jobs.unregister(rip_job_id)
+
+
+def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        disc = session.get(Disc, disc_id)
+        if rip_job is None or disc is None:
+            logger.warning("RipJob %s or disc %s vanished before final completion", rip_job_id, disc_id)
+            return
+
+        relative_path = str(iso_dir.relative_to(Path(cfg["storage"]["datastore_root"])))
+
+        disc.raw_path = relative_path
+        disc.ripped_at = datetime.utcnow()
+        if disc.drive is not None and disc.drive.physical_drive is not None:
+            disc.ripped_in_region = disc.drive.physical_drive.region
+        disc.status = DiscStatus.ripped
+
+        rip_job.status = JobStatus.done
+        rip_job.completed_at = datetime.utcnow()
+
+        session.commit()
+        logger.info("Rip job %s (%s) completed successfully - ISO at %s", rip_job_id, label, relative_path)
+    finally:
+        session.close()
+        _cleanup_scratch_dir(scratch_dir)
+
+
+def _fail_job(rip_job_id, label, result, scratch_dir, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        if rip_job is None:
+            logger.warning("RipJob %s vanished before error handling", rip_job_id)
+            return
+        disc = rip_job.disc
+
+        rip_job.status = JobStatus.error
+        rip_job.completed_at = datetime.utcnow()
+        error_message = _extract_error_message(result.get("log") or "")
+        rip_job.error_message = error_message
+        if disc is not None:
+            disc.status = DiscStatus.error
+
+        session.commit()
+        logger.warning("Rip job %s (%s) failed: %s", rip_job_id, label, error_message)
+    finally:
+        session.close()
+        _cleanup_scratch_dir(scratch_dir)
 
 
 def _extract_error_message(log_text: str) -> str:

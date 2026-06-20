@@ -44,6 +44,7 @@ class DiscType(str, enum.Enum):
 class DiscStatus(str, enum.Enum):
     queued = "queued"
     ripping = "ripping"
+    building = "building"
     ripped = "ripped"
     encoding = "encoding"
     done = "done"

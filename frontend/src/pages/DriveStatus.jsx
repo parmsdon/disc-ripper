@@ -166,6 +166,8 @@ function DirectEjectButton({ drive, onRefresh }) {
   let disabledReason = null;
   if (discStatus === "ripping") {
     disabledReason = "Cannot eject while ripping";
+  } else if (discStatus === "building") {
+    disabledReason = "Cannot eject while building ISO";
   } else if (discStatus === "encoding") {
     disabledReason = "Cannot eject while encoding";
   } else if (drive.pending_action === "eject") {
@@ -270,7 +272,7 @@ function DiscStatusZone({ disc, rippingEnabled }) {
         <Countdown scheduledStart={disc.scheduled_start} />
       )}
 
-      {disc.status === "ripping" && (
+      {(disc.status === "ripping" || disc.status === "building") && (
         <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
       )}
     </div>

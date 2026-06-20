@@ -173,7 +173,8 @@ body {
 }
 
 .status-pill.running,
-.status-pill.ripping {
+.status-pill.ripping,
+.status-pill.building {
   background: rgba(79, 140, 255, 0.15);
   color: var(--accent);
 }

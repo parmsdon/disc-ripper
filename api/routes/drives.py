@@ -15,7 +15,9 @@ from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus
 
 drives_bp = Blueprint("drives", __name__)
 
-_ACTIVE_STATUSES = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.ripped, DiscStatus.encoding]
+_ACTIVE_STATUSES = [
+    DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.ripped, DiscStatus.encoding,
+]
 
 
 def _drive_summary(drive: Drive) -> dict:
