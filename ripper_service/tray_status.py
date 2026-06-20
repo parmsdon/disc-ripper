@@ -46,3 +46,16 @@ def get_tray_status(device_path: str) -> str:
                 os.close(fd)
             except OSError:
                 pass
+
+
+def tray_open_from_status(tray_status: str):
+    """
+    Map a get_tray_status() result to a tri-state tray_open value: True
+    (open), False (closed - disc_ok/no_disc/not_ready), or None
+    (unknown/no_info).
+    """
+    if tray_status == "tray_open":
+        return True
+    if tray_status in ("disc_ok", "no_disc", "not_ready"):
+        return False
+    return None  # "unknown" or "no_info"
