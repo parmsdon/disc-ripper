@@ -195,7 +195,7 @@ function TempNameInput({ disc, onSaved }) {
   );
 }
 
-function DrivePanel({ drive, onRefresh }) {
+function DrivePanel({ drive, onRefresh, rippingEnabled }) {
   const disc = drive.current_disc;
   const ejecting = drive.pending_action === "eject";
 
@@ -223,10 +223,15 @@ function DrivePanel({ drive, onRefresh }) {
       ) : (
         <>
           <p>
+            <span className="disc-id-label">{disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}</span>{" "}
             <span className={`status-pill ${disc.status}`}>{disc.status}</span>
           </p>
 
-          {disc.status === "queued" && (
+          {disc.status === "queued" && !rippingEnabled && !disc.scheduled_start && (
+            <p className="countdown">Ripping paused - disc detected, waiting</p>
+          )}
+
+          {disc.status === "queued" && rippingEnabled && disc.scheduled_start && (
             <Countdown scheduledStart={disc.scheduled_start} />
           )}
 
@@ -258,6 +263,7 @@ function DrivePanel({ drive, onRefresh }) {
 export default function DriveStatus() {
   const [drives, setDrives] = useState(null);
   const [maxRippers, setMaxRippers] = useState(null);
+  const [rippingEnabled, setRippingEnabled] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchDrives = useCallback(() => {
@@ -272,12 +278,22 @@ export default function DriveStatus() {
       .catch((e) => setError(e.message));
   }, []);
 
+  const fetchRippingEnabled = useCallback(() => {
+    api.getRippingEnabled()
+      .then((data) => setRippingEnabled(data.ripping_enabled))
+      .catch((e) => setError(e.message));
+  }, []);
+
   useEffect(() => {
     fetchDrives();
     fetchMaxRippers();
-    const interval = setInterval(fetchDrives, 5000);
+    fetchRippingEnabled();
+    const interval = setInterval(() => {
+      fetchDrives();
+      fetchRippingEnabled();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [fetchDrives, fetchMaxRippers]);
+  }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled]);
 
   if (error) {
     return <div className="panel"><h2>Drive Status</h2><div className="empty-state">Error loading drives: {error}</div></div>;
@@ -307,7 +323,7 @@ export default function DriveStatus() {
         onChange={fetchMaxRippers}
       />
       {drives.map((drive) => (
-        <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} />
+        <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} rippingEnabled={rippingEnabled} />
       ))}
     </div>
   );

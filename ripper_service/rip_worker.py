@@ -12,6 +12,7 @@ import re
 import subprocess
 
 from common.models import RipJob
+from ripper_service import active_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,12 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         # without a restart, so confirm it again right before use.
         os.makedirs(scratch_dir, exist_ok=True)
 
+        if active_jobs.was_rolled_back(rip_job_id):
+            # Rolled back between being queued for start and actually
+            # launching (tight race) - don't bother starting the real work.
+            logger.info("Rip job %s was rolled back before starting - skipping launch", rip_job_id)
+            return {"success": False, "log": "Rolled back before starting", "return_code": None}
+
         proc = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -53,6 +60,7 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
             text=True,
             bufsize=1,
         )
+        active_jobs.set_process(rip_job_id, proc)
 
         for line in proc.stdout:
             line = line.rstrip("\n")

@@ -14,7 +14,6 @@ implemented yet.
 import logging
 import os
 import time
-from datetime import datetime, timedelta
 
 from common.config import load_config
 from common.models import Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob
@@ -26,7 +25,6 @@ from ripper_service.tray_status import get_tray_status, tray_open_from_status
 from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
-JOB_START_COUNTDOWN_SECONDS = 10
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,16 +81,18 @@ def run(cfg: dict) -> None:
                                 session.add(disc)
                                 session.flush()
 
-                                scheduled_start = datetime.utcnow() + timedelta(seconds=JOB_START_COUNTDOWN_SECONDS)
+                                # scheduled_start stays null - the job only
+                                # starts counting down once ripping_enabled
+                                # is true (job_starter.py).
                                 session.add(RipJob(
                                     disc_id=disc.id,
                                     drive_id=drive_id,
                                     status=JobStatus.queued,
-                                    scheduled_start=scheduled_start,
                                 ))
                                 logger.info(
-                                    "Created disc #%s for %s, rip job scheduled to start at %s",
-                                    disc.id, label, scheduled_start.isoformat(),
+                                    "Created disc #%s for %s - rip job queued, "
+                                    "waiting for ripping to be enabled",
+                                    disc.id, label,
                                 )
                             elif media_type != "dvd":
                                 logger.info(

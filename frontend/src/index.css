@@ -223,6 +223,14 @@ body {
   font-style: italic;
 }
 
+.disc-id-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 button:disabled {
   color: var(--text-dim);
   border-color: var(--panel-border);
@@ -236,7 +244,8 @@ button:disabled {
 }
 
 .theme-toggle,
-.fake-rip-toggle {
+.fake-rip-toggle,
+.ripping-toggle {
   background: transparent;
   border: 1px solid var(--panel-border);
   color: var(--text-dim);
@@ -247,7 +256,8 @@ button:disabled {
 }
 
 .theme-toggle:hover,
-.fake-rip-toggle:hover {
+.fake-rip-toggle:hover,
+.ripping-toggle:hover {
   color: var(--text);
   border-color: var(--accent);
 }
@@ -255,4 +265,10 @@ button:disabled {
 .fake-rip-toggle.active {
   color: var(--warn);
   border-color: var(--warn);
+}
+
+.ripping-toggle.active {
+  color: var(--good);
+  border-color: var(--good);
+  background: rgba(76, 175, 109, 0.12);
 }
