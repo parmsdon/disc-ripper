@@ -10,13 +10,13 @@ function Countdown({ scheduledStart }) {
   }, []);
 
   if (!scheduledStart) {
-    return <p className="countdown">Starting…</p>;
+    return null;
   }
 
   const remainingSeconds = Math.ceil((new Date(scheduledStart).getTime() - now) / 1000);
 
   if (remainingSeconds <= 0) {
-    return <p className="countdown">Starting…</p>;
+    return null;
   }
 
   return <p className="countdown">Starting in {remainingSeconds}s</p>;
@@ -219,6 +219,10 @@ function TempNameInput({ disc, onSaved }) {
     }
   }
 
+  function handleCopyLabel() {
+    setValue(disc.disc_fingerprint);
+  }
+
   return (
     <div className={`temp-name-row${needsName ? " needs-name" : ""}`}>
       <input
@@ -229,6 +233,16 @@ function TempNameInput({ disc, onSaved }) {
         onKeyDown={(e) => e.key === "Enter" && handleSave()}
         className={needsName ? "input-warning" : ""}
       />
+      {disc.disc_fingerprint && (
+        <button
+          type="button"
+          className="copy-label-btn"
+          onClick={handleCopyLabel}
+          title="Copy disc label"
+        >
+          ↓
+        </button>
+      )}
       <button onClick={handleSave} disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
