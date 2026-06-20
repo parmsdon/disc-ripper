@@ -15,7 +15,7 @@ import time
 
 _PARTS = 4
 _STEPS = (25, 50, 75, 100)
-_STEP_SECONDS = 10 / (_PARTS * len(_STEPS))
+_STEP_SECONDS = 30 / (_PARTS * len(_STEPS))
 _TOTAL_MIB = 1024
 
 

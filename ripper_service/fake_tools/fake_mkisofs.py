@@ -11,7 +11,7 @@ import sys
 import time
 
 _STEPS = (10, 30, 50, 70, 90, 100)
-_STEP_SECONDS = 3 / len(_STEPS)
+_STEP_SECONDS = 8 / len(_STEPS)
 
 
 def main() -> None:

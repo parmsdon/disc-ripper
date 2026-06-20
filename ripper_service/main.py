@@ -15,11 +15,14 @@ import logging
 import os
 import time
 
+from sqlalchemy import select
+
 from common.config import load_config
-from common.models import Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob
+from common.models import Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob, Setting
 from ripper_service.db import get_session_factory
 from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
+from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.job_starter import start_eligible_rip_jobs
 from ripper_service.pending_actions import process_pending_actions
 from ripper_service.tray_status import get_tray_status, tray_open_from_status
@@ -43,6 +46,31 @@ def run(cfg: dict) -> None:
     scratch_dir = cfg["storage"]["scratch_dir"]
     os.makedirs(scratch_dir, exist_ok=True)
     logger.info("Scratch directory ready: %s", scratch_dir)
+
+    # Safety default: a restart should never silently resume mass-ripping,
+    # regardless of whatever was last persisted.
+    with Session() as session:
+        setting = session.get(Setting, "ripping_enabled")
+        if setting:
+            setting.value = "false"
+        else:
+            session.add(Setting(key="ripping_enabled", value="false"))
+        session.commit()
+        logger.info("ripping_enabled reset to false on startup")
+
+        # Any RipJob still "running" at startup belonged to a previous
+        # instance that's gone - it can't actually still be running, so
+        # clean it up via the same rollback mechanism used for manual stop.
+        stale_running_count = len(session.scalars(
+            select(RipJob).where(RipJob.status == JobStatus.running)
+        ).all())
+        if stale_running_count:
+            logger.warning(
+                "%d RipJob(s) found 'running' at startup - the process that "
+                "owned them is gone, rolling them back",
+                stale_running_count,
+            )
+            rollback_excess_jobs(session, 0, cfg)
 
     logger.info("Ripper service started (env=%s)", cfg["environment"])
 
