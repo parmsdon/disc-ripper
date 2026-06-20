@@ -38,4 +38,6 @@ export const api = {
     request(`/drives/${driveId}/region/start-read`, { method: "POST" }),
   rereadRegion: (driveId) =>
     request(`/drives/${driveId}/region/reread`, { method: "POST" }),
+  ejectDriveDirectly: (driveId) =>
+    request(`/drives/${driveId}/eject`, { method: "POST" }),
 };

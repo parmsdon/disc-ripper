@@ -104,6 +104,25 @@ def start_region_read(drive_id):
     return jsonify(_drive_summary(drive))
 
 
+@drives_bp.route("/<int:drive_id>/eject", methods=["POST"])
+def eject_drive_directly(drive_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        return jsonify({"error": "Drive not found"}), 404
+
+    # Same command-queue mechanism as discs.py's eject endpoint, but keyed
+    # directly off drive_id - works even when there's no disc record at all
+    # (e.g. an empty drive being opened, or a disc never queued for ripping).
+    drive.pending_action = "eject"
+    drive.pending_action_requested_at = datetime.utcnow()
+    session.commit()
+
+    return jsonify(_drive_summary(drive))
+
+
 @drives_bp.route("/<int:drive_id>/region/reread", methods=["POST"])
 def reread_region(drive_id):
     Session = current_app.config["DB_SESSION"]

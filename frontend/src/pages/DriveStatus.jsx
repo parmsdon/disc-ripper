@@ -118,6 +118,42 @@ function RegionBadge({ drive, onRefresh }) {
   );
 }
 
+function DirectEjectButton({ drive, onRefresh }) {
+  const [ejecting, setEjecting] = useState(false);
+  const discStatus = drive.current_disc?.status;
+
+  let disabledReason = null;
+  if (discStatus === "ripping") {
+    disabledReason = "Cannot eject while ripping";
+  } else if (discStatus === "encoding") {
+    disabledReason = "Cannot eject while encoding";
+  } else if (drive.pending_action === "eject") {
+    disabledReason = "Eject in progress";
+  } else if (drive.pending_action === "read_region") {
+    disabledReason = "Reading region…";
+  }
+
+  async function handleClick() {
+    setEjecting(true);
+    try {
+      await api.ejectDriveDirectly(drive.id);
+      onRefresh();
+    } finally {
+      setEjecting(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={!!disabledReason || ejecting}
+      title={disabledReason || "Eject this drive"}
+    >
+      {disabledReason || (ejecting ? "Ejecting…" : "Eject")}
+    </button>
+  );
+}
+
 function TempNameInput({ disc, onSaved }) {
   const [value, setValue] = useState(disc.temp_name || "");
   const [saving, setSaving] = useState(false);
@@ -174,6 +210,9 @@ function DrivePanel({ drive, onRefresh }) {
       </div>
 
       <RegionBadge drive={drive} onRefresh={onRefresh} />
+      <div className="region-row">
+        <DirectEjectButton drive={drive} onRefresh={onRefresh} />
+      </div>
 
       {!drive.region_known ? (
         <p className="empty-state">Region unknown — read the region before ripping.</p>
