@@ -161,14 +161,27 @@ export DISCRIPPER_ENV=dev
 python3 scripts/seed.py
 ```
 
-### Ripper service
-
-Not yet implemented (next phase). Will run via:
+### Running the ripper service
 
 ```bash
+cd /projects/ripperdev   # must run from the project root so `common`/`ripper_service` resolve
 export DISCRIPPER_ENV=dev
 python3 -m ripper_service.main
 ```
+
+Runs in the foreground, polling every 3 seconds. For now it only:
+- Syncs each configured drive's hardware identity (via `udevadm`) into the
+  `drives`/`physical_drives` tables, so drives are recognized across device
+  path reassignment.
+- Detects disc insert/removal per drive and logs it. Drives whose region is
+  unknown are logged but otherwise skipped — read the region from the
+  Drive Status tab ("Read Region") before ripping will activate for that
+  drive in a later phase.
+- Does **not** yet create `RipJob`s or run `dvdbackup`/`cdparanoia` — that's
+  the next phase.
+
+Run it under `tmux`/`screen` or a process supervisor for now (no systemd
+unit yet). `Ctrl+C` shuts it down cleanly.
 
 ---
 
