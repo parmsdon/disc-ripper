@@ -7,6 +7,7 @@ background thread, so blocking here doesn't stall the main poll loop.
 """
 
 import logging
+import os
 import re
 import subprocess
 
@@ -40,6 +41,11 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
     session = session_factory()
 
     try:
+        # Defense in depth: main.py creates this at service startup, but a
+        # long-running service could outlive an externally-cleared /tmp
+        # without a restart, so confirm it again right before use.
+        os.makedirs(scratch_dir, exist_ok=True)
+
         proc = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,

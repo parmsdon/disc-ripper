@@ -39,6 +39,12 @@ def run(cfg: dict) -> None:
     Session = get_session_factory(cfg)
     media_present_by_device = {}
 
+    # /tmp-based scratch space may not survive a reboot - make sure it
+    # exists before relying on it, rather than assuming manual setup.
+    scratch_dir = cfg["storage"]["scratch_dir"]
+    os.makedirs(scratch_dir, exist_ok=True)
+    logger.info("Scratch directory ready: %s", scratch_dir)
+
     logger.info("Ripper service started (env=%s)", cfg["environment"])
 
     while True:

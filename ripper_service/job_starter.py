@@ -79,8 +79,8 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
         thread.start()
 
         logger.info(
-            "Started rip job %s for disc %s on %s (fake_rip_mode=%s)",
-            rip_job.id, disc.id, label, fake_rip_mode,
+            "Started rip job %s for disc %s on %s (fake_rip_mode=%s, scratch_dir=%s)",
+            rip_job.id, disc.id, label, fake_rip_mode, scratch_dir,
         )
 
 
