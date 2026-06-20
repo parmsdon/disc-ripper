@@ -47,6 +47,7 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
         <input
           type="number"
           min="1"
+          className="max-rippers-input"
           value={maxRippers}
           disabled={saving}
           onChange={(e) => {

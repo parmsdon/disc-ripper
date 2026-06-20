@@ -18,6 +18,7 @@ const TABS = [
 
 export default function App() {
   const [env, setEnv] = useState(null);
+  const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
     api.ping()
@@ -25,16 +26,28 @@ export default function App() {
       .catch(() => setEnv("unreachable"));
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   return (
     <BrowserRouter>
       <div className="app">
         <header className="app-header">
           <h1>Disc Ripper</h1>
-          {env && (
-            <span className={`env-badge ${env}`}>
-              {env === "unreachable" ? "API unreachable" : env}
-            </span>
-          )}
+          <div className="header-controls">
+            {env && (
+              <span className={`env-badge ${env}`}>
+                {env === "unreachable" ? "API unreachable" : env}
+              </span>
+            )}
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            >
+              {theme === "dark" ? "☀ Light" : "☾ Dark"}
+            </button>
+          </div>
         </header>
 
         <nav className="tabs">

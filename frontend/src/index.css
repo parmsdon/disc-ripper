@@ -11,6 +11,18 @@
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
 }
 
+[data-theme="light"] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-border: #d8dbe1;
+  --text: #1d2026;
+  --text-dim: #5b6270;
+  --accent: #2f6fe0;
+  --good: #2f8f54;
+  --warn: #a96f12;
+  --error: #c43d3d;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -40,6 +52,12 @@ body {
   font-weight: 600;
   margin: 0;
   letter-spacing: 0.02em;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .env-badge {
@@ -176,4 +194,24 @@ body {
 .status-pill.queued {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
+}
+
+.max-rippers-input {
+  width: 3em;
+  text-align: center;
+}
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
 }
