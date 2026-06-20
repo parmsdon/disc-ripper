@@ -42,6 +42,8 @@ def _disc_to_dict(disc: Disc) -> dict:
         "needs_rerip": disc.needs_rerip,
         "temp_name": disc.temp_name,
         "scheduled_start": active_job.scheduled_start.isoformat() if active_job and active_job.scheduled_start else None,
+        "progress_percent": active_job.progress_percent if active_job else None,
+        "progress_stage": active_job.progress_stage if active_job else None,
     }
 
 

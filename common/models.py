@@ -252,6 +252,10 @@ class RipJob(Base):
     # if the job is rolled back to queued (e.g. max_rippers decreased).
     scheduled_start = Column(DateTime, nullable=True)
 
+    # Live progress, parsed from dvdbackup/mkisofs stdout while running.
+    progress_percent = Column(Integer, nullable=True)
+    progress_stage = Column(String, nullable=True)     # e.g. "Copying Title, part 1/4"
+
     disc = relationship("Disc", back_populates="rip_jobs")
     drive = relationship("Drive", back_populates="rip_jobs")
 

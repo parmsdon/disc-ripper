@@ -71,6 +71,8 @@ def list_drives():
                 "ripped_at": current_disc_row.ripped_at.isoformat() if current_disc_row.ripped_at else None,
                 "created_at": current_disc_row.created_at.isoformat() if current_disc_row.created_at else None,
                 "scheduled_start": current_job.scheduled_start.isoformat() if current_job and current_job.scheduled_start else None,
+                "progress_percent": current_job.progress_percent if current_job else None,
+                "progress_stage": current_job.progress_stage if current_job else None,
             }
 
         drive_dict = _drive_summary(drive)

@@ -39,6 +39,7 @@ DEFAULT_ENCODE_PROFILES = [
 
 DEFAULT_SETTINGS = [
     {"key": "max_rippers", "value": "1"},
+    {"key": "fake_rip_mode", "value": "false"},
 ]
 
 

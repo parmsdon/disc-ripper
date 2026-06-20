@@ -4,25 +4,29 @@ Ripper service entry point.
 Run with (from the project root, venv active):
     DISCRIPPER_ENV=dev python3 -m ripper_service.main
 
-Polls configured drives for hardware identity and disc insert/removal.
-Does NOT perform any ripping yet - that's a follow-up. Drives whose
-physical region is unknown are detected but intentionally left alone;
-read the region via the UI's "Read Region" action first.
+Polls configured drives for hardware identity and disc insert/removal,
+creates rip jobs for newly-detected DVDs on region-known drives, and
+starts queued jobs (dvdbackup, slot-aware up to max_rippers) once their
+countdown elapses. CD ripping and the mkisofs/ISO-build step are not
+implemented yet.
 """
 
 import logging
 import os
 import time
+from datetime import datetime, timedelta
 
 from common.config import load_config
-from common.models import Drive
+from common.models import Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob
 from ripper_service.db import get_session_factory
 from ripper_service.drive_registry import sync_physical_drives
+from ripper_service.job_starter import start_eligible_rip_jobs
 from ripper_service.pending_actions import process_pending_actions
 from ripper_service.tray_status import get_tray_status, tray_open_from_status
 from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
+JOB_START_COUNTDOWN_SECONDS = 10
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +54,7 @@ def run(cfg: dict) -> None:
                     device_path = drive_cfg["device"]
                     label = drive_cfg.get("label") or device_path
                     state = drive_states.get(device_path, {})
+                    drive_id = state.get("drive_id")
 
                     info = get_drive_info(device_path)
                     media_present = info["media_present"]
@@ -67,6 +72,28 @@ def run(cfg: dict) -> None:
                             )
                         else:
                             logger.info("Disc detected in %s, type=%s", label, media_type)
+                            if media_type == "dvd" and drive_id is not None:
+                                disc = Disc(type=DiscType.dvd, status=DiscStatus.queued, drive_id=drive_id)
+                                session.add(disc)
+                                session.flush()
+
+                                scheduled_start = datetime.utcnow() + timedelta(seconds=JOB_START_COUNTDOWN_SECONDS)
+                                session.add(RipJob(
+                                    disc_id=disc.id,
+                                    drive_id=drive_id,
+                                    status=JobStatus.queued,
+                                    scheduled_start=scheduled_start,
+                                ))
+                                logger.info(
+                                    "Created disc #%s for %s, rip job scheduled to start at %s",
+                                    disc.id, label, scheduled_start.isoformat(),
+                                )
+                            elif media_type != "dvd":
+                                logger.info(
+                                    "Drive %s: media_type=%s - skipping job creation "
+                                    "(DVD ripping pipeline only for now)",
+                                    label, media_type,
+                                )
                     elif was_present and not media_present:
                         logger.info("Disc removed from %s", label)
 
@@ -75,7 +102,6 @@ def run(cfg: dict) -> None:
                     # Persist current media presence and tray state so the
                     # API/UI (which has no direct hardware access) can
                     # reflect them.
-                    drive_id = state.get("drive_id")
                     if drive_id is not None:
                         drive = session.get(Drive, drive_id)
                         if drive is not None:
@@ -86,6 +112,9 @@ def run(cfg: dict) -> None:
 
             with Session() as session:
                 process_pending_actions(session, cfg)
+
+            with Session() as session:
+                start_eligible_rip_jobs(session, cfg, Session)
 
         except Exception:
             logger.exception("Error during poll iteration - continuing")

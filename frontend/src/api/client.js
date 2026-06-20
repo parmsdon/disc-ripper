@@ -40,4 +40,10 @@ export const api = {
     request(`/drives/${driveId}/region/reread`, { method: "POST" }),
   ejectDriveDirectly: (driveId) =>
     request(`/drives/${driveId}/eject`, { method: "POST" }),
+  getFakeRipMode: () => request("/settings/fake-rip-mode"),
+  setFakeRipMode: (enabled) =>
+    request("/settings/fake-rip-mode", {
+      method: "PUT",
+      body: JSON.stringify({ fake_rip_mode: enabled }),
+    }),
 };

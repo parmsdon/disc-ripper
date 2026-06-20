@@ -64,6 +64,29 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
   );
 }
 
+function FakeRipModeControl({ fakeRipMode, onChange }) {
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    setSaving(true);
+    try {
+      await api.setFakeRipMode(!fakeRipMode);
+      onChange();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="panel fake-rip-mode-control">
+      <label>
+        <input type="checkbox" checked={fakeRipMode} disabled={saving} onChange={toggle} />
+        {" "}Fake rip mode (uses a fake dvdbackup stand-in instead of real hardware)
+      </label>
+    </div>
+  );
+}
+
 function RegionBadge({ drive, onRefresh }) {
   const [rereading, setRereading] = useState(false);
 
@@ -231,7 +254,11 @@ function DrivePanel({ drive, onRefresh }) {
           )}
 
           {disc.status === "ripping" && (
-            <p className="progress-placeholder">Ripping in progress…</p>
+            <p className="progress-placeholder">
+              {disc.progress_stage
+                ? `${disc.progress_stage}: ${disc.progress_percent ?? 0}%`
+                : "Ripping in progress…"}
+            </p>
           )}
 
           <TempNameInput disc={disc} onSaved={onRefresh} />
@@ -254,6 +281,8 @@ function DrivePanel({ drive, onRefresh }) {
 export default function DriveStatus() {
   const [drives, setDrives] = useState(null);
   const [maxRippers, setMaxRippers] = useState(null);
+  const [fakeRipMode, setFakeRipMode] = useState(false);
+  const [env, setEnv] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchDrives = useCallback(() => {
@@ -268,12 +297,23 @@ export default function DriveStatus() {
       .catch((e) => setError(e.message));
   }, []);
 
+  const fetchFakeRipMode = useCallback(() => {
+    api.getFakeRipMode()
+      .then((data) => setFakeRipMode(data.fake_rip_mode))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    api.ping().then((data) => setEnv(data.environment)).catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetchDrives();
     fetchMaxRippers();
+    fetchFakeRipMode();
     const interval = setInterval(fetchDrives, 5000);
     return () => clearInterval(interval);
-  }, [fetchDrives, fetchMaxRippers]);
+  }, [fetchDrives, fetchMaxRippers, fetchFakeRipMode]);
 
   if (error) {
     return <div className="panel"><h2>Drive Status</h2><div className="empty-state">Error loading drives: {error}</div></div>;
@@ -302,6 +342,9 @@ export default function DriveStatus() {
         driveCount={drives.length}
         onChange={fetchMaxRippers}
       />
+      {env === "dev" && (
+        <FakeRipModeControl fakeRipMode={fakeRipMode} onChange={fetchFakeRipMode} />
+      )}
       {drives.map((drive) => (
         <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} />
       ))}
