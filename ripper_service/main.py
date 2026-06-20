@@ -18,6 +18,7 @@ import time
 from common.config import load_config
 from common.models import Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob
 from ripper_service.db import get_session_factory
+from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.job_starter import start_eligible_rip_jobs
 from ripper_service.pending_actions import process_pending_actions
@@ -77,7 +78,15 @@ def run(cfg: dict) -> None:
                         else:
                             logger.info("Disc detected in %s, type=%s", label, media_type)
                             if media_type == "dvd" and drive_id is not None:
-                                disc = Disc(type=DiscType.dvd, status=DiscStatus.queued, drive_id=drive_id)
+                                volume_info = read_volume_info(device_path)
+                                disc_fingerprint = volume_info["volume_id"] or volume_info["volume_set_id"]
+
+                                disc = Disc(
+                                    type=DiscType.dvd,
+                                    status=DiscStatus.queued,
+                                    drive_id=drive_id,
+                                    disc_fingerprint=disc_fingerprint,
+                                )
                                 session.add(disc)
                                 session.flush()
 
@@ -90,9 +99,9 @@ def run(cfg: dict) -> None:
                                     status=JobStatus.queued,
                                 ))
                                 logger.info(
-                                    "Created disc #%s for %s - rip job queued, "
-                                    "waiting for ripping to be enabled",
-                                    disc.id, label,
+                                    "Created disc #%s for %s (volume_id=%s, volume_set_id=%s) - "
+                                    "rip job queued, waiting for ripping to be enabled",
+                                    disc.id, label, volume_info["volume_id"], volume_info["volume_set_id"],
                                 )
                             elif media_type != "dvd":
                                 logger.info(

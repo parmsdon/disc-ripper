@@ -22,6 +22,18 @@ function Countdown({ scheduledStart }) {
   return <p className="countdown">Starting in {remainingSeconds}s</p>;
 }
 
+function ProgressBar({ percent, stage }) {
+  const pct = percent ?? 0;
+  return (
+    <div className="progress-bar-row">
+      <div className="progress-bar-track">
+        <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="progress-bar-label">{stage ? `${stage}: ${pct}%` : `${pct}%`}</span>
+    </div>
+  );
+}
+
 function MaxRippersControl({ maxRippers, driveCount, onChange }) {
   const [saving, setSaving] = useState(false);
 
@@ -38,29 +50,40 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
   }
 
   return (
-    <div className="panel max-rippers-control">
-      <label>
-        Max simultaneous rips:{" "}
-        <button onClick={() => update(maxRippers - 1)} disabled={saving || maxRippers <= 1}>
-          −
-        </button>
-        <input
-          type="number"
-          min="1"
-          className="max-rippers-input"
-          value={maxRippers}
-          disabled={saving}
-          onChange={(e) => {
-            const parsed = parseInt(e.target.value, 10);
-            if (!Number.isNaN(parsed)) update(parsed);
-          }}
-        />
-        <button onClick={() => update(maxRippers + 1)} disabled={saving}>
-          +
-        </button>
-      </label>
-      <span className="text-dim"> (currently {maxRippers} of {driveCount} drives)</span>
+    <div className="control-bar-group">
+      <span className="control-bar-label">Max simultaneous rips:</span>
+      <button onClick={() => update(maxRippers - 1)} disabled={saving || maxRippers <= 1}>
+        −
+      </button>
+      <input
+        type="number"
+        min="1"
+        className="max-rippers-input"
+        value={maxRippers}
+        disabled={saving}
+        onChange={(e) => {
+          const parsed = parseInt(e.target.value, 10);
+          if (!Number.isNaN(parsed)) update(parsed);
+        }}
+      />
+      <button onClick={() => update(maxRippers + 1)} disabled={saving}>
+        +
+      </button>
+      <span className="text-dim">(currently {maxRippers} of {driveCount} drives)</span>
     </div>
+  );
+}
+
+function RippingToggle({ rippingEnabled, saving, onToggle }) {
+  return (
+    <button
+      className={`ripping-toggle${rippingEnabled ? " active" : ""}`}
+      onClick={onToggle}
+      disabled={saving}
+      title={rippingEnabled ? "Ripping is enabled - click to stop" : "Ripping is stopped - click to start"}
+    >
+      {rippingEnabled ? "Stop Ripping" : "Start Ripping"}
+    </button>
   );
 }
 
@@ -86,33 +109,35 @@ function RegionBadge({ drive, onRefresh }) {
   // (every 3s) - the page's own 5s refresh will show the result once done.
   if (drive.pending_action === "read_region") {
     return (
-      <div className="region-row">
+      <div className="region-cell">
         <span className={`status-pill ${drive.region_known ? "good" : "queued"}`}>
           Region: {drive.region_known ? drive.region : "Unknown"}
         </span>
-        <span className="pending-action-label">Reading region…</span>
+        <span className="pending-action-label">Reading…</span>
       </div>
     );
   }
 
   if (drive.region_known) {
     return (
-      <div className="region-row">
+      <div className="region-cell">
         <span className="status-pill good">Region: {drive.region}</span>
         <button className="region-reread-link" onClick={handleReread} disabled={rereading}>
-          {rereading ? "Clearing…" : "Re-read region"}
+          {rereading ? "Clearing…" : "Re-read"}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="region-row">
+    <div className="region-cell">
       <span className="status-pill queued">Region: Unknown</span>
       {drive.media_present ? (
-        <button onClick={handleStartRead}>Read Region</button>
+        <button className="region-read-btn" onClick={handleStartRead}>Read region</button>
       ) : (
-        <button disabled>Insert disc to read drive region</button>
+        <button className="region-read-btn" disabled title="Insert disc to read drive region">
+          Read region
+        </button>
       )}
     </div>
   );
@@ -120,9 +145,19 @@ function RegionBadge({ drive, onRefresh }) {
 
 function DirectEjectButton({ drive, onRefresh }) {
   const [ejecting, setEjecting] = useState(false);
-  const discStatus = drive.current_disc?.status;
+  const disc = drive.current_disc;
+  const discStatus = disc?.status;
   const closingTray = !!drive.tray_open;
-  const actionLabel = closingTray ? "Close Tray" : "Eject";
+  const waitingForId = discStatus === "ripped" && !disc?.temp_name;
+
+  let idleTitle;
+  if (closingTray) {
+    idleTitle = "Close Tray";
+  } else if (waitingForId) {
+    idleTitle = "Eject to view disc";
+  } else {
+    idleTitle = "Eject";
+  }
 
   let disabledReason = null;
   if (discStatus === "ripping") {
@@ -145,13 +180,16 @@ function DirectEjectButton({ drive, onRefresh }) {
     }
   }
 
+  const title = disabledReason || (ejecting ? (closingTray ? "Closing tray…" : "Ejecting…") : idleTitle);
+
   return (
     <button
+      className="eject-icon-btn"
       onClick={handleClick}
       disabled={!!disabledReason || ejecting}
-      title={disabledReason || `${actionLabel} this drive`}
+      title={title}
     >
-      {disabledReason || (ejecting ? (closingTray ? "Closing tray…" : "Ejecting…") : actionLabel)}
+      ⏏
     </button>
   );
 }
@@ -195,67 +233,66 @@ function TempNameInput({ disc, onSaved }) {
   );
 }
 
+function DiscStatusZone({ disc, rippingEnabled }) {
+  return (
+    <div className="disc-status-zone">
+      <div className="disc-status-row">
+        <span className={`status-pill ${disc.status}`}>{disc.status}</span>
+        <span className="disc-id-label">
+          {disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}
+          {disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
+        </span>
+      </div>
+
+      {disc.status === "queued" && !rippingEnabled && !disc.scheduled_start && (
+        <p className="countdown">Ripping paused - disc detected, waiting</p>
+      )}
+
+      {disc.status === "queued" && rippingEnabled && disc.scheduled_start && (
+        <Countdown scheduledStart={disc.scheduled_start} />
+      )}
+
+      {disc.status === "ripping" && (
+        <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
+      )}
+    </div>
+  );
+}
+
 function DrivePanel({ drive, onRefresh, rippingEnabled }) {
   const disc = drive.current_disc;
-  const ejecting = drive.pending_action === "eject";
-
-  async function handleEject() {
-    await api.ejectDisc(disc.id);
-    onRefresh();
-  }
 
   return (
-    <div className="panel">
-      <div className="drive-header">
-        <h2>{drive.label || drive.device_path}</h2>
-        <span className="device-path">{drive.device_path}</span>
+    <div className="drive-row">
+      <div className="drive-row-identity">
+        <span className="drive-icon">💽</span>
+        <div className="drive-identity-text">
+          <div className="drive-label">{drive.label || drive.device_path}</div>
+          <div className="device-path">{drive.device_path}</div>
+        </div>
       </div>
 
-      <RegionBadge drive={drive} onRefresh={onRefresh} />
-      <div className="region-row">
+      <div className="drive-row-region">
+        <RegionBadge drive={drive} onRefresh={onRefresh} />
+      </div>
+
+      <div className="drive-row-status">
+        {!drive.region_known ? (
+          <span className="status-empty-note">Region unknown — read region before ripping</span>
+        ) : !disc ? (
+          <span className="status-pill idle">idle</span>
+        ) : (
+          <DiscStatusZone disc={disc} rippingEnabled={rippingEnabled} />
+        )}
+      </div>
+
+      <div className="drive-row-temp-name">
+        {disc && <TempNameInput disc={disc} onSaved={onRefresh} />}
+      </div>
+
+      <div className="drive-row-eject">
         <DirectEjectButton drive={drive} onRefresh={onRefresh} />
       </div>
-
-      {!drive.region_known ? (
-        <p className="empty-state">Region unknown — read the region before ripping.</p>
-      ) : !disc ? (
-        <p><span className="status-pill idle">idle</span></p>
-      ) : (
-        <>
-          <p>
-            <span className="disc-id-label">{disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}</span>{" "}
-            <span className={`status-pill ${disc.status}`}>{disc.status}</span>
-          </p>
-
-          {disc.status === "queued" && !rippingEnabled && !disc.scheduled_start && (
-            <p className="countdown">Ripping paused - disc detected, waiting</p>
-          )}
-
-          {disc.status === "queued" && rippingEnabled && disc.scheduled_start && (
-            <Countdown scheduledStart={disc.scheduled_start} />
-          )}
-
-          {disc.status === "ripping" && (
-            <p className="progress-placeholder">
-              {disc.progress_stage
-                ? `${disc.progress_stage}: ${disc.progress_percent ?? 0}%`
-                : "Ripping in progress…"}
-            </p>
-          )}
-
-          <TempNameInput disc={disc} onSaved={onRefresh} />
-
-          {disc.status === "ripped" && (
-            ejecting ? (
-              <p className="pending-action-label">Ejecting…</p>
-            ) : (
-              <button className="eject-btn" onClick={handleEject}>
-                Eject
-              </button>
-            )
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -264,6 +301,7 @@ export default function DriveStatus() {
   const [drives, setDrives] = useState(null);
   const [maxRippers, setMaxRippers] = useState(null);
   const [rippingEnabled, setRippingEnabled] = useState(false);
+  const [savingRippingEnabled, setSavingRippingEnabled] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchDrives = useCallback(() => {
@@ -283,6 +321,16 @@ export default function DriveStatus() {
       .then((data) => setRippingEnabled(data.ripping_enabled))
       .catch((e) => setError(e.message));
   }, []);
+
+  async function toggleRippingEnabled() {
+    setSavingRippingEnabled(true);
+    try {
+      const data = await api.setRippingEnabled(!rippingEnabled);
+      setRippingEnabled(data.ripping_enabled);
+    } finally {
+      setSavingRippingEnabled(false);
+    }
+  }
 
   useEffect(() => {
     fetchDrives();
@@ -317,14 +365,24 @@ export default function DriveStatus() {
 
   return (
     <div>
-      <MaxRippersControl
-        maxRippers={maxRippers ?? 1}
-        driveCount={drives.length}
-        onChange={fetchMaxRippers}
-      />
-      {drives.map((drive) => (
-        <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} rippingEnabled={rippingEnabled} />
-      ))}
+      <div className="control-bar">
+        <MaxRippersControl
+          maxRippers={maxRippers ?? 1}
+          driveCount={drives.length}
+          onChange={fetchMaxRippers}
+        />
+        <RippingToggle
+          rippingEnabled={rippingEnabled}
+          saving={savingRippingEnabled}
+          onToggle={toggleRippingEnabled}
+        />
+      </div>
+
+      <div className="drive-list">
+        {drives.map((drive) => (
+          <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} rippingEnabled={rippingEnabled} />
+        ))}
+      </div>
     </div>
   );
 }

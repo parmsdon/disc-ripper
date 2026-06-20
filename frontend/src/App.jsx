@@ -28,8 +28,6 @@ export default function App() {
   const [theme, setTheme] = useState(loadStoredTheme);
   const [fakeRipMode, setFakeRipMode] = useState(false);
   const [savingFakeRipMode, setSavingFakeRipMode] = useState(false);
-  const [rippingEnabled, setRippingEnabled] = useState(false);
-  const [savingRippingEnabled, setSavingRippingEnabled] = useState(false);
 
   useEffect(() => {
     api.ping()
@@ -49,13 +47,6 @@ export default function App() {
       .catch(() => {});
   }, [env]);
 
-  useEffect(() => {
-    if (!env || env === "unreachable") return;
-    api.getRippingEnabled()
-      .then((data) => setRippingEnabled(data.ripping_enabled))
-      .catch(() => {});
-  }, [env]);
-
   async function toggleFakeRipMode() {
     setSavingFakeRipMode(true);
     try {
@@ -66,36 +57,12 @@ export default function App() {
     }
   }
 
-  async function toggleRippingEnabled() {
-    setSavingRippingEnabled(true);
-    try {
-      const data = await api.setRippingEnabled(!rippingEnabled);
-      setRippingEnabled(data.ripping_enabled);
-    } finally {
-      setSavingRippingEnabled(false);
-    }
-  }
-
   return (
     <BrowserRouter>
       <div className="app">
         <header className="app-header">
           <h1>Disc Ripper</h1>
           <div className="header-controls">
-            {env && env !== "unreachable" && (
-              <button
-                className={`ripping-toggle${rippingEnabled ? " active" : ""}`}
-                onClick={toggleRippingEnabled}
-                disabled={savingRippingEnabled}
-                title={
-                  rippingEnabled
-                    ? "Ripping is enabled - click to stop"
-                    : "Ripping is stopped - click to start"
-                }
-              >
-                {rippingEnabled ? "Stop Ripping" : "Start Ripping"}
-              </button>
-            )}
             {env === "dev" && (
               <button
                 className={`fake-rip-toggle${fakeRipMode ? " active" : ""}`}

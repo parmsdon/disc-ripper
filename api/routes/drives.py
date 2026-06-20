@@ -67,6 +67,7 @@ def list_drives():
                 "id": current_disc_row.id,
                 "type": current_disc_row.type.value if current_disc_row.type else None,
                 "status": current_disc_row.status.value if current_disc_row.status else None,
+                "disc_fingerprint": current_disc_row.disc_fingerprint,
                 "temp_name": current_disc_row.temp_name,
                 "ripped_at": current_disc_row.ripped_at.isoformat() if current_disc_row.ripped_at else None,
                 "created_at": current_disc_row.created_at.isoformat() if current_disc_row.created_at else None,

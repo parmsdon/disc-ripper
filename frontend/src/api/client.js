@@ -26,8 +26,6 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ temp_name: name }),
     }),
-  ejectDisc: (discId) =>
-    request(`/discs/${discId}/eject`, { method: "POST" }),
   getMaxRippers: () => request("/settings/max-rippers"),
   setMaxRippers: (n) =>
     request("/settings/max-rippers", {
