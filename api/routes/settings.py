@@ -21,6 +21,11 @@ _DEFAULT_FAKE_RIP_MODE = False
 _RIPPING_ENABLED_KEY = "ripping_enabled"
 _DEFAULT_RIPPING_ENABLED = False
 
+_SERVICE_STATUS_KEY = "service_status"
+_DEFAULT_SERVICE_STATUS = "stopped"
+_SERVICE_HEARTBEAT_KEY = "service_heartbeat"
+_SERVICE_COMMAND_KEY = "service_command"
+
 
 @settings_bp.route("/max-rippers", methods=["GET"])
 def get_max_rippers():
@@ -123,3 +128,50 @@ def set_ripping_enabled():
 
     session.commit()
     return jsonify({"ripping_enabled": raw})
+
+
+@settings_bp.route("/service-status", methods=["GET"])
+def get_service_status():
+    # Written only by the ripper service itself (running at startup,
+    # stopped on clean shutdown) - read-only from the API's side.
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    setting = session.get(Setting, _SERVICE_STATUS_KEY)
+    value = setting.value if setting and setting.value else _DEFAULT_SERVICE_STATUS
+    return jsonify({"service_status": value})
+
+
+@settings_bp.route("/service-heartbeat", methods=["GET"])
+def get_service_heartbeat():
+    # Written only by the ripper service itself, every poll iteration
+    # (plus a final stamp on clean shutdown) - read-only from the API's side.
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    setting = session.get(Setting, _SERVICE_HEARTBEAT_KEY)
+    value = setting.value if setting and setting.value else None
+    return jsonify({"service_heartbeat": value})
+
+
+@settings_bp.route("/service-command", methods=["PUT"])
+def set_service_command():
+    # Written by the API/UI (e.g. the "Stop Service" button); read and
+    # cleared by the ripper service itself on its next poll.
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("service_command")
+
+    if raw not in ("exit", ""):
+        return jsonify({"error": "service_command must be 'exit' or ''"}), 400
+
+    setting = session.get(Setting, _SERVICE_COMMAND_KEY)
+    if setting:
+        setting.value = raw
+    else:
+        session.add(Setting(key=_SERVICE_COMMAND_KEY, value=raw))
+
+    session.commit()
+    return jsonify({"service_command": raw})

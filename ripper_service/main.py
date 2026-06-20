@@ -9,11 +9,22 @@ creates rip jobs for newly-detected DVDs on region-known drives, and
 starts queued jobs (dvdbackup, slot-aware up to max_rippers) once their
 countdown elapses. CD ripping and the mkisofs/ISO-build step are not
 implemented yet.
+
+Exposes a simple remote start/stop protocol via the settings table:
+    service_status:    "running" | "stopped" - written by this process
+    service_heartbeat:  ISO timestamp, refreshed every poll iteration
+                        and stamped one final time on clean shutdown
+    service_command:    "" | "exit" - written by the API/UI, read and
+                        cleared by this process on its next poll
+A stale heartbeat while service_status="running" means the process died
+without a clean shutdown (crash/kill -9), distinguishable in the UI from
+a genuine clean stop.
 """
 
 import logging
 import os
 import time
+from datetime import datetime
 
 from sqlalchemy import select
 
@@ -30,11 +41,48 @@ from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
 
+_SERVICE_STATUS_KEY = "service_status"
+_SERVICE_HEARTBEAT_KEY = "service_heartbeat"
+_SERVICE_COMMAND_KEY = "service_command"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _set_setting(session, key: str, value: str) -> None:
+    setting = session.get(Setting, key)
+    if setting:
+        setting.value = value
+    else:
+        session.add(Setting(key=key, value=value))
+
+
+def _get_setting_value(session, key: str, default: str) -> str:
+    setting = session.get(Setting, key)
+    return setting.value if setting else default
+
+
+def shutdown(cfg: dict) -> None:
+    """
+    Clean shutdown: kill/roll back any in-flight rip jobs (subprocess
+    terminated, scratch dir cleaned, job/disc reset to queued), mark the
+    service stopped with a final heartbeat, and clear any pending
+    command. Shared by both the remote "exit" command and Ctrl-C.
+    """
+    Session = get_session_factory(cfg)
+    with Session() as session:
+        rollback_excess_jobs(session, 0, cfg)
+
+        _set_setting(session, _SERVICE_STATUS_KEY, "stopped")
+        _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.utcnow().isoformat())
+        _set_setting(session, _SERVICE_COMMAND_KEY, "")
+
+        session.commit()
+
+    logger.info("Clean shutdown complete")
 
 
 def run(cfg: dict) -> None:
@@ -71,6 +119,11 @@ def run(cfg: dict) -> None:
                 stale_running_count,
             )
             rollback_excess_jobs(session, 0, cfg)
+
+    with Session() as session:
+        _set_setting(session, _SERVICE_STATUS_KEY, "running")
+        session.commit()
+    logger.info("service_status set to running")
 
     logger.info("Ripper service started (env=%s)", cfg["environment"])
 
@@ -159,6 +212,16 @@ def run(cfg: dict) -> None:
             with Session() as session:
                 start_eligible_rip_jobs(session, cfg, Session)
 
+            with Session() as session:
+                _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.utcnow().isoformat())
+                session.commit()
+                command = _get_setting_value(session, _SERVICE_COMMAND_KEY, "")
+
+            if command == "exit":
+                logger.info("Received exit command - shutting down cleanly")
+                shutdown(cfg)
+                return
+
         except Exception:
             logger.exception("Error during poll iteration - continuing")
 
@@ -171,6 +234,7 @@ def main() -> None:
         run(cfg)
     except KeyboardInterrupt:
         logger.info("Ripper service stopping (KeyboardInterrupt)")
+        shutdown(cfg)
 
 
 if __name__ == "__main__":

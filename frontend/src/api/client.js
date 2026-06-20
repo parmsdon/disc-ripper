@@ -50,4 +50,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ ripping_enabled: enabled }),
     }),
+  getServiceStatus: () => request("/settings/service-status"),
+  getServiceHeartbeat: () => request("/settings/service-heartbeat"),
+  setServiceCommand: (command) =>
+    request("/settings/service-command", {
+      method: "PUT",
+      body: JSON.stringify({ service_command: command }),
+    }),
 };

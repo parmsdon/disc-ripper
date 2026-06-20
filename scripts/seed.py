@@ -41,6 +41,10 @@ DEFAULT_SETTINGS = [
     {"key": "max_rippers", "value": "1"},
     {"key": "fake_rip_mode", "value": "false"},
     {"key": "ripping_enabled", "value": "false"},
+    # Reflects reality at rest - nothing is running until a service starts.
+    {"key": "service_status", "value": "stopped"},
+    {"key": "service_command", "value": ""},
+    {"key": "service_heartbeat", "value": ""},
 ]
 
 
