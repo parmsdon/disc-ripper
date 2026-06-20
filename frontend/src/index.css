@@ -235,7 +235,8 @@ button:disabled {
   text-align: center;
 }
 
-.theme-toggle {
+.theme-toggle,
+.fake-rip-toggle {
   background: transparent;
   border: 1px solid var(--panel-border);
   color: var(--text-dim);
@@ -245,7 +246,13 @@ button:disabled {
   cursor: pointer;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.fake-rip-toggle:hover {
   color: var(--text);
   border-color: var(--accent);
+}
+
+.fake-rip-toggle.active {
+  color: var(--warn);
+  border-color: var(--warn);
 }

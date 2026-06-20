@@ -26,6 +26,8 @@ function loadStoredTheme() {
 export default function App() {
   const [env, setEnv] = useState(null);
   const [theme, setTheme] = useState(loadStoredTheme);
+  const [fakeRipMode, setFakeRipMode] = useState(false);
+  const [savingFakeRipMode, setSavingFakeRipMode] = useState(false);
 
   useEffect(() => {
     api.ping()
@@ -38,16 +40,38 @@ export default function App() {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (env !== "dev") return;
+    api.getFakeRipMode()
+      .then((data) => setFakeRipMode(data.fake_rip_mode))
+      .catch(() => {});
+  }, [env]);
+
+  async function toggleFakeRipMode() {
+    setSavingFakeRipMode(true);
+    try {
+      const data = await api.setFakeRipMode(!fakeRipMode);
+      setFakeRipMode(data.fake_rip_mode);
+    } finally {
+      setSavingFakeRipMode(false);
+    }
+  }
+
   return (
     <BrowserRouter>
       <div className="app">
         <header className="app-header">
           <h1>Disc Ripper</h1>
           <div className="header-controls">
-            {env && (
-              <span className={`env-badge ${env}`}>
-                {env === "unreachable" ? "API unreachable" : env}
-              </span>
+            {env === "dev" && (
+              <button
+                className={`fake-rip-toggle${fakeRipMode ? " active" : ""}`}
+                onClick={toggleFakeRipMode}
+                disabled={savingFakeRipMode}
+                title="Fake rip mode: uses a fake dvdbackup stand-in instead of real hardware (dev only)"
+              >
+                Fake Mode
+              </button>
             )}
             <button
               className="theme-toggle"
@@ -55,6 +79,11 @@ export default function App() {
             >
               {theme === "dark" ? "☀ Light" : "☾ Dark"}
             </button>
+            {env && (
+              <span className={`env-badge ${env}`}>
+                {env === "unreachable" ? "API unreachable" : env}
+              </span>
+            )}
           </div>
         </header>
 
