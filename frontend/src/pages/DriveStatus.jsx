@@ -64,6 +64,53 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
   );
 }
 
+function RegionBadge({ drive, onRefresh }) {
+  const [reading, setReading] = useState(false);
+  const [rereading, setRereading] = useState(false);
+
+  async function handleStartRead() {
+    setReading(true);
+    try {
+      await api.startRegionRead(drive.id);
+      onRefresh();
+    } finally {
+      setReading(false);
+    }
+  }
+
+  async function handleReread() {
+    setRereading(true);
+    try {
+      await api.rereadRegion(drive.id);
+      onRefresh();
+    } finally {
+      setRereading(false);
+    }
+  }
+
+  if (drive.region_known) {
+    return (
+      <div className="region-row">
+        <span className="status-pill good">Region: {drive.region}</span>
+        <button className="region-reread-link" onClick={handleReread} disabled={rereading}>
+          {rereading ? "Clearing…" : "Re-read region"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="region-row">
+      <span className="status-pill queued">Region: Unknown</span>
+      {/* Always enabled for now — no disc-presence detection until the ripper
+          service exists. Once it does, disable with "Insert a disc first". */}
+      <button onClick={handleStartRead} disabled={reading}>
+        {reading ? "Starting…" : "Read Region"}
+      </button>
+    </div>
+  );
+}
+
 function TempNameInput({ disc, onSaved }) {
   const [value, setValue] = useState(disc.temp_name || "");
   const [saving, setSaving] = useState(false);
@@ -124,7 +171,11 @@ function DrivePanel({ drive, onRefresh }) {
         <span className="device-path">{drive.device_path}</span>
       </div>
 
-      {!disc ? (
+      <RegionBadge drive={drive} onRefresh={onRefresh} />
+
+      {!drive.region_known ? (
+        <p className="empty-state">Region unknown — read the region before ripping.</p>
+      ) : !disc ? (
         <p><span className="status-pill idle">idle</span></p>
       ) : (
         <>

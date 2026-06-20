@@ -60,6 +60,8 @@ def list_drives():
             "label": drive.label,
             "drive_type": drive.drive_type.value if drive.drive_type else None,
             "active": drive.active,
+            "region": drive.physical_drive.region if drive.physical_drive else None,
+            "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
             "current_job": {
                 "id": current_job.id,
                 "disc_id": current_job.disc_id,
@@ -70,3 +72,43 @@ def list_drives():
         })
 
     return jsonify(result)
+
+
+@drives_bp.route("/<int:drive_id>/region/start-read", methods=["POST"])
+def start_region_read(drive_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        return jsonify({"error": "Drive not found"}), 404
+
+    # Actual region reading happens in the ripper service (not yet
+    # implemented). This just validates the drive exists so the UI flow
+    # can be wired up ahead of that.
+    return jsonify({"status": "ready"})
+
+
+@drives_bp.route("/<int:drive_id>/region/reread", methods=["POST"])
+def reread_region(drive_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        return jsonify({"error": "Drive not found"}), 404
+
+    if drive.physical_drive is not None:
+        drive.physical_drive.region = None
+        drive.physical_drive.region_known = False
+        session.commit()
+
+    return jsonify({
+        "id": drive.id,
+        "device_path": drive.device_path,
+        "label": drive.label,
+        "drive_type": drive.drive_type.value if drive.drive_type else None,
+        "active": drive.active,
+        "region": drive.physical_drive.region if drive.physical_drive else None,
+        "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
+    })

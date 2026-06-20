@@ -77,6 +77,24 @@ class EncodeTarget(str, enum.Enum):
 # Models
 # ---------------------------------------------------------------------------
 
+class PhysicalDrive(Base):
+    """
+    Physical optical drive hardware, keyed by a stable identifier (e.g.
+    udevadm ID_SERIAL) rather than device path, since device paths can
+    shift between reboots or be reassigned between dev/prod.
+    """
+    __tablename__ = "physical_drives"
+
+    id = Column(Integer, primary_key=True)
+    hardware_id = Column(String, nullable=False, unique=True)
+    region = Column(Integer, nullable=True)        # 1-6, null = unknown
+    region_known = Column(Boolean, nullable=False, default=False)
+    last_seen_at = Column(DateTime, nullable=True)
+    notes = Column(String, nullable=True)           # e.g. "Samsung SH-224 - replaced 2026-06"
+
+    drives = relationship("Drive", back_populates="physical_drive")
+
+
 class Drive(Base):
     __tablename__ = "drives"
 
@@ -86,7 +104,9 @@ class Drive(Base):
     drive_type = Column(Enum(DiscType), nullable=True)
     label = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    physical_drive_id = Column(Integer, ForeignKey("physical_drives.id"), nullable=True)
 
+    physical_drive = relationship("PhysicalDrive", back_populates="drives")
     rip_jobs = relationship("RipJob", back_populates="drive")
     discs = relationship("Disc", back_populates="drive")
 
@@ -135,6 +155,10 @@ class Disc(Base):
     # so a re-rip can be triggered next time the disc is inserted.
     needs_rerip = Column(Boolean, default=False, nullable=False)
     temp_name = Column(String, nullable=True)
+
+    # Region of the physical drive this disc was ripped on, captured at
+    # rip time for historical record even if the drive's region changes later.
+    ripped_in_region = Column(Integer, nullable=True)
 
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")

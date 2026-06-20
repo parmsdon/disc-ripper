@@ -34,4 +34,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ max_rippers: n }),
     }),
+  startRegionRead: (driveId) =>
+    request(`/drives/${driveId}/region/start-read`, { method: "POST" }),
+  rereadRegion: (driveId) =>
+    request(`/drives/${driveId}/region/reread`, { method: "POST" }),
 };

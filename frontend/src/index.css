@@ -196,6 +196,27 @@ body {
   color: var(--warn);
 }
 
+.region-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.region-reread-link {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  text-decoration: underline;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.region-reread-link:hover {
+  color: var(--accent);
+}
+
 .max-rippers-input {
   width: 3em;
   text-align: center;
