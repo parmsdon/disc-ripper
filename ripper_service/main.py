@@ -19,6 +19,7 @@ from common.models import Drive
 from ripper_service.db import get_session_factory
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.pending_actions import process_pending_actions
+from ripper_service.tray_status import get_tray_status
 from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
@@ -28,6 +29,14 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _tray_open_value(tray_status: str):
+    if tray_status == "tray_open":
+        return True
+    if tray_status in ("disc_ok", "no_disc", "not_ready"):
+        return False
+    return None  # "unknown" or "no_info"
 
 
 def run(cfg: dict) -> None:
@@ -53,6 +62,7 @@ def run(cfg: dict) -> None:
                     info = get_drive_info(device_path)
                     media_present = info["media_present"]
                     media_type = info["media_type"]
+                    tray_open = _tray_open_value(get_tray_status(device_path))
 
                     was_present = media_present_by_device.get(device_path, False)
 
@@ -70,13 +80,15 @@ def run(cfg: dict) -> None:
 
                     media_present_by_device[device_path] = media_present
 
-                    # Persist current media presence so the API/UI (which has
-                    # no direct hardware access) can reflect it.
+                    # Persist current media presence and tray state so the
+                    # API/UI (which has no direct hardware access) can
+                    # reflect them.
                     drive_id = state.get("drive_id")
                     if drive_id is not None:
                         drive = session.get(Drive, drive_id)
                         if drive is not None:
                             drive.media_present = media_present
+                            drive.tray_open = tray_open
 
                 session.commit()
 

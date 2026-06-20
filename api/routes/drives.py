@@ -29,6 +29,7 @@ def _drive_summary(drive: Drive) -> dict:
         "region_known": drive.physical_drive.region_known if drive.physical_drive else False,
         "pending_action": drive.pending_action,
         "media_present": drive.media_present,
+        "tray_open": drive.tray_open,
     }
 
 

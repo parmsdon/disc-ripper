@@ -33,3 +33,30 @@ def eject_drive(device_path: str) -> bool:
         return False
 
     return True
+
+
+def close_tray(device_path: str) -> bool:
+    """
+    Close the disc tray at device_path via `eject -t`.
+
+    Returns True on success (exit 0), False otherwise. Never raises.
+    """
+    try:
+        proc = subprocess.run(
+            ["eject", "-t", device_path],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("Failed to run eject -t for %s: %s", device_path, exc)
+        return False
+
+    if proc.returncode != 0:
+        logger.warning(
+            "eject -t exited %d for %s: %s",
+            proc.returncode, device_path, proc.stderr.strip(),
+        )
+        return False
+
+    return True

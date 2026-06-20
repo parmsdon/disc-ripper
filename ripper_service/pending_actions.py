@@ -11,7 +11,7 @@ import logging
 from sqlalchemy import select
 
 from common.models import Drive
-from ripper_service.eject_helper import eject_drive
+from ripper_service.eject_helper import close_tray, eject_drive
 from ripper_service.regionset_helper import read_region
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,16 @@ def _handle_read_region(drive: Drive, label: str) -> None:
 
 
 def _handle_eject(drive: Drive, label: str) -> None:
-    if eject_drive(drive.device_path):
-        logger.info("Ejected %s", label)
+    # The open/close decision is made here, at execution time, based on
+    # the drive's current tray_open state - pending_action is still just
+    # "eject" either way.
+    if drive.tray_open:
+        if close_tray(drive.device_path):
+            logger.info("Closed tray for %s", label)
+        else:
+            logger.warning("Failed to close tray for %s", label)
     else:
-        logger.warning("Failed to eject %s", label)
+        if eject_drive(drive.device_path):
+            logger.info("Ejected %s", label)
+        else:
+            logger.warning("Failed to eject %s", label)

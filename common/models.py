@@ -115,6 +115,10 @@ class Drive(Base):
     # ripper service has polled this drive yet).
     media_present = Column(Boolean, nullable=True)
 
+    # Whether the tray is physically open, as last observed by the ripper
+    # service's CDROM_DRIVE_STATUS ioctl poll. Null = unknown/not yet checked.
+    tray_open = Column(Boolean, nullable=True)
+
     # DB-based command queue: the API sets these, the ripper service picks
     # them up on its next poll and clears them once executed.
     pending_action = Column(String, nullable=True)     # "read_region" or "eject", null = none

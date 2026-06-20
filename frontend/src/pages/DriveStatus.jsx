@@ -121,6 +121,8 @@ function RegionBadge({ drive, onRefresh }) {
 function DirectEjectButton({ drive, onRefresh }) {
   const [ejecting, setEjecting] = useState(false);
   const discStatus = drive.current_disc?.status;
+  const closingTray = !!drive.tray_open;
+  const actionLabel = closingTray ? "Close Tray" : "Eject";
 
   let disabledReason = null;
   if (discStatus === "ripping") {
@@ -128,7 +130,7 @@ function DirectEjectButton({ drive, onRefresh }) {
   } else if (discStatus === "encoding") {
     disabledReason = "Cannot eject while encoding";
   } else if (drive.pending_action === "eject") {
-    disabledReason = "Eject in progress";
+    disabledReason = closingTray ? "Closing tray…" : "Eject in progress";
   } else if (drive.pending_action === "read_region") {
     disabledReason = "Reading region…";
   }
@@ -147,9 +149,9 @@ function DirectEjectButton({ drive, onRefresh }) {
     <button
       onClick={handleClick}
       disabled={!!disabledReason || ejecting}
-      title={disabledReason || "Eject this drive"}
+      title={disabledReason || `${actionLabel} this drive`}
     >
-      {disabledReason || (ejecting ? "Ejecting…" : "Eject")}
+      {disabledReason || (ejecting ? (closingTray ? "Closing tray…" : "Ejecting…") : actionLabel)}
     </button>
   );
 }
