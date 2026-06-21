@@ -41,6 +41,12 @@ from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
 
+# Statuses with an outstanding RipJob that job_starter can still act on.
+# A disc that's "ripped"/"error" (rip phase concluded) shouldn't match -
+# job_starter has nothing left to pick up for it, and reinserting that
+# physical disc later (e.g. a deliberate re-rip) should get a fresh record.
+_ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.building)
+
 _SERVICE_STATUS_KEY = "service_status"
 _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
@@ -162,28 +168,52 @@ def run(cfg: dict) -> None:
                                 volume_info = read_volume_info(device_path)
                                 disc_fingerprint = volume_info["volume_id"] or volume_info["volume_set_id"]
 
-                                disc = Disc(
-                                    type=DiscType.dvd,
-                                    status=DiscStatus.queued,
-                                    drive_id=drive_id,
-                                    disc_fingerprint=disc_fingerprint,
-                                )
-                                session.add(disc)
-                                session.flush()
+                                # A service restart loses media_present_by_device,
+                                # so a disc that was never removed looks like a
+                                # fresh insert on the next poll. Without an
+                                # identifier we can't safely dedup, so fall back
+                                # to the old create-new behavior in that case.
+                                existing_disc = None
+                                if disc_fingerprint:
+                                    existing_disc = session.scalars(
+                                        select(Disc)
+                                        .where(
+                                            Disc.drive_id == drive_id,
+                                            Disc.disc_fingerprint == disc_fingerprint,
+                                            Disc.status.in_(_ACTIVE_DISC_STATUSES),
+                                        )
+                                        .order_by(Disc.id)
+                                    ).first()
 
-                                # scheduled_start stays null - the job only
-                                # starts counting down once ripping_enabled
-                                # is true (job_starter.py).
-                                session.add(RipJob(
-                                    disc_id=disc.id,
-                                    drive_id=drive_id,
-                                    status=JobStatus.queued,
-                                ))
-                                logger.info(
-                                    "Created disc #%s for %s (volume_id=%s, volume_set_id=%s) - "
-                                    "rip job queued, waiting for ripping to be enabled",
-                                    disc.id, label, volume_info["volume_id"], volume_info["volume_set_id"],
-                                )
+                                if existing_disc is not None:
+                                    logger.info(
+                                        "Disc %s already tracked as disc #%s on Drive %s, "
+                                        "resuming existing record",
+                                        disc_fingerprint, existing_disc.id, label,
+                                    )
+                                else:
+                                    disc = Disc(
+                                        type=DiscType.dvd,
+                                        status=DiscStatus.queued,
+                                        drive_id=drive_id,
+                                        disc_fingerprint=disc_fingerprint,
+                                    )
+                                    session.add(disc)
+                                    session.flush()
+
+                                    # scheduled_start stays null - the job only
+                                    # starts counting down once ripping_enabled
+                                    # is true (job_starter.py).
+                                    session.add(RipJob(
+                                        disc_id=disc.id,
+                                        drive_id=drive_id,
+                                        status=JobStatus.queued,
+                                    ))
+                                    logger.info(
+                                        "Created disc #%s for %s (volume_id=%s, volume_set_id=%s) - "
+                                        "rip job queued, waiting for ripping to be enabled",
+                                        disc.id, label, volume_info["volume_id"], volume_info["volume_set_id"],
+                                    )
                             elif media_type != "dvd":
                                 logger.info(
                                     "Drive %s: media_type=%s - skipping job creation "
