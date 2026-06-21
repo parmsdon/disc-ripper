@@ -167,7 +167,8 @@ body {
   letter-spacing: 0.04em;
 }
 
-.status-pill.idle {
+.status-pill.idle,
+.status-pill.open {
   background: rgba(154, 163, 178, 0.15);
   color: var(--text-dim);
 }

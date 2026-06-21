@@ -92,8 +92,12 @@ export default function App() {
               <button
                 className={`fake-dirty-toggle${fakeDirtyMode ? " active" : ""}`}
                 onClick={toggleFakeDirtyMode}
-                disabled={savingFakeDirtyMode}
-                title="Fake dirty mode: when fake-ripping on Drive 1, simulates a recoverable read error to test dirty-rip detection (dev only)"
+                disabled={savingFakeDirtyMode || !fakeRipMode}
+                title={
+                  fakeRipMode
+                    ? "Fake dirty mode: when fake-ripping on Drive 1, simulates a recoverable read error to test dirty-rip detection (dev only)"
+                    : "Requires Fake Mode to be on - dirty simulation only takes effect within fake rip runs"
+                }
               >
                 Dirty Mode
               </button>

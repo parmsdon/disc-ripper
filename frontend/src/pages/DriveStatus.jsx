@@ -376,7 +376,12 @@ function DiscStatusZone({ disc }) {
 }
 
 function DrivePanel({ drive, onRefresh }) {
-  const disc = drive.current_disc;
+  // An open tray can't have a disc actually loaded, no matter what
+  // current_disc the backend still has on record for it (e.g. ejection
+  // is in flight, or the disc was removed before the next API refresh) -
+  // treat the drive as disc-less for display purposes until it's closed
+  // again, rather than showing stale per-disc state.
+  const disc = drive.tray_open ? null : drive.current_disc;
 
   return (
     <div className="drive-row">
@@ -393,7 +398,9 @@ function DrivePanel({ drive, onRefresh }) {
       </div>
 
       <div className="drive-row-status">
-        {!drive.region_known ? (
+        {drive.tray_open ? (
+          <span className="status-pill open">Open</span>
+        ) : !drive.region_known ? (
           <span className="status-empty-note">Region unknown — read region before ripping</span>
         ) : !disc ? (
           <span className="status-pill idle">idle</span>
