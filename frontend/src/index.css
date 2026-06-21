@@ -333,6 +333,10 @@ button:disabled {
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   padding: 10px 16px;
+  /* Reserves room for the tallest region-cell state (status pill + Read
+     region/Re-read row) up front, so the row doesn't grow/shift when a
+     drive switches between region states. */
+  min-height: 76px;
 }
 
 .drive-row-identity {
