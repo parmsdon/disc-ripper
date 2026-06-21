@@ -132,8 +132,11 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         active_jobs.unregister(rip_job_id)
         return
 
-    # dvdbackup succeeded - move on to building the ISO. Disc shows
-    # "building" (distinct from "ripping") while this runs.
+    # dvdbackup succeeded (possibly "dirty" - padded over a recoverable
+    # read error) - move on to building the ISO regardless; dirty is just
+    # recorded for now and checked again at final completion below. Disc
+    # shows "building" (distinct from "ripping") while this runs.
+    dirty = result.get("dirty", False)
     disc_id = _mark_building(rip_job_id, label, session_factory)
     if disc_id is None:
         active_jobs.unregister(rip_job_id)
@@ -158,7 +161,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         return
 
     if mkiso_result["success"]:
-        _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory)
+        _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty)
     else:
         _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
 
@@ -184,7 +187,7 @@ def _mark_building(rip_job_id, label, session_factory):
         session.close()
 
 
-def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory) -> None:
+def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty: bool) -> None:
     session = session_factory()
     try:
         rip_job = session.get(RipJob, rip_job_id)
@@ -199,6 +202,13 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         disc.ripped_at = naive_utcnow()
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
+
+        # dirty -> flag for a re-rip next time this disc is reinserted
+        # (main.py's detection dedup checks needs_rerip). clean -> clear
+        # any prior dirty flag, e.g. this is a re-rip that's now succeeded.
+        disc.rip_quality = "dirty" if dirty else "clean"
+        disc.needs_rerip = dirty
+
         # A working title set before the rip finished (e.g. typed in while
         # ripping/building) goes straight to "ripped" - otherwise there's
         # nothing to identify it by yet, so it needs a stop in
@@ -209,7 +219,10 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         rip_job.completed_at = naive_utcnow()
 
         session.commit()
-        logger.info("Rip job %s (%s) completed successfully - ISO at %s", rip_job_id, label, relative_path)
+        logger.info(
+            "Rip job %s (%s) completed successfully - ISO at %s (rip_quality=%s)",
+            rip_job_id, label, relative_path, disc.rip_quality,
+        )
     finally:
         session.close()
         _cleanup_scratch_dir(scratch_dir)

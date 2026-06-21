@@ -18,6 +18,18 @@ from ripper_service import active_jobs
 logger = logging.getLogger(__name__)
 
 _PROGRESS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:done)?", re.IGNORECASE)
+_DIRTY_RIP_RE = re.compile(r"Error reading.*padding", re.IGNORECASE)
+
+
+def detect_dirty_rip(log_text: str) -> bool:
+    """
+    True if dvdbackup's captured output shows it padded over a
+    recoverable read error rather than failing outright (the dvdbackup
+    process still exits 0 in that case). Kept isolated and
+    unit-testable since the exact message format may need refinement
+    against real-world dvdbackup logs.
+    """
+    return any(_DIRTY_RIP_RE.search(line) for line in log_text.splitlines())
 
 
 def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, session_factory) -> dict:
@@ -25,7 +37,8 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
     Run dvdbackup (real or fake) for one disc, updating rip_job progress
     as output streams in.
 
-    Returns {"success": bool, "log": str, "return_code": int|None}.
+    Returns {"success": bool, "log": str, "return_code": int|None}, plus
+    "dirty": bool when success is True (see detect_dirty_rip).
     Never raises - any failure is captured and reflected in the result.
     """
     if fake_mode:
@@ -76,7 +89,11 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
             rip_job.log = full_log
             session.commit()
 
-        return {"success": proc.returncode == 0, "log": full_log, "return_code": proc.returncode}
+        success = proc.returncode == 0
+        result = {"success": success, "log": full_log, "return_code": proc.returncode}
+        if success:
+            result["dirty"] = detect_dirty_rip(full_log)
+        return result
 
     except Exception as exc:
         logger.exception("run_dvdbackup crashed for rip_job %s", rip_job_id)

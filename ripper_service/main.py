@@ -47,6 +47,12 @@ POLL_INTERVAL_SECONDS = 3
 # physical disc later (e.g. a deliberate re-rip) should get a fresh record.
 _ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.building)
 
+# Statuses where the rip phase has concluded but the disc is still
+# physically the same one we'd see again on reinsertion. needs_rerip
+# distinguishes "dirty - reuse this row for a re-rip" (below) from
+# "clean - already done, ignore reinsertion entirely".
+_COMPLETED_DISC_STATUSES = (DiscStatus.ripped, DiscStatus.identifying)
+
 _SERVICE_STATUS_KEY = "service_status"
 _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
@@ -173,9 +179,10 @@ def run(cfg: dict) -> None:
                                 # fresh insert on the next poll. Without an
                                 # identifier we can't safely dedup, so fall back
                                 # to the old create-new behavior in that case.
-                                existing_disc = None
+                                existing_active_disc = None
+                                existing_completed_disc = None
                                 if disc_fingerprint:
-                                    existing_disc = session.scalars(
+                                    existing_active_disc = session.scalars(
                                         select(Disc)
                                         .where(
                                             Disc.drive_id == drive_id,
@@ -185,11 +192,44 @@ def run(cfg: dict) -> None:
                                         .order_by(Disc.id)
                                     ).first()
 
-                                if existing_disc is not None:
+                                    if existing_active_disc is None:
+                                        existing_completed_disc = session.scalars(
+                                            select(Disc)
+                                            .where(
+                                                Disc.drive_id == drive_id,
+                                                Disc.disc_fingerprint == disc_fingerprint,
+                                                Disc.status.in_(_COMPLETED_DISC_STATUSES),
+                                            )
+                                            .order_by(Disc.id)
+                                        ).first()
+
+                                if existing_active_disc is not None:
                                     logger.info(
                                         "Disc %s already tracked as disc #%s on Drive %s, "
                                         "resuming existing record",
-                                        disc_fingerprint, existing_disc.id, label,
+                                        disc_fingerprint, existing_active_disc.id, label,
+                                    )
+                                elif existing_completed_disc is not None and existing_completed_disc.needs_rerip:
+                                    existing_completed_disc.status = DiscStatus.queued
+                                    existing_completed_disc.rip_attempt_count += 1
+                                    existing_completed_disc.error_message = None
+                                    existing_completed_disc.rip_quality = None
+                                    session.add(RipJob(
+                                        disc_id=existing_completed_disc.id,
+                                        drive_id=drive_id,
+                                        status=JobStatus.queued,
+                                    ))
+                                    logger.info(
+                                        "Disc %s previously had a dirty rip - starting re-rip "
+                                        "attempt #%s for disc #%s",
+                                        disc_fingerprint, existing_completed_disc.rip_attempt_count,
+                                        existing_completed_disc.id,
+                                    )
+                                elif existing_completed_disc is not None:
+                                    logger.info(
+                                        "Disc %s already ripped cleanly as disc #%s on Drive %s - "
+                                        "ignoring reinsertion",
+                                        disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 else:
                                     disc = Disc(
@@ -201,9 +241,9 @@ def run(cfg: dict) -> None:
                                     session.add(disc)
                                     session.flush()
 
-                                    # scheduled_start stays null - the job only
-                                    # starts counting down once ripping_enabled
-                                    # is true (job_starter.py).
+                                    # RipJob starts queued - job_starter promotes
+                                    # it to running once ripping_enabled is true
+                                    # and a slot is free.
                                     session.add(RipJob(
                                         disc_id=disc.id,
                                         drive_id=drive_id,

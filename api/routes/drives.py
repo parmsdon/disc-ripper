@@ -70,6 +70,8 @@ def list_drives():
                 "status": current_disc_row.status.value if current_disc_row.status else None,
                 "disc_fingerprint": current_disc_row.disc_fingerprint,
                 "temp_name": current_disc_row.temp_name,
+                "rip_quality": current_disc_row.rip_quality,
+                "rip_attempt_count": current_disc_row.rip_attempt_count,
                 "ripped_at": current_disc_row.ripped_at.isoformat() if current_disc_row.ripped_at else None,
                 "created_at": current_disc_row.created_at.isoformat() if current_disc_row.created_at else None,
                 "scheduled_start": current_job.scheduled_start.isoformat() if current_job and current_job.scheduled_start else None,

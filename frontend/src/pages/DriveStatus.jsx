@@ -325,11 +325,18 @@ function TempNameInput({ disc, onSaved }) {
   );
 }
 
+const _IN_PROGRESS_DISC_STATUSES = ["queued", "ripping", "building"];
+
 function DiscStatusZone({ disc }) {
+  const isDirty = (disc.status === "ripped" || disc.status === "identifying") && disc.rip_quality === "dirty";
+  const isRerip = disc.rip_attempt_count > 1;
+  const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
+  const pillLabel = reripInProgress ? "re-ripping" : disc.status;
+
   return (
     <div className="disc-status-zone">
       <div className="disc-status-row">
-        <span className={`status-pill ${disc.status}`}>{disc.status}</span>
+        <span className={`status-pill ${disc.status}`}>{pillLabel}</span>
         <span className="disc-id-label">
           {disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}
           {disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
@@ -339,7 +346,20 @@ function DiscStatusZone({ disc }) {
             Working title: {disc.temp_name}
           </span>
         )}
+        {isDirty && (
+          <span
+            className="dirty-rip-badge"
+            title="Rip completed with read errors - will be re-attempted if reinserted"
+          >
+            ⚠ Dirty rip
+          </span>
+        )}
+        {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
       </div>
+
+      {reripInProgress && (
+        <p className="rerip-hint">Re-ripping after a previous dirty attempt</p>
+      )}
 
       {disc.status === "identifying" && (
         <p className="identifying-hint">Disc ripped — please identify before this drive can be reused</p>

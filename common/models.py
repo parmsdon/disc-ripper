@@ -191,6 +191,14 @@ class Disc(Base):
     needs_rerip = Column(Boolean, default=False, nullable=False)
     temp_name = Column(String, nullable=True)
 
+    # "clean" or "dirty" (recoverable dvdbackup read errors padded over -
+    # see ripper_service.rip_worker.detect_dirty_rip), set once a DVD rip
+    # completes successfully. Null until first successful completion. A
+    # plain string, not the CDTrack.rip_quality enum above - distinct
+    # concept, distinct value set.
+    rip_quality = Column(String, nullable=True)
+    rip_attempt_count = Column(Integer, nullable=False, default=1, server_default="1")
+
     # Region(s) the drive supported at the time this disc was ripped, as a
     # space-separated digit string (same format as PhysicalDrive.region).
     # Captured as a snapshot for historical record even though the drive's

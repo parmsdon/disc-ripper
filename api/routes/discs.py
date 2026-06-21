@@ -39,6 +39,8 @@ def _disc_to_dict(disc: Disc) -> dict:
         "album_artist": disc.album_artist,
         "needs_rerip": disc.needs_rerip,
         "temp_name": disc.temp_name,
+        "rip_quality": disc.rip_quality,
+        "rip_attempt_count": disc.rip_attempt_count,
         "scheduled_start": active_job.scheduled_start.isoformat() if active_job and active_job.scheduled_start else None,
         "progress_percent": active_job.progress_percent if active_job else None,
         "progress_stage": active_job.progress_stage if active_job else None,
