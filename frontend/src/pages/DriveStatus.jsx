@@ -263,13 +263,15 @@ function DirectEjectButton({ drive, onRefresh }) {
 }
 
 function TempNameInput({ disc, onSaved }) {
-  const [value, setValue] = useState(disc.temp_name || "");
+  const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Sync input if disc changes (e.g. after a refresh)
+  // Reset to blank when switching to a different disc - the input is for
+  // entering a new value, not for displaying the currently-saved one
+  // (that's shown via the working-title badge near the disc id instead).
   useEffect(() => {
-    setValue(disc.temp_name || "");
-  }, [disc.temp_name]);
+    setValue("");
+  }, [disc.id]);
 
   const needsName = (disc.status === "ripped" || disc.status === "encoding") && !disc.temp_name;
 
@@ -277,6 +279,7 @@ function TempNameInput({ disc, onSaved }) {
     setSaving(true);
     try {
       await api.saveTempName(disc.id, value.trim() || null);
+      setValue("");
       onSaved();
     } finally {
       setSaving(false);
@@ -285,6 +288,10 @@ function TempNameInput({ disc, onSaved }) {
 
   function handleCopyLabel() {
     setValue(disc.disc_fingerprint);
+  }
+
+  function handleCopyCurrent() {
+    setValue(disc.temp_name);
   }
 
   return (
@@ -307,6 +314,16 @@ function TempNameInput({ disc, onSaved }) {
           ↓
         </button>
       )}
+      {disc.temp_name && (
+        <button
+          type="button"
+          className="copy-current-btn"
+          onClick={handleCopyCurrent}
+          title="Copy current working title"
+        >
+          ↻
+        </button>
+      )}
       <button onClick={handleSave} disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
@@ -324,6 +341,11 @@ function DiscStatusZone({ disc, rippingEnabled }) {
           {disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}
           {disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
         </span>
+        {disc.temp_name && (
+          <span className="working-title-badge" title="Working title">
+            Working title: {disc.temp_name}
+          </span>
+        )}
       </div>
 
       {disc.status === "queued" && !rippingEnabled && !disc.scheduled_start && (
