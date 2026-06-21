@@ -318,7 +318,9 @@ function TempNameInput({ disc, onSaved }) {
       <button onClick={handleSave} disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
-      <span className="warning-hint">This can't be changed once saved</span>
+      {disc.status === "identifying" && (
+        <span className="warning-hint">This can't be changed once saved</span>
+      )}
     </div>
   );
 }
