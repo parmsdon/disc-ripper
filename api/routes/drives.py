@@ -6,12 +6,10 @@ Phase 1: list configured drives and their current status, for the
 tail) will be populated once the ripper service writes job state.
 """
 
-from datetime import datetime
-
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import select
 
-from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus
+from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus, naive_utcnow
 
 drives_bp = Blueprint("drives", __name__)
 
@@ -104,7 +102,7 @@ def start_region_read(drive_id):
     # Actual region reading happens in the ripper service - it picks this
     # up via the pending_action command queue on its next poll.
     drive.pending_action = "read_region"
-    drive.pending_action_requested_at = datetime.utcnow()
+    drive.pending_action_requested_at = naive_utcnow()
     session.commit()
 
     return jsonify(_drive_summary(drive))
@@ -123,7 +121,7 @@ def eject_drive_directly(drive_id):
     # directly off drive_id - works even when there's no disc record at all
     # (e.g. an empty drive being opened, or a disc never queued for ripping).
     drive.pending_action = "eject"
-    drive.pending_action_requested_at = datetime.utcnow()
+    drive.pending_action_requested_at = naive_utcnow()
     session.commit()
 
     return jsonify(_drive_summary(drive))

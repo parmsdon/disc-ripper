@@ -6,11 +6,9 @@ Safe to call repeatedly - the main loop re-syncs periodically so drives
 added/removed from config are picked up without restarting the service.
 """
 
-from datetime import datetime
-
 from sqlalchemy import select
 
-from common.models import Drive, PhysicalDrive, DiscType
+from common.models import Drive, PhysicalDrive, DiscType, naive_utcnow
 from ripper_service.udev_helper import get_drive_info
 
 
@@ -55,7 +53,7 @@ def sync_physical_drives(session, cfg: dict) -> dict:
         if physical_drive is None:
             physical_drive = PhysicalDrive(hardware_id=hardware_id, region_known=False)
             session.add(physical_drive)
-        physical_drive.last_seen_at = datetime.utcnow()
+        physical_drive.last_seen_at = naive_utcnow()
 
         if drive.physical_drive_id is None:
             drive.physical_drive = physical_drive

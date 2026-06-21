@@ -24,7 +24,7 @@ a genuine clean stop.
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -77,7 +77,7 @@ def shutdown(cfg: dict) -> None:
         rollback_excess_jobs(session, 0, cfg)
 
         _set_setting(session, _SERVICE_STATUS_KEY, "stopped")
-        _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.utcnow().isoformat())
+        _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())
         _set_setting(session, _SERVICE_COMMAND_KEY, "")
 
         session.commit()
@@ -213,7 +213,7 @@ def run(cfg: dict) -> None:
                 start_eligible_rip_jobs(session, cfg, Session)
 
             with Session() as session:
-                _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.utcnow().isoformat())
+                _set_setting(session, _SERVICE_HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())
                 session.commit()
                 command = _get_setting_value(session, _SERVICE_COMMAND_KEY, "")
 

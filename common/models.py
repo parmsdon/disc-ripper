@@ -13,7 +13,7 @@ Schema covers:
 """
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -30,6 +30,21 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+def naive_utcnow() -> datetime:
+    """
+    Current UTC time as a naive datetime, for use as a default/value for
+    these models' DateTime columns (all "timestamp without time zone").
+
+    Deliberately not datetime.now(timezone.utc) directly: psycopg2
+    converts aware datetimes to the Postgres session's TimeZone setting
+    before storing them in a tz-naive column, silently shifting the
+    wall-clock value (e.g. +1h for Europe/London in BST). Stripping
+    tzinfo here keeps the stored value as true UTC, matching what the
+    deprecated datetime.utcnow() this replaces always stored.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +170,7 @@ class Disc(Base):
     drive_id = Column(Integer, ForeignKey("drives.id"), nullable=True)
     catalog_id = Column(Integer, ForeignKey("catalog.id"), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=naive_utcnow, nullable=False)
     ripped_at = Column(DateTime, nullable=True)
 
     raw_path = Column(String, nullable=True)           # path under datastore, e.g. dvd_store/raw/123
@@ -217,7 +232,7 @@ class LookupCandidate(Base):
     source = Column(String, nullable=False)     # "musicbrainz" or "cddb"
     candidate_data = Column(JSON, nullable=False)
     selected = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=naive_utcnow, nullable=False)
 
     disc = relationship("Disc", back_populates="lookup_candidates")
 
@@ -243,7 +258,7 @@ class RipJob(Base):
     drive_id = Column(Integer, ForeignKey("drives.id"), nullable=True)
 
     status = Column(Enum(JobStatus), default=JobStatus.queued, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=naive_utcnow, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
@@ -271,7 +286,7 @@ class EncodeJob(Base):
     status = Column(Enum(JobStatus), default=JobStatus.queued, nullable=False)
     source_file = Column(String, nullable=True)
     output_path = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=naive_utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
 

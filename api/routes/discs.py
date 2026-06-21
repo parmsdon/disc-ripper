@@ -5,12 +5,10 @@ Phase 1: basic listing/detail/status. Rip/encode job creation and
 metadata editing endpoints will be expanded in later phases.
 """
 
-from datetime import datetime
-
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import select
 
-from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus
+from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus, naive_utcnow
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -134,7 +132,7 @@ def eject_disc(disc_id):
     # attached - queue it via pending_action for the ripper service to pick
     # up on its next poll.
     drive.pending_action = "eject"
-    drive.pending_action_requested_at = datetime.utcnow()
+    drive.pending_action_requested_at = naive_utcnow()
     session.commit()
 
     return jsonify({"status": "requested"})

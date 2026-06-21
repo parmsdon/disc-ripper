@@ -20,7 +20,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import get_store_path
-from common.models import Disc, DiscStatus, JobStatus, RipJob, Setting
+from common.models import Disc, DiscStatus, JobStatus, RipJob, Setting, naive_utcnow
 from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.rip_worker import run_dvdbackup, run_mkisofs
@@ -36,7 +36,7 @@ _JOB_START_COUNTDOWN_SECONDS = 10
 
 
 def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
-    now = datetime.utcnow()
+    now = naive_utcnow()
 
     ripping_enabled = _get_ripping_enabled(session)
     max_rippers = _get_max_rippers(session)
@@ -231,13 +231,13 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         relative_path = str(iso_dir.relative_to(Path(cfg["storage"]["datastore_root"])))
 
         disc.raw_path = relative_path
-        disc.ripped_at = datetime.utcnow()
+        disc.ripped_at = naive_utcnow()
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
         disc.status = DiscStatus.ripped
 
         rip_job.status = JobStatus.done
-        rip_job.completed_at = datetime.utcnow()
+        rip_job.completed_at = naive_utcnow()
 
         session.commit()
         logger.info("Rip job %s (%s) completed successfully - ISO at %s", rip_job_id, label, relative_path)
@@ -256,7 +256,7 @@ def _fail_job(rip_job_id, label, result, scratch_dir, session_factory) -> None:
         disc = rip_job.disc
 
         rip_job.status = JobStatus.error
-        rip_job.completed_at = datetime.utcnow()
+        rip_job.completed_at = naive_utcnow()
         error_message = _extract_error_message(result.get("log") or "")
         rip_job.error_message = error_message
         if disc is not None:
