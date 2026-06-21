@@ -345,7 +345,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 110px minmax(160px, 1fr) 480px 36px;
+  grid-template-columns: 140px 140px minmax(160px, 1fr) 480px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
