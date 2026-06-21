@@ -91,6 +91,7 @@ const HEARTBEAT_STALE_THRESHOLD_MS = 10000;
 
 function ServiceStatusIndicator({ serviceStatus, serviceHeartbeat, saving, onStop }) {
   const [now, setNow] = useState(Date.now());
+  const [stopRequested, setStopRequested] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -99,6 +100,18 @@ function ServiceStatusIndicator({ serviceStatus, serviceHeartbeat, saving, onSto
 
   const heartbeatMs = serviceHeartbeat ? new Date(serviceHeartbeat).getTime() : null;
   const isStale = heartbeatMs === null || now - heartbeatMs > HEARTBEAT_STALE_THRESHOLD_MS;
+
+  // The request has been resolved one way or another once the service is
+  // confirmed stopped, or it died mid-shutdown without completing cleanly
+  // (still "running" but no longer responding) - clear the local flag so
+  // the button's disabled state goes back to being driven purely by
+  // serviceStatus, in case the service is restarted later and needs to
+  // be stoppable again.
+  useEffect(() => {
+    if (serviceStatus === "stopped" || (serviceStatus === "running" && isStale)) {
+      setStopRequested(false);
+    }
+  }, [serviceStatus, isStale]);
 
   let pillClass = "idle";
   let pillText = "Ripper service: stopped";
@@ -114,16 +127,23 @@ function ServiceStatusIndicator({ serviceStatus, serviceHeartbeat, saving, onSto
     detailText = `stopped at ${new Date(heartbeatMs).toLocaleTimeString()}`;
   }
 
+  function handleStopClick() {
+    setStopRequested(true);
+    onStop();
+  }
+
+  const buttonLabel = stopRequested && serviceStatus === "running" ? "Stopping…" : "Stop Service";
+
   return (
     <div className="control-bar-group">
       <span className={`status-pill ${pillClass}`}>{pillText}</span>
       {detailText && <span className="text-dim">{detailText}</span>}
       <button
-        onClick={onStop}
-        disabled={saving || serviceStatus === "stopped"}
+        onClick={handleStopClick}
+        disabled={saving || stopRequested || serviceStatus === "stopped"}
         title="Request a clean shutdown of the ripper service"
       >
-        Stop Service
+        {buttonLabel}
       </button>
     </div>
   );
