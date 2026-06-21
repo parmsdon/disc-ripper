@@ -60,6 +60,7 @@ class DiscStatus(str, enum.Enum):
     queued = "queued"
     ripping = "ripping"
     building = "building"
+    identifying = "identifying"
     ripped = "ripped"
     encoding = "encoding"
     done = "done"

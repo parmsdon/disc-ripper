@@ -1,27 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 
-function Countdown({ scheduledStart }) {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (!scheduledStart) {
-    return null;
-  }
-
-  const remainingSeconds = Math.ceil((new Date(scheduledStart).getTime() - now) / 1000);
-
-  if (remainingSeconds <= 0) {
-    return null;
-  }
-
-  return <p className="countdown">Starting in {remainingSeconds}s</p>;
-}
-
 function ProgressBar({ percent, stage }) {
   const pct = percent ?? 0;
   return (
@@ -214,7 +193,7 @@ function DirectEjectButton({ drive, onRefresh }) {
   const disc = drive.current_disc;
   const discStatus = disc?.status;
   const closingTray = !!drive.tray_open;
-  const waitingForId = discStatus === "ripped" && !disc?.temp_name;
+  const waitingForId = discStatus === "identifying";
 
   let idleTitle;
   if (closingTray) {
@@ -273,7 +252,13 @@ function TempNameInput({ disc, onSaved }) {
     setValue("");
   }, [disc.id]);
 
-  const needsName = (disc.status === "ripped" || disc.status === "encoding") && !disc.temp_name;
+  // Naming is only offered while a disc is "identifying" - once a name is
+  // saved the API auto-transitions the disc to "ripped" and this input
+  // disappears for good. There's deliberately no edit-after-lock path: the
+  // working title is just a bridge until real catalog matching exists.
+  if (disc.status !== "identifying") {
+    return null;
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -295,14 +280,14 @@ function TempNameInput({ disc, onSaved }) {
   }
 
   return (
-    <div className={`temp-name-row${needsName ? " needs-name" : ""}`}>
+    <div className="temp-name-row">
       <input
         type="text"
         placeholder="Working title…"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-        className={needsName ? "input-warning" : ""}
+        className="input-warning"
       />
       {disc.disc_fingerprint && (
         <button
@@ -327,12 +312,12 @@ function TempNameInput({ disc, onSaved }) {
       <button onClick={handleSave} disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
-      {needsName && <span className="warning-hint">Add a name before ejecting</span>}
+      <span className="warning-hint">This can't be changed once saved</span>
     </div>
   );
 }
 
-function DiscStatusZone({ disc, rippingEnabled }) {
+function DiscStatusZone({ disc }) {
   return (
     <div className="disc-status-zone">
       <div className="disc-status-row">
@@ -348,8 +333,8 @@ function DiscStatusZone({ disc, rippingEnabled }) {
         )}
       </div>
 
-      {disc.status === "queued" && rippingEnabled && disc.scheduled_start && (
-        <Countdown scheduledStart={disc.scheduled_start} />
+      {disc.status === "identifying" && (
+        <p className="identifying-hint">Disc ripped — please identify before this drive can be reused</p>
       )}
 
       {(disc.status === "ripping" || disc.status === "building") && (
@@ -359,7 +344,7 @@ function DiscStatusZone({ disc, rippingEnabled }) {
   );
 }
 
-function DrivePanel({ drive, onRefresh, rippingEnabled }) {
+function DrivePanel({ drive, onRefresh }) {
   const disc = drive.current_disc;
 
   return (
@@ -382,7 +367,7 @@ function DrivePanel({ drive, onRefresh, rippingEnabled }) {
         ) : !disc ? (
           <span className="status-pill idle">idle</span>
         ) : (
-          <DiscStatusZone disc={disc} rippingEnabled={rippingEnabled} />
+          <DiscStatusZone disc={disc} />
         )}
       </div>
 
@@ -514,7 +499,7 @@ export default function DriveStatus() {
 
       <div className="drive-list">
         {drives.map((drive) => (
-          <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} rippingEnabled={rippingEnabled} />
+          <DrivePanel key={drive.id} drive={drive} onRefresh={fetchDrives} />
         ))}
       </div>
     </div>

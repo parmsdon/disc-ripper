@@ -192,7 +192,8 @@ body {
 }
 
 .status-pill.imperfect,
-.status-pill.queued {
+.status-pill.queued,
+.status-pill.identifying {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
 }
@@ -475,6 +476,12 @@ button:disabled {
 .warning-hint {
   width: 100%;
   font-size: 10px;
+  color: var(--warn);
+}
+
+.identifying-hint {
+  margin: 0;
+  font-size: 12px;
   color: var(--warn);
 }
 

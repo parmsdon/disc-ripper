@@ -30,7 +30,7 @@ def health():
         select(func.count()).select_from(Disc).where(
             Disc.type == DiscType.dvd,
             Disc.catalog_id.is_(None),
-            Disc.status.in_([DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done]),
+            Disc.status.in_([DiscStatus.identifying, DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done]),
         )
     )
 

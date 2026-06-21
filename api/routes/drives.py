@@ -14,7 +14,8 @@ from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus, naive_utcn
 drives_bp = Blueprint("drives", __name__)
 
 _ACTIVE_STATUSES = [
-    DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.ripped, DiscStatus.encoding,
+    DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.identifying,
+    DiscStatus.ripped, DiscStatus.encoding,
 ]
 
 

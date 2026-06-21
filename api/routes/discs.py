@@ -110,6 +110,8 @@ def update_temp_name(disc_id):
         return jsonify({"error": "Missing field: temp_name"}), 400
 
     disc.temp_name = body["temp_name"] or None
+    if disc.temp_name and disc.status == DiscStatus.identifying:
+        disc.status = DiscStatus.ripped
     session.commit()
     return jsonify(_disc_to_dict(disc))
 

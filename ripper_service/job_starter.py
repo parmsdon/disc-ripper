@@ -14,7 +14,6 @@ import logging
 import os
 import shutil
 import threading
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -32,7 +31,6 @@ _DEFAULT_MAX_RIPPERS = 1
 _FAKE_RIP_MODE_KEY = "fake_rip_mode"
 _RIPPING_ENABLED_KEY = "ripping_enabled"
 _DEFAULT_RIPPING_ENABLED = False
-_JOB_START_COUNTDOWN_SECONDS = 10
 
 
 def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
@@ -42,30 +40,21 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
     max_rippers = _get_max_rippers(session)
     fake_rip_mode = _get_fake_rip_mode(session)
 
-    if ripping_enabled:
-        # Newly-created jobs, and ones that were paused mid-countdown,
-        # become eligible to start a fresh countdown now.
-        _activate_pending_countdowns(session, now)
-    else:
-        # Pause anything mid-countdown, and kill/roll back anything
-        # already running - ripping_enabled=false means stopped, full stop.
-        _pause_counting_down_jobs(session)
+    if not ripping_enabled:
+        # ripping_enabled=false means stopped, full stop - kill/roll back
+        # anything already running.
         rollback_excess_jobs(session, 0, cfg)
+        return  # defense in depth - don't start anything while stopped
 
     active_count = _count_running(session)
     if active_count > max_rippers:
         rollback_excess_jobs(session, max_rippers, cfg)
         active_count = _count_running(session)
 
-    if not ripping_enabled:
-        return  # defense in depth - don't start anything while stopped
-
     queued_jobs = session.scalars(
         select(RipJob)
         .where(RipJob.status == JobStatus.queued)
-        .where(RipJob.scheduled_start.is_not(None))
-        .where(RipJob.scheduled_start <= now)
-        .order_by(RipJob.scheduled_start)
+        .order_by(RipJob.created_at)
     ).all()
 
     for rip_job in queued_jobs:
@@ -107,30 +96,6 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
 def _count_running(session) -> int:
     return len(session.scalars(select(RipJob).where(RipJob.status == JobStatus.running)).all())
-
-
-def _activate_pending_countdowns(session, now: datetime) -> None:
-    pending_jobs = session.scalars(
-        select(RipJob)
-        .where(RipJob.status == JobStatus.queued)
-        .where(RipJob.scheduled_start.is_(None))
-    ).all()
-    for rip_job in pending_jobs:
-        rip_job.scheduled_start = now + timedelta(seconds=_JOB_START_COUNTDOWN_SECONDS)
-    if pending_jobs:
-        session.commit()
-
-
-def _pause_counting_down_jobs(session) -> None:
-    counting_down_jobs = session.scalars(
-        select(RipJob)
-        .where(RipJob.status == JobStatus.queued)
-        .where(RipJob.scheduled_start.is_not(None))
-    ).all()
-    for rip_job in counting_down_jobs:
-        rip_job.scheduled_start = None
-    if counting_down_jobs:
-        session.commit()
 
 
 def _get_max_rippers(session) -> int:
@@ -234,7 +199,11 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         disc.ripped_at = naive_utcnow()
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
-        disc.status = DiscStatus.ripped
+        # A working title set before the rip finished (e.g. typed in while
+        # ripping/building) goes straight to "ripped" - otherwise there's
+        # nothing to identify it by yet, so it needs a stop in
+        # "identifying" until temp-name is set via the API.
+        disc.status = DiscStatus.ripped if disc.temp_name else DiscStatus.identifying
 
         rip_job.status = JobStatus.done
         rip_job.completed_at = naive_utcnow()
