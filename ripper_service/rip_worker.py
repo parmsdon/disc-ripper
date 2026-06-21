@@ -68,12 +68,17 @@ def _flag_dirty_rip_live(rip_job_id: int, line: str, session) -> bool:
     return True
 
 
-def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, session_factory) -> dict:
+def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, session_factory, inject_dirty: bool = False) -> dict:
     """
     Run dvdbackup (real or fake) for one disc, updating rip_job progress
     as output streams in. Also watches each line for a dirty-rip read
     error and flags the disc as soon as one is seen, rather than waiting
     for completion (see _flag_dirty_rip_live).
+
+    inject_dirty only has an effect when fake_mode is also True - it
+    tells the fake stand-in to simulate a read error partway through, for
+    testing dirty-rip detection without real hardware (see job_starter's
+    fake_dirty_mode handling, which decides when this is set).
 
     Returns {"success": bool, "log": str, "return_code": int|None}, plus
     "dirty": bool when success is True (see detect_dirty_rip).
@@ -84,6 +89,8 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
             "python3", "-m", "ripper_service.fake_tools.fake_dvdbackup",
             "-i", device_path, "-o", scratch_dir, "-n", disc_label,
         ]
+        if inject_dirty:
+            command.append("--dirty")
     else:
         command = [
             "dvdbackup", "-p", "-M",

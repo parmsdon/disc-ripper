@@ -277,6 +277,7 @@ button:disabled {
 
 .theme-toggle,
 .fake-rip-toggle,
+.fake-dirty-toggle,
 .ripping-toggle {
   background: transparent;
   border: 1px solid var(--panel-border);
@@ -289,12 +290,14 @@ button:disabled {
 
 .theme-toggle:hover,
 .fake-rip-toggle:hover,
+.fake-dirty-toggle:hover,
 .ripping-toggle:hover {
   color: var(--text);
   border-color: var(--accent);
 }
 
-.fake-rip-toggle.active {
+.fake-rip-toggle.active,
+.fake-dirty-toggle.active {
   color: var(--warn);
   border-color: var(--warn);
 }

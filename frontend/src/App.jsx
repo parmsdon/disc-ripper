@@ -28,6 +28,8 @@ export default function App() {
   const [theme, setTheme] = useState(loadStoredTheme);
   const [fakeRipMode, setFakeRipMode] = useState(false);
   const [savingFakeRipMode, setSavingFakeRipMode] = useState(false);
+  const [fakeDirtyMode, setFakeDirtyMode] = useState(false);
+  const [savingFakeDirtyMode, setSavingFakeDirtyMode] = useState(false);
 
   useEffect(() => {
     api.ping()
@@ -45,6 +47,9 @@ export default function App() {
     api.getFakeRipMode()
       .then((data) => setFakeRipMode(data.fake_rip_mode))
       .catch(() => {});
+    api.getFakeDirtyMode()
+      .then((data) => setFakeDirtyMode(data.fake_dirty_mode))
+      .catch(() => {});
   }, [env]);
 
   async function toggleFakeRipMode() {
@@ -54,6 +59,16 @@ export default function App() {
       setFakeRipMode(data.fake_rip_mode);
     } finally {
       setSavingFakeRipMode(false);
+    }
+  }
+
+  async function toggleFakeDirtyMode() {
+    setSavingFakeDirtyMode(true);
+    try {
+      const data = await api.setFakeDirtyMode(!fakeDirtyMode);
+      setFakeDirtyMode(data.fake_dirty_mode);
+    } finally {
+      setSavingFakeDirtyMode(false);
     }
   }
 
@@ -71,6 +86,16 @@ export default function App() {
                 title="Fake rip mode: uses a fake dvdbackup stand-in instead of real hardware (dev only)"
               >
                 Fake Mode
+              </button>
+            )}
+            {env === "dev" && (
+              <button
+                className={`fake-dirty-toggle${fakeDirtyMode ? " active" : ""}`}
+                onClick={toggleFakeDirtyMode}
+                disabled={savingFakeDirtyMode}
+                title="Fake dirty mode: when fake-ripping on Drive 1, simulates a recoverable read error to test dirty-rip detection (dev only)"
+              >
+                Dirty Mode
               </button>
             )}
             <button

@@ -44,6 +44,12 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ fake_rip_mode: enabled }),
     }),
+  getFakeDirtyMode: () => request("/settings/fake-dirty-mode"),
+  setFakeDirtyMode: (enabled) =>
+    request("/settings/fake-dirty-mode", {
+      method: "PUT",
+      body: JSON.stringify({ fake_dirty_mode: enabled }),
+    }),
   getRippingEnabled: () => request("/settings/ripping-enabled"),
   setRippingEnabled: (enabled) =>
     request("/settings/ripping-enabled", {

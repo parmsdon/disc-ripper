@@ -1,9 +1,10 @@
 """
 Settings API.
 
-Generic key/value app settings: max_rippers (ripper concurrency control)
-and fake_rip_mode (dev-only debug toggle - see set_fake_rip_mode below
-for why prod is hard-blocked from ever enabling it).
+Generic key/value app settings: max_rippers (ripper concurrency control),
+fake_rip_mode, and fake_dirty_mode (dev-only debug toggles - see
+set_fake_rip_mode/set_fake_dirty_mode below for why prod is hard-blocked
+from ever enabling them).
 """
 
 from flask import Blueprint, jsonify, current_app, request
@@ -17,6 +18,9 @@ _DEFAULT_MAX_RIPPERS = 1
 
 _FAKE_RIP_MODE_KEY = "fake_rip_mode"
 _DEFAULT_FAKE_RIP_MODE = False
+
+_FAKE_DIRTY_MODE_KEY = "fake_dirty_mode"
+_DEFAULT_FAKE_DIRTY_MODE = False
 
 _RIPPING_ENABLED_KEY = "ripping_enabled"
 _DEFAULT_RIPPING_ENABLED = False
@@ -96,6 +100,44 @@ def set_fake_rip_mode():
 
     session.commit()
     return jsonify({"fake_rip_mode": raw})
+
+
+@settings_bp.route("/fake-dirty-mode", methods=["GET"])
+def get_fake_dirty_mode():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    setting = session.get(Setting, _FAKE_DIRTY_MODE_KEY)
+    value = (setting.value == "true") if setting else _DEFAULT_FAKE_DIRTY_MODE
+    return jsonify({"fake_dirty_mode": value})
+
+
+@settings_bp.route("/fake-dirty-mode", methods=["PUT"])
+def set_fake_dirty_mode():
+    cfg = current_app.config["DISCRIPPER_CFG"]
+
+    # Same hard safety backstop as fake_rip_mode - never settable in prod.
+    if cfg["environment"] == "prod":
+        return jsonify({"error": "fake_dirty_mode cannot be changed in prod"}), 403
+
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("fake_dirty_mode")
+
+    if not isinstance(raw, bool):
+        return jsonify({"error": "fake_dirty_mode must be a boolean"}), 400
+
+    value_str = "true" if raw else "false"
+    setting = session.get(Setting, _FAKE_DIRTY_MODE_KEY)
+    if setting:
+        setting.value = value_str
+    else:
+        session.add(Setting(key=_FAKE_DIRTY_MODE_KEY, value=value_str))
+
+    session.commit()
+    return jsonify({"fake_dirty_mode": raw})
 
 
 @settings_bp.route("/ripping-enabled", methods=["GET"])

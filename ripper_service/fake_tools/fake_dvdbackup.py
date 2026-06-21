@@ -24,6 +24,10 @@ def main() -> None:
     parser.add_argument("-i", dest="device_path", default=None)
     parser.add_argument("-o", dest="output_dir", required=True)
     parser.add_argument("-n", dest="name", required=True)
+    parser.add_argument(
+        "--dirty", action="store_true",
+        help="Simulate a recoverable read error partway through, then finish successfully anyway",
+    )
     args, _unknown = parser.parse_known_args()
 
     for part in range(1, _PARTS + 1):
@@ -34,6 +38,8 @@ def main() -> None:
                 flush=True,
             )
             time.sleep(_STEP_SECONDS)
+            if args.dirty and part == 2 and pct == 50:
+                print("Error reading sector 123456 - padding with zeros", flush=True)
 
     video_ts_dir = os.path.join(args.output_dir, args.name, "VIDEO_TS")
     os.makedirs(video_ts_dir, exist_ok=True)

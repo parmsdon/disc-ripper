@@ -29,8 +29,13 @@ logger = logging.getLogger(__name__)
 _MAX_RIPPERS_KEY = "max_rippers"
 _DEFAULT_MAX_RIPPERS = 1
 _FAKE_RIP_MODE_KEY = "fake_rip_mode"
+_FAKE_DIRTY_MODE_KEY = "fake_dirty_mode"
 _RIPPING_ENABLED_KEY = "ripping_enabled"
 _DEFAULT_RIPPING_ENABLED = False
+
+# fake_dirty_mode only ever injects a simulated read error on this one
+# drive, so testing dirty-rip detection doesn't make every fake rip dirty.
+_FAKE_DIRTY_DRIVE_LABEL = "Drive 1"
 
 
 def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
@@ -39,6 +44,7 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
     ripping_enabled = _get_ripping_enabled(session)
     max_rippers = _get_max_rippers(session)
     fake_rip_mode = _get_fake_rip_mode(session)
+    fake_dirty_mode = _get_fake_dirty_mode(session)
 
     if not ripping_enabled:
         # ripping_enabled=false means stopped, full stop - kill/roll back
@@ -69,6 +75,7 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
             continue
 
         label = drive.label or drive.device_path
+        inject_dirty = fake_dirty_mode and drive.label == _FAKE_DIRTY_DRIVE_LABEL
 
         rip_job.status = JobStatus.running
         rip_job.started_at = now
@@ -82,15 +89,18 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
         thread = threading.Thread(
             target=_run_job,
-            args=(rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg),
+            args=(
+                rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode,
+                session_factory, label, cfg, inject_dirty,
+            ),
             daemon=True,
         )
         active_jobs.register(rip_job.id, thread)
         thread.start()
 
         logger.info(
-            "Started rip job %s for disc %s on %s (fake_rip_mode=%s, scratch_dir=%s)",
-            rip_job.id, disc.id, label, fake_rip_mode, scratch_dir,
+            "Started rip job %s for disc %s on %s (fake_rip_mode=%s, inject_dirty=%s, scratch_dir=%s)",
+            rip_job.id, disc.id, label, fake_rip_mode, inject_dirty, scratch_dir,
         )
 
 
@@ -108,14 +118,22 @@ def _get_fake_rip_mode(session) -> bool:
     return setting.value == "true" if setting else False
 
 
+def _get_fake_dirty_mode(session) -> bool:
+    setting = session.get(Setting, _FAKE_DIRTY_MODE_KEY)
+    return setting.value == "true" if setting else False
+
+
 def _get_ripping_enabled(session) -> bool:
     setting = session.get(Setting, _RIPPING_ENABLED_KEY)
     return setting.value == "true" if setting else _DEFAULT_RIPPING_ENABLED
 
 
-def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg) -> None:
+def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg, inject_dirty) -> None:
     try:
-        result = run_dvdbackup(device_path, scratch_dir, disc_label, fake_rip_mode, rip_job_id, session_factory)
+        result = run_dvdbackup(
+            device_path, scratch_dir, disc_label, fake_rip_mode, rip_job_id, session_factory,
+            inject_dirty=inject_dirty,
+        )
     except Exception:
         logger.exception("Unexpected error running rip job %s", rip_job_id)
         result = {"success": False, "log": "Unexpected error - see service logs", "return_code": None}
