@@ -21,6 +21,10 @@ _PROGRESS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:done)?", re.IGNORECASE)
 _DIRTY_RIP_RE = re.compile(r"Error reading.*padding", re.IGNORECASE)
 
 
+def _is_dirty_rip_line(line: str) -> bool:
+    return bool(_DIRTY_RIP_RE.search(line))
+
+
 def detect_dirty_rip(log_text: str) -> bool:
     """
     True if dvdbackup's captured output shows it padded over a
@@ -28,14 +32,48 @@ def detect_dirty_rip(log_text: str) -> bool:
     process still exits 0 in that case). Kept isolated and
     unit-testable since the exact message format may need refinement
     against real-world dvdbackup logs.
+
+    Used as a post-completion safety net in run_dvdbackup - the primary
+    detection path checks each line live as it streams in, so this only
+    ends up doing real work if a dirty line was somehow missed there
+    (e.g. split across a buffered read boundary).
     """
-    return any(_DIRTY_RIP_RE.search(line) for line in log_text.splitlines())
+    return any(_is_dirty_rip_line(line) for line in log_text.splitlines())
+
+
+def _mark_dirty(disc) -> None:
+    disc.rip_quality = "dirty"
+    disc.needs_rerip = True
+
+
+def _flag_dirty_rip_live(rip_job_id: int, line: str, session) -> bool:
+    """
+    Persist the dirty-rip flag the moment it's seen mid-rip, rather than
+    waiting for dvdbackup to finish, so the UI can show the warning while
+    the disc is still "ripping"/"building". Returns True if a disc was
+    found and flagged (i.e. the caller can skip the post-completion
+    fallback check).
+    """
+    rip_job = session.get(RipJob, rip_job_id)
+    disc = rip_job.disc if rip_job else None
+    if disc is None:
+        return False
+
+    _mark_dirty(disc)
+    session.commit()
+    logger.warning(
+        "Dirty rip detected live for disc #%s - read error at %s",
+        disc.id, line.strip(),
+    )
+    return True
 
 
 def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, session_factory) -> dict:
     """
     Run dvdbackup (real or fake) for one disc, updating rip_job progress
-    as output streams in.
+    as output streams in. Also watches each line for a dirty-rip read
+    error and flags the disc as soon as one is seen, rather than waiting
+    for completion (see _flag_dirty_rip_live).
 
     Returns {"success": bool, "log": str, "return_code": int|None}, plus
     "dirty": bool when success is True (see detect_dirty_rip).
@@ -76,10 +114,13 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         )
         active_jobs.set_process(rip_job_id, proc)
 
+        dirty_detected_live = False
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
             _maybe_update_progress(line, rip_job_id, session)
+            if not dirty_detected_live and _is_dirty_rip_line(line):
+                dirty_detected_live = _flag_dirty_rip_live(rip_job_id, line, session)
 
         proc.wait()
 
@@ -92,7 +133,21 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         success = proc.returncode == 0
         result = {"success": success, "log": full_log, "return_code": proc.returncode}
         if success:
-            result["dirty"] = detect_dirty_rip(full_log)
+            if dirty_detected_live:
+                dirty = True
+            else:
+                dirty = detect_dirty_rip(full_log)
+                if dirty:
+                    disc = rip_job.disc if rip_job else None
+                    if disc is not None:
+                        _mark_dirty(disc)
+                        session.commit()
+                        logger.warning(
+                            "Dirty rip detected post-completion for disc #%s - missed "
+                            "by the live per-line check, flagging now as a fallback",
+                            disc.id,
+                        )
+            result["dirty"] = dirty
         return result
 
     except Exception as exc:

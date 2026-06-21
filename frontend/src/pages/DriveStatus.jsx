@@ -328,7 +328,10 @@ function TempNameInput({ disc, onSaved }) {
 const _IN_PROGRESS_DISC_STATUSES = ["queued", "ripping", "building"];
 
 function DiscStatusZone({ disc }) {
-  const isDirty = (disc.status === "ripped" || disc.status === "identifying") && disc.rip_quality === "dirty";
+  // Not scoped to a particular status - dirty is now flagged live as
+  // soon as a read error streams in (see rip_worker._flag_dirty_rip_live),
+  // so this can be true while the disc is still "ripping"/"building".
+  const isDirty = disc.rip_quality === "dirty";
   const isRerip = disc.rip_attempt_count > 1;
   const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
   const pillLabel = reripInProgress ? "re-ripping" : disc.status;
