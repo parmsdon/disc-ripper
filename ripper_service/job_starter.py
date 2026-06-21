@@ -324,9 +324,11 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     for index, track_number in enumerate(track_numbers, start=1):
         output_path = str(cd_dir / f"track{track_number:02d}.wav")
         stage_label = f"Track {index}/{total}"
-        # fake_dirty_mode simulates one bad track on a disc, not a wholly
-        # unreadable one - only the first track processed gets it.
-        inject_dirty_this_track = inject_dirty and index == 1
+        # fake_dirty_mode simulates several bad tracks on a disc, not a
+        # wholly unreadable one - every odd-numbered track gets it, so
+        # the selective re-rip logic gets exercised against more than
+        # just a single bad track.
+        inject_dirty_this_track = inject_dirty and track_number % 2 == 1
 
         try:
             result = run_cdparanoia(
