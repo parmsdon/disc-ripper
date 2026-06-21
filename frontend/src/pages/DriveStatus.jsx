@@ -241,6 +241,8 @@ function DirectEjectButton({ drive, onRefresh }) {
   );
 }
 
+const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying"];
+
 function TempNameInput({ disc, onSaved }) {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -252,11 +254,15 @@ function TempNameInput({ disc, onSaved }) {
     setValue("");
   }, [disc.id]);
 
-  // Naming is only offered while a disc is "identifying" - once a name is
-  // saved the API auto-transitions the disc to "ripped" and this input
-  // disappears for good. There's deliberately no edit-after-lock path: the
-  // working title is just a bridge until real catalog matching exists.
-  if (disc.status !== "identifying") {
+  // Naming is offered for the whole active lifetime of a disc (queued
+  // through identifying), so the user can type a title in as soon as it's
+  // detected rather than waiting for the rip to finish. Once status
+  // reaches "ripped" - either set directly because a name was already
+  // saved when building completed, or via the identifying -> ripped
+  // auto-transition - this input disappears for good. There's
+  // deliberately no edit-after-lock path: the working title is just a
+  // bridge until real catalog matching exists.
+  if (!_NAMEABLE_DISC_STATUSES.includes(disc.status)) {
     return null;
   }
 
