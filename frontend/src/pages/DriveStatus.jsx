@@ -348,10 +348,6 @@ function DiscStatusZone({ disc, rippingEnabled }) {
         )}
       </div>
 
-      {disc.status === "queued" && !rippingEnabled && !disc.scheduled_start && (
-        <p className="countdown">Ripping paused - disc detected, waiting</p>
-      )}
-
       {disc.status === "queued" && rippingEnabled && disc.scheduled_start && (
         <Countdown scheduledStart={disc.scheduled_start} />
       )}
