@@ -2,12 +2,13 @@
 Slot-aware rip job starting: gates queued RipJobs behind the global
 ripping_enabled control, promotes them to running up to the configured
 max_rippers concurrency limit, and spawns the actual dvdbackup/mkisofs
-work in a background thread so the main poll loop keeps running for
-other drives/region-reads/ejects.
+(DVD) or cdparanoia (CD) work in a background thread so the main poll
+loop keeps running for other drives/region-reads/ejects.
 
 RipJob.status stays "running" across both the dvdbackup and mkisofs
-sub-steps - it's Disc.status that distinguishes "ripping" (copying disc
-content) from "building" (constructing the ISO) for the UI.
+sub-steps (DVD) or across all tracks processed in one run (CD) - it's
+Disc.status that distinguishes "ripping" (copying disc content) from
+"building" (constructing the ISO, DVD only) for the UI.
 """
 
 import logging
@@ -19,10 +20,10 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import get_store_path
-from common.models import Disc, DiscStatus, JobStatus, RipJob, Setting, naive_utcnow
+from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob, RipQuality, Setting, naive_utcnow
 from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
-from ripper_service.rip_worker import run_dvdbackup, run_mkisofs
+from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs
 
 logger = logging.getLogger(__name__)
 
@@ -84,23 +85,30 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
         active_count += 1
 
-        scratch_dir = str(Path(cfg["storage"]["scratch_dir"]) / str(disc.id))
-        disc_label = f"disc_{disc.id}"
+        if disc.type == DiscType.dvd:
+            scratch_dir = str(Path(cfg["storage"]["scratch_dir"]) / str(disc.id))
+            disc_label = f"disc_{disc.id}"
+            thread = threading.Thread(
+                target=_run_job,
+                args=(
+                    rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode,
+                    session_factory, label, cfg, inject_dirty,
+                ),
+                daemon=True,
+            )
+        else:
+            thread = threading.Thread(
+                target=_run_cd_job,
+                args=(rip_job.id, drive.device_path, fake_rip_mode, label, cfg, inject_dirty, session_factory),
+                daemon=True,
+            )
 
-        thread = threading.Thread(
-            target=_run_job,
-            args=(
-                rip_job.id, drive.device_path, scratch_dir, disc_label, fake_rip_mode,
-                session_factory, label, cfg, inject_dirty,
-            ),
-            daemon=True,
-        )
         active_jobs.register(rip_job.id, thread)
         thread.start()
 
         logger.info(
-            "Started rip job %s for disc %s on %s (fake_rip_mode=%s, inject_dirty=%s, scratch_dir=%s)",
-            rip_job.id, disc.id, label, fake_rip_mode, inject_dirty, scratch_dir,
+            "Started rip job %s for disc %s (%s) on %s (fake_rip_mode=%s, inject_dirty=%s)",
+            rip_job.id, disc.id, disc.type.value, label, fake_rip_mode, inject_dirty,
         )
 
 
@@ -267,6 +275,169 @@ def _fail_job(rip_job_id, label, result, scratch_dir, session_factory) -> None:
     finally:
         session.close()
         _cleanup_scratch_dir(scratch_dir)
+
+
+# ---------------------------------------------------------------------------
+# CD: one job processes all tracks needing a rip, sequentially (one drive
+# can only read one track at a time anyway) - no separate build step.
+# ---------------------------------------------------------------------------
+
+_NEEDS_RIP_TRACK_QUALITIES = (None, RipQuality.imperfect, RipQuality.failed)
+
+
+def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        if rip_job is None:
+            logger.warning("RipJob %s vanished before CD job started", rip_job_id)
+            return
+        disc = rip_job.disc
+        if disc is None:
+            logger.warning("RipJob %s has no disc - aborting CD job", rip_job_id)
+            return
+        disc_id = disc.id
+
+        # Fresh disc: every track has rip_quality=None, so all of them
+        # need ripping. Re-rip of a dirty disc: only the imperfect/failed
+        # ones do - already-"good" tracks are left untouched.
+        pending = sorted(
+            (t for t in disc.tracks if t.rip_quality in _NEEDS_RIP_TRACK_QUALITIES),
+            key=lambda t: t.track_number,
+        )
+        track_numbers = [t.track_number for t in pending]
+        track_durations = {t.track_number: t.duration_seconds for t in pending}
+
+        cd_dir = get_store_path(cfg, "cd_store", "raw", str(disc_id))
+        disc.raw_path = str(cd_dir.relative_to(Path(cfg["storage"]["datastore_root"])))
+        session.commit()
+    finally:
+        session.close()
+
+    total = len(track_numbers)
+    if total == 0:
+        logger.warning("RipJob %s (disc %s) has no tracks needing a rip - nothing to do", rip_job_id, disc_id)
+        _finish_cd_job(rip_job_id, label, disc_id, session_factory)
+        active_jobs.unregister(rip_job_id)
+        return
+
+    for index, track_number in enumerate(track_numbers, start=1):
+        output_path = str(cd_dir / f"track{track_number:02d}.wav")
+        stage_label = f"Track {index}/{total}"
+        # fake_dirty_mode simulates one bad track on a disc, not a wholly
+        # unreadable one - only the first track processed gets it.
+        inject_dirty_this_track = inject_dirty and index == 1
+
+        try:
+            result = run_cdparanoia(
+                device_path, track_number, output_path, track_durations.get(track_number), stage_label,
+                fake_rip_mode, rip_job_id, session_factory, inject_dirty=inject_dirty_this_track,
+            )
+        except Exception:
+            logger.exception("Unexpected error ripping track %s for rip job %s", track_number, rip_job_id)
+            result = {"success": False, "log": "Unexpected error - see service logs", "return_code": None}
+
+        if active_jobs.was_rolled_back(rip_job_id):
+            logger.info(
+                "Rip job %s was rolled back externally during track %s - skipping normal completion handling",
+                rip_job_id, track_number,
+            )
+            active_jobs.unregister(rip_job_id)
+            return
+
+        # A single bad/scratched track is normal and shouldn't stop the
+        # rest of the disc - only return_code=None (process never even
+        # ran: rolled back, or couldn't launch) suggests a deeper
+        # drive/device problem worth aborting the whole disc for.
+        hard_failure = not result["success"] and result.get("return_code") is None
+        _record_track_result(disc_id, track_number, result, label, session_factory)
+
+        if hard_failure:
+            _fail_cd_job(rip_job_id, label, disc_id, result, session_factory)
+            active_jobs.unregister(rip_job_id)
+            return
+
+    _finish_cd_job(rip_job_id, label, disc_id, session_factory)
+    active_jobs.unregister(rip_job_id)
+
+
+def _record_track_result(disc_id, track_number, result, label, session_factory) -> None:
+    session = session_factory()
+    try:
+        track = session.scalars(
+            select(CDTrack).where(CDTrack.disc_id == disc_id, CDTrack.track_number == track_number)
+        ).first()
+        if track is None:
+            logger.warning("CDTrack %s for disc %s vanished - skipping result recording", track_number, disc_id)
+            return
+
+        track.rip_log = result.get("log")
+        if result["success"]:
+            track.rip_quality = RipQuality.imperfect if result.get("dirty") else RipQuality.good
+            track.wav_filename = f"track{track_number:02d}.wav"
+        else:
+            track.rip_quality = RipQuality.failed
+
+        session.commit()
+        logger.info(
+            "Track %s for disc %s (%s) -> %s", track_number, disc_id, label, track.rip_quality.value,
+        )
+    finally:
+        session.close()
+
+
+def _finish_cd_job(rip_job_id, label, disc_id, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        disc = session.get(Disc, disc_id)
+        if rip_job is None or disc is None:
+            logger.warning("RipJob %s or disc %s vanished before final CD completion", rip_job_id, disc_id)
+            return
+
+        # "Clean" only if every track, across all attempts (not just the
+        # ones processed in this run), is currently "good".
+        any_bad = any(t.rip_quality in (RipQuality.imperfect, RipQuality.failed) for t in disc.tracks)
+        disc.rip_quality = "dirty" if any_bad else "clean"
+        disc.needs_rerip = any_bad
+        disc.ripped_at = naive_utcnow()
+        disc.status = DiscStatus.ripped if disc.temp_name else DiscStatus.identifying
+
+        rip_job.status = JobStatus.done
+        rip_job.completed_at = naive_utcnow()
+
+        session.commit()
+        logger.info(
+            "CD rip job %s (%s) completed - disc #%s rip_quality=%s",
+            rip_job_id, label, disc_id, disc.rip_quality,
+        )
+    finally:
+        session.close()
+
+
+def _fail_cd_job(rip_job_id, label, disc_id, result, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        if rip_job is None:
+            logger.warning("RipJob %s vanished before CD error handling", rip_job_id)
+            return
+        disc = rip_job.disc
+
+        rip_job.status = JobStatus.error
+        rip_job.completed_at = naive_utcnow()
+        error_message = _extract_error_message(result.get("log") or "")
+        rip_job.error_message = error_message
+        if disc is not None:
+            disc.status = DiscStatus.error
+
+        session.commit()
+        logger.warning(
+            "CD rip job %s (%s) aborted - drive/device problem, not just a bad track: %s",
+            rip_job_id, label, error_message,
+        )
+    finally:
+        session.close()
 
 
 def _extract_error_message(log_text: str) -> str:

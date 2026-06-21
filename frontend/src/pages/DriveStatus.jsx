@@ -295,7 +295,9 @@ function TempNameInput({ disc, onSaved }) {
         onKeyDown={(e) => e.key === "Enter" && handleSave()}
         className="input-warning"
       />
-      {disc.disc_fingerprint && (
+      {/* CD disc_fingerprint is a CDDB-style hash, not a human-readable
+          label - only worth copying for DVDs (volume id/volume set id). */}
+      {disc.type !== "cd" && disc.disc_fingerprint && (
         <button
           type="button"
           className="copy-label-btn"

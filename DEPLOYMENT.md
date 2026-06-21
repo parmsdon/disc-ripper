@@ -105,7 +105,7 @@ Open `http://<app-db-host>:5173`.
 ### System packages
 
 ```bash
-sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia
+sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia cd-discid
 
 # libdvdcss via RPM Fusion (needed for dvdbackup to read commercial DVDs)
 sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
