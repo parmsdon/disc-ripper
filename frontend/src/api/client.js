@@ -63,4 +63,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ service_command: command }),
     }),
+  getCatalog: (search) =>
+    request(`/catalog/${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  triggerSync: () => request("/catalog/sync", { method: "POST" }),
+  getSyncStatus: () => request("/catalog/sync/status"),
 };

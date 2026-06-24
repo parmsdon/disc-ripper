@@ -155,6 +155,10 @@ class Catalog(Base):
     title = Column(String, nullable=False)
     year = Column(Integer, nullable=True)
     media_type = Column(Enum(MediaType), default=MediaType.movie, nullable=False)
+    # 100% populated in My Movies, but nullable here since catalog entries
+    # may eventually come from other sources (e.g. manual entry) too.
+    imdb_id = Column(String, nullable=True, index=True)
+    upc = Column(String, nullable=True)
     raw_metadata = Column(JSON, nullable=True)
     synced_at = Column(DateTime, nullable=True)
 

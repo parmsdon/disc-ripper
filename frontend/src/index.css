@@ -533,3 +533,49 @@ button:disabled {
   color: var(--text);
   border-color: var(--accent);
 }
+
+.sync-status-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sync-result-line {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.catalog-search-input {
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.catalog-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.catalog-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.catalog-table tbody tr:hover {
+  background: var(--bg);
+}

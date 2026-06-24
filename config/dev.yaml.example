@@ -42,9 +42,13 @@ api:
   port: 5000
   debug: true
 
-# My Movies sync (ODBC -> SQL Server, read-only)
+# My Movies sync (FreeTDS -> SQL Server, read-only). Connects directly via
+# the FreeTDS driver string (see mymovies_sync/connector.py) rather than an
+# ODBC DSN.
 mymovies:
-  odbc_dsn: "MyMoviesDSN"
-  odbc_user: "myuser"
-  odbc_password: "changeme"
+  server: "192.168.2.4"
+  port: "11598"
+  database: "My Movies"
+  username: "mymoviesapi"
+  password: "changeme"
   sync_interval_hours: 24

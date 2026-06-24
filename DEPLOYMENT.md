@@ -98,6 +98,66 @@ npm run dev
 Frontend dev server runs on port 5173 and proxies `/api` to `localhost:5000`.
 Open `http://<app-db-host>:5173`.
 
+### My Movies sync (app/db machine only)
+
+The sync connects to the My Movies 5 SQL Server database over FreeTDS, so
+it runs on the app/db machine (it needs Postgres access, not the optical
+drives).
+
+```bash
+sudo dnf install -y freetds python3-pyodbc
+```
+
+> **Note:** `pyodbc` must come from the system package (`python3-pyodbc`
+> via dnf), not pip — same `--system-site-packages` venv constraint as
+> `psycopg2`.
+
+Create `/etc/freetds.conf` (encryption must be off — this SQL Server 2014
+instance running on Windows Server 2008 doesn't support FreeTDS's default
+encryption negotiation):
+
+```ini
+[global]
+    tds version = 7.3
+    client charset = UTF-8
+    encryption = off
+
+[mymovies]
+    host = 192.168.2.4
+    port = 11598
+    tds version = 7.3
+    client charset = UTF-8
+    encryption = off
+```
+
+The `[mymovies]` section name is **load-bearing** — `mymovies_sync/connector.py`
+connects via `SERVERNAME=mymovies`, not an inline host/port, because this
+FreeTDS ODBC driver build ignores the connection string's `PORT` keyword
+and otherwise falls back to the default port 1433. Do not rename this
+section without updating `connector.py` to match.
+
+Fill in `mymovies:` in `config/dev.yaml` (server/port/database/username/
+password, plus `sync_interval_hours`) — see `config/dev.yaml.example`.
+`server`/`port` are for documentation/diagnostics only; the live
+connection's actual host/port comes from the `[mymovies]` freetds.conf
+stanza above.
+
+Run a one-off sync to confirm connectivity:
+
+```bash
+export DISCRIPPER_ENV=dev
+python3 -m mymovies_sync.sync
+```
+
+Run the scheduler as a long-running background process (like
+`ripper_service.main` — under `tmux`/`screen` or a process supervisor,
+`Ctrl+C` to stop):
+
+```bash
+export DISCRIPPER_ENV=dev
+python3 -m mymovies_sync.scheduler
+```
+
 ---
 
 ## 2. Ripper machine
