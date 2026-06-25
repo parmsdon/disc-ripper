@@ -587,40 +587,106 @@ button:disabled {
   background: var(--bg);
 }
 
-.temp-name-zone {
+.mb-status-btn {
+  width: 22px;
+  height: 22px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mb-lookup-hint {
-  font-size: 11px;
-  color: var(--text-dim);
-  font-style: italic;
-}
-
-.mb-candidates {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.mb-candidate-btn {
-  background: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  padding: 0;
+  background: transparent;
   border: 1px solid var(--panel-border);
   border-radius: 4px;
   color: var(--accent);
-  font-size: 12px;
-  padding: 3px 8px;
   cursor: pointer;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 460px;
+  flex-shrink: 0;
 }
 
-.mb-candidate-btn:hover {
-  background: rgba(79, 140, 255, 0.1);
+.mb-status-btn:hover:not(:disabled) {
+  color: var(--text);
   border-color: var(--accent);
+}
+
+.mb-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.mb-popover {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.mb-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.mb-popover-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.mb-popover-close:hover {
+  color: var(--text);
+}
+
+.mb-popover-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.mb-popover-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+
+.mb-popover-item:hover {
+  background: var(--bg);
+}
+
+.mb-popover-title {
+  display: block;
+  font-size: 13px;
+}
+
+.mb-popover-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }

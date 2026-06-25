@@ -28,7 +28,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, delete, func, select, update
 from sqlalchemy.orm import sessionmaker
 
 from common.config import get_db_url, get_store_path, load_config
@@ -104,6 +104,9 @@ def main(env: str) -> None:
     session.execute(delete(RipJob))
     session.execute(delete(LookupCandidate))
     session.execute(delete(Disc))
+    # Clear MB fields on any surviving disc rows (no-op when all discs were
+    # deleted above, but future-proofs the script for a --keep-discs mode).
+    session.execute(update(Disc).values(mb_disc_id=None, mb_toc=None, mb_lookup_status=None))
     session.commit()
     print(f"Deleted {disc_count} disc(s), {rip_job_count} rip_job(s), "
           f"{encode_job_count} encode_job(s), {lookup_candidate_count} "

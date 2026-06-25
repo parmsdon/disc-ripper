@@ -243,9 +243,10 @@ function DirectEjectButton({ drive, onRefresh }) {
 
 const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying"];
 
-// value and onChange are lifted to DrivePanel so MbCandidates can pre-fill
-// the input when the user clicks a suggestion.
-function TempNameInput({ disc, onSaved, value, onChange }) {
+// value/onChange are lifted to DrivePanel so the MB popover can pre-fill it.
+// mbLookupStatus/mbHasResults/onOpenMbPopover drive the small indicator button
+// that lives in the same button row as Copy Label and Copy Current.
+function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasResults, onOpenMbPopover }) {
   const [saving, setSaving] = useState(false);
 
   // Naming is offered for the whole active lifetime of a disc (queued
@@ -311,6 +312,16 @@ function TempNameInput({ disc, onSaved, value, onChange }) {
           ↻
         </button>
       )}
+      {disc.type === "cd" && mbLookupStatus === "pending" && (
+        <button type="button" className="mb-status-btn" disabled title="Looking up in MusicBrainz…">
+          ···
+        </button>
+      )}
+      {disc.type === "cd" && mbLookupStatus === "found" && mbHasResults && (
+        <button type="button" className="mb-status-btn" onClick={onOpenMbPopover} title="MusicBrainz matches available">
+          ♫
+        </button>
+      )}
       <button onClick={handleSave} disabled={saving}>
         {saving ? "Saving…" : "Save"}
       </button>
@@ -371,58 +382,59 @@ function DiscStatusZone({ disc }) {
   );
 }
 
-function MbCandidates({ disc, onSelect }) {
+function useMbCandidates(disc) {
   const [candidates, setCandidates] = useState(null);
 
-  // Reset cached candidates when disc changes so a new disc starts fresh.
-  useEffect(() => {
-    setCandidates(null);
-  }, [disc.id]);
+  useEffect(() => { setCandidates(null); }, [disc?.id]);
 
-  // Fetch once when status reaches "found" (or on mount if already "found").
   useEffect(() => {
-    if (disc.mb_lookup_status === "found" && candidates === null) {
+    if (disc?.mb_lookup_status === "found" && candidates === null) {
       api.getDiscCandidates(disc.id)
         .then(setCandidates)
         .catch(() => setCandidates([]));
     }
-  }, [disc.mb_lookup_status, disc.id, candidates]);
+  }, [disc?.mb_lookup_status, disc?.id, candidates]);
 
-  if (disc.mb_lookup_status === "pending") {
-    return <span className="mb-lookup-hint">Looking up in MusicBrainz…</span>;
-  }
-  if (disc.mb_lookup_status === "not_found") {
-    return <span className="mb-lookup-hint">No matches found in MusicBrainz</span>;
-  }
-  if (disc.mb_lookup_status === "error") {
-    return <span className="mb-lookup-hint">MusicBrainz lookup failed</span>;
-  }
-  if (disc.mb_lookup_status === "found") {
-    if (candidates === null) {
-      return <span className="mb-lookup-hint">Loading suggestions…</span>;
-    }
-    if (candidates.length === 0) return null;
-    const shown = candidates.slice(0, 5);
-    const extra = candidates.length - shown.length;
-    return (
-      <div className="mb-candidates">
-        {shown.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className="mb-candidate-btn"
-            onClick={() => onSelect(c.title)}
-          >
-            {c.title}{c.artist ? ` — ${c.artist}` : ""}{c.year ? ` (${c.year})` : ""}
-          </button>
-        ))}
-        {extra > 0 && (
-          <span className="mb-lookup-hint">{extra} more match{extra !== 1 ? "es" : ""}</span>
-        )}
+  return candidates;
+}
+
+function MbPopover({ candidates, onSelect, onClose }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="mb-popover-backdrop" onClick={onClose}>
+      <div className="mb-popover" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-popover-header">
+          <span>MusicBrainz matches</span>
+          <button className="mb-popover-close" onClick={onClose}>×</button>
+        </div>
+        <div className="mb-popover-list">
+          {candidates.length === 0 ? (
+            <div className="empty-state">No matches found</div>
+          ) : (
+            candidates.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="mb-popover-item"
+                onClick={() => { onSelect(c.title); onClose(); }}
+              >
+                <span className="mb-popover-title">{c.title}</span>
+                <span className="mb-popover-meta">
+                  {[c.artist, c.year, c.track_count != null ? `${c.track_count} tracks` : null]
+                    .filter(Boolean).join(" · ")}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 }
 
 function DrivePanel({ drive, onRefresh }) {
@@ -433,10 +445,13 @@ function DrivePanel({ drive, onRefresh }) {
   // again, rather than showing stale per-disc state.
   const disc = drive.tray_open ? null : drive.current_disc;
 
-  // Lifted so MbCandidates can pre-fill TempNameInput on click.
   const [tempNameValue, setTempNameValue] = useState("");
+  const [mbPopoverOpen, setMbPopoverOpen] = useState(false);
+  const candidates = useMbCandidates(disc);
+
   useEffect(() => {
     setTempNameValue("");
+    setMbPopoverOpen(false);
   }, [disc?.id]);
 
   return (
@@ -467,23 +482,29 @@ function DrivePanel({ drive, onRefresh }) {
 
       <div className="drive-row-temp-name">
         {disc && (
-          <div className="temp-name-zone">
-            <TempNameInput
-              disc={disc}
-              onSaved={onRefresh}
-              value={tempNameValue}
-              onChange={setTempNameValue}
-            />
-            {disc.type === "cd" && disc.mb_lookup_status && (
-              <MbCandidates disc={disc} onSelect={setTempNameValue} />
-            )}
-          </div>
+          <TempNameInput
+            disc={disc}
+            onSaved={onRefresh}
+            value={tempNameValue}
+            onChange={setTempNameValue}
+            mbLookupStatus={disc.mb_lookup_status}
+            mbHasResults={Boolean(candidates && candidates.length > 0)}
+            onOpenMbPopover={() => setMbPopoverOpen(true)}
+          />
         )}
       </div>
 
       <div className="drive-row-eject">
         <DirectEjectButton drive={drive} onRefresh={onRefresh} />
       </div>
+
+      {mbPopoverOpen && candidates && (
+        <MbPopover
+          candidates={candidates}
+          onSelect={setTempNameValue}
+          onClose={() => setMbPopoverOpen(false)}
+        />
+      )}
     </div>
   );
 }
