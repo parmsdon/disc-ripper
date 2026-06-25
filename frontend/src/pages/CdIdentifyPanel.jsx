@@ -7,12 +7,20 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const [candidates, setCandidates] = useState([]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [physicalTracks, setPhysicalTracks] = useState([]);
-  // Map<trackId, string> — presence of key = title locked
+
+  // Saved (committed) lock state
   const [lockedTitles, setLockedTitles] = useState(new Map());
-  // Map<trackId, string> — presence of key = artist locked (compilation only)
   const [lockedArtists, setLockedArtists] = useState(new Map());
   const [albumTitleLock, setAlbumTitleLock] = useState(null);
   const [albumArtistLock, setAlbumArtistLock] = useState(null);
+
+  // Staging state: in-progress edits not yet saved (candidates mode only).
+  // Presence of a key means the field is dirty. Value is the pending string.
+  const [editingTitles, setEditingTitles] = useState(new Map());
+  const [editingArtists, setEditingArtists] = useState(new Map());
+  const [editingAlbumTitle, setEditingAlbumTitle] = useState(null);
+  const [editingAlbumArtist, setEditingAlbumArtist] = useState(null);
+
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState(null);
@@ -28,7 +36,6 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         .slice()
         .sort((a, b) => a.track_number - b.track_number);
       setPhysicalTracks(sorted);
-      // No MB candidates: pre-lock all fields with empty strings for manual entry
       if (cands.length === 0) {
         setAlbumTitleLock("");
         setAlbumArtistLock("");
@@ -51,8 +58,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
   const hasCandidates = candidates.length > 0;
   const currentCandidate = hasCandidates ? candidates[candidateIndex] : null;
-  const isCompilation = albumArtistLock !== null &&
-    albumArtistLock.trim().toLowerCase() === "various";
+
+  // Effective values: staging edit overrides saved lock (for canConfirm + submit)
+  function effectiveTrackTitle(id) {
+    return editingTitles.has(id) ? editingTitles.get(id) : (lockedTitles.get(id) ?? "");
+  }
+  function effectiveTrackArtist(id) {
+    return editingArtists.has(id) ? editingArtists.get(id) : (lockedArtists.get(id) ?? "");
+  }
+  const effectiveAlbumTitle = editingAlbumTitle !== null ? editingAlbumTitle : albumTitleLock;
+  const effectiveAlbumArtist = editingAlbumArtist !== null ? editingAlbumArtist : albumArtistLock;
+
+  const isCompilation = effectiveAlbumArtist !== null &&
+    effectiveAlbumArtist.trim().toLowerCase() === "various";
 
   function getMbTrack(trackNumber) {
     if (!currentCandidate?.tracks) return null;
@@ -61,40 +79,90 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     ) || null;
   }
 
-  const lockedTitleCount = physicalTracks.filter(
-    (t) => lockedTitles.has(t.id)
-  ).length;
-  const allTitlesLocked =
-    physicalTracks.length > 0 && lockedTitleCount === physicalTracks.length;
+  // Save staging edits into locked state
+  function saveTrackTitle(id) {
+    const val = editingTitles.get(id);
+    if (val === undefined) return;
+    setLockedTitles((prev) => new Map(prev).set(id, val));
+    setEditingTitles((prev) => { const m = new Map(prev); m.delete(id); return m; });
+  }
+  function saveTrackArtist(id) {
+    const val = editingArtists.get(id);
+    if (val === undefined) return;
+    setLockedArtists((prev) => new Map(prev).set(id, val));
+    setEditingArtists((prev) => { const m = new Map(prev); m.delete(id); return m; });
+  }
+  function saveAlbumTitle() {
+    if (editingAlbumTitle === null) return;
+    setAlbumTitleLock(editingAlbumTitle);
+    setEditingAlbumTitle(null);
+  }
+  function saveAlbumArtist() {
+    if (editingAlbumArtist === null) return;
+    setAlbumArtistLock(editingAlbumArtist);
+    setEditingAlbumArtist(null);
+  }
 
-  const canConfirm =
-    !confirming &&
-    albumTitleLock !== null &&
-    albumTitleLock.trim() !== "" &&
-    albumArtistLock !== null &&
-    allTitlesLocked &&
-    physicalTracks.every((t) => (lockedTitles.get(t.id) ?? "").trim() !== "") &&
-    (!isCompilation ||
-      physicalTracks.every((t) => {
-        const a = lockedArtists.get(t.id);
-        return a !== undefined && a.trim() !== "";
-      }));
+  // Lock / unlock (both clear staging for that field)
+  function handleLockTitle(trackId, mbTitle) {
+    setLockedTitles((prev) => new Map(prev).set(trackId, mbTitle || ""));
+    setEditingTitles((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+  }
+  function handleUnlockTitle(trackId) {
+    setLockedTitles((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+    setEditingTitles((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+  }
+  function handleLockArtist(trackId, mbArtist) {
+    setLockedArtists((prev) => new Map(prev).set(trackId, mbArtist || ""));
+    setEditingArtists((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+  }
+  function handleUnlockArtist(trackId) {
+    setLockedArtists((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+    setEditingArtists((prev) => { const m = new Map(prev); m.delete(trackId); return m; });
+  }
 
   function lockAllRemaining() {
     const newTitles = new Map(lockedTitles);
     const newArtists = new Map(lockedArtists);
+    const newEditTitles = new Map(editingTitles);
+    const newEditArtists = new Map(editingArtists);
     for (const track of physicalTracks) {
       if (!newTitles.has(track.id)) {
         const mbTrack = getMbTrack(track.track_number);
         newTitles.set(track.id, mbTrack?.title || "");
+        newEditTitles.delete(track.id);
         if (isCompilation && !newArtists.has(track.id)) {
           newArtists.set(track.id, mbTrack?.artist || "");
+          newEditArtists.delete(track.id);
         }
       }
     }
     setLockedTitles(newTitles);
-    if (isCompilation) setLockedArtists(newArtists);
+    setEditingTitles(newEditTitles);
+    if (isCompilation) {
+      setLockedArtists(newArtists);
+      setEditingArtists(newEditArtists);
+    }
   }
+
+  const lockedTitleCount = physicalTracks.filter((t) => lockedTitles.has(t.id)).length;
+  const allTitlesLocked =
+    physicalTracks.length > 0 && lockedTitleCount === physicalTracks.length;
+
+  // canConfirm uses effective values so dirty-but-non-empty edits don't block it
+  const canConfirm =
+    !confirming &&
+    (effectiveAlbumTitle ?? "").trim() !== "" &&
+    effectiveAlbumArtist !== null &&
+    allTitlesLocked &&
+    physicalTracks.every((t) => effectiveTrackTitle(t.id).trim() !== "") &&
+    (!isCompilation ||
+      physicalTracks.every((t) => {
+        return (
+          (lockedArtists.has(t.id) || editingArtists.has(t.id)) &&
+          effectiveTrackArtist(t.id).trim() !== ""
+        );
+      }));
 
   async function handleConfirm() {
     if (!canConfirm) return;
@@ -102,12 +170,12 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     setConfirmError(null);
     try {
       await api.identifyCd(disc.id, {
-        album_title: albumTitleLock,
-        album_artist: albumArtistLock,
+        album_title: effectiveAlbumTitle,
+        album_artist: effectiveAlbumArtist,
         tracks: physicalTracks.map((t) => ({
           id: t.id,
-          title: lockedTitles.get(t.id) || "",
-          artist: lockedArtists.get(t.id) || "",
+          title: effectiveTrackTitle(t.id),
+          artist: effectiveTrackArtist(t.id),
         })),
         selected_candidate_id: selectedCandidateId,
       });
@@ -118,31 +186,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     }
   }
 
-  function handleLockTitle(trackId, mbTitle) {
-    const next = new Map(lockedTitles);
-    next.set(trackId, mbTitle || "");
-    setLockedTitles(next);
-  }
-
-  function handleUnlockTitle(trackId) {
-    const next = new Map(lockedTitles);
-    next.delete(trackId);
-    setLockedTitles(next);
-  }
-
-  function handleLockArtist(trackId, mbArtist) {
-    const next = new Map(lockedArtists);
-    next.set(trackId, mbArtist || "");
-    setLockedArtists(next);
-  }
-
-  function handleUnlockArtist(trackId) {
-    const next = new Map(lockedArtists);
-    next.delete(trackId);
-    setLockedArtists(next);
-  }
-
-  const lockAllDisabled = hasCandidates && allTitlesLocked &&
+  const lockAllDisabled =
+    hasCandidates &&
+    allTitlesLocked &&
     (!isCompilation || physicalTracks.every((t) => lockedArtists.has(t.id)));
 
   return (
@@ -166,9 +212,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         {/* Body */}
         <div className="identify-panel-body">
 
-          {loading && (
-            <div className="empty-state">Loading…</div>
-          )}
+          {loading && <div className="empty-state">Loading…</div>}
 
           {loadError && (
             <div className="identify-error" style={{ margin: "16px" }}>
@@ -178,7 +222,6 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
           {!loading && !loadError && (
             <>
-              {/* No-candidates notice */}
               {!hasCandidates && (
                 <div className="cd-no-candidates-notice">
                   {disc.mb_lookup_status === "pending"
@@ -204,9 +247,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     <button
                       className="cd-nav-btn"
                       onClick={() =>
-                        setCandidateIndex((i) =>
-                          Math.min(candidates.length - 1, i + 1)
-                        )
+                        setCandidateIndex((i) => Math.min(candidates.length - 1, i + 1))
                       }
                       disabled={candidateIndex === candidates.length - 1}
                     >
@@ -216,78 +257,40 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                 )}
 
                 {/* Album title row */}
-                <div className="cd-album-row">
-                  <span className="cd-album-label">Album</span>
-                  {hasCandidates && (
-                    <span className="cd-mb-cell" title={currentCandidate?.title}>
-                      {currentCandidate?.title || ""}
-                    </span>
-                  )}
-                  <div className="cd-locked-cell">
-                    {albumTitleLock !== null ? (
-                      <input
-                        type="text"
-                        className="cd-album-input"
-                        value={albumTitleLock}
-                        onChange={(e) => setAlbumTitleLock(e.target.value)}
-                      />
-                    ) : (
-                      <span className="cd-not-locked">not locked</span>
-                    )}
-                  </div>
-                  {hasCandidates && (
-                    <button
-                      className={`cd-lock-btn${albumTitleLock !== null ? " cd-lock-btn-active" : ""}`}
-                      onClick={() => {
-                        if (albumTitleLock !== null) {
-                          setAlbumTitleLock(null);
-                        } else {
-                          setAlbumTitleLock(currentCandidate?.title || "");
-                          setSelectedCandidateId(currentCandidate?.id ?? null);
-                        }
-                      }}
-                    >
-                      {albumTitleLock !== null ? "Locked ✓" : "Lock"}
-                    </button>
-                  )}
-                </div>
+                <AlbumRow
+                  label="Album"
+                  mbValue={currentCandidate?.title}
+                  hasCandidates={hasCandidates}
+                  lockedValue={albumTitleLock}
+                  editingValue={editingAlbumTitle}
+                  onType={(v) => setEditingAlbumTitle(v)}
+                  onDirectChange={(v) => setAlbumTitleLock(v)}
+                  onLock={() => {
+                    setAlbumTitleLock(currentCandidate?.title || "");
+                    setEditingAlbumTitle(null);
+                    setSelectedCandidateId(currentCandidate?.id ?? null);
+                  }}
+                  onUnlock={() => { setAlbumTitleLock(null); setEditingAlbumTitle(null); }}
+                  onSave={saveAlbumTitle}
+                />
 
                 {/* Album artist row */}
-                <div className="cd-album-row">
-                  <span className="cd-album-label">Artist</span>
-                  {hasCandidates && (
-                    <span className="cd-mb-cell" title={currentCandidate?.artist}>
-                      {currentCandidate?.artist || ""}
-                    </span>
-                  )}
-                  <div className="cd-locked-cell">
-                    {albumArtistLock !== null ? (
-                      <input
-                        type="text"
-                        className="cd-album-input"
-                        value={albumArtistLock}
-                        onChange={(e) => setAlbumArtistLock(e.target.value)}
-                      />
-                    ) : (
-                      <span className="cd-not-locked">not locked</span>
-                    )}
-                  </div>
-                  {hasCandidates && (
-                    <button
-                      className={`cd-lock-btn${albumArtistLock !== null ? " cd-lock-btn-active" : ""}`}
-                      onClick={() => {
-                        if (albumArtistLock !== null) {
-                          setAlbumArtistLock(null);
-                        } else {
-                          setAlbumArtistLock(currentCandidate?.artist || "");
-                          setSelectedCandidateId(currentCandidate?.id ?? null);
-                        }
-                      }}
-                    >
-                      {albumArtistLock !== null ? "Locked ✓" : "Lock"}
-                    </button>
-                  )}
-                </div>
+                <AlbumRow
+                  label="Artist"
+                  mbValue={currentCandidate?.artist}
+                  hasCandidates={hasCandidates}
+                  lockedValue={albumArtistLock}
+                  editingValue={editingAlbumArtist}
+                  onType={(v) => setEditingAlbumArtist(v)}
+                  onDirectChange={(v) => setAlbumArtistLock(v)}
+                  onLock={() => {
+                    setAlbumArtistLock(currentCandidate?.artist || "");
+                    setEditingAlbumArtist(null);
+                    setSelectedCandidateId(currentCandidate?.id ?? null);
+                  }}
+                  onUnlock={() => { setAlbumArtistLock(null); setEditingAlbumArtist(null); }}
+                  onSave={saveAlbumArtist}
+                />
               </div>
 
               {/* Track section */}
@@ -332,7 +335,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                       {physicalTracks.map((track) => {
                         const mbTrack = getMbTrack(track.track_number);
                         const titleLocked = lockedTitles.has(track.id);
+                        const titleDirty = editingTitles.has(track.id);
                         const artistLocked = lockedArtists.has(track.id);
+                        const artistDirty = editingArtists.has(track.id);
 
                         return (
                           <tr
@@ -343,24 +348,37 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                               {track.track_number}
                             </td>
 
-                            {/* MB Title */}
                             {hasCandidates && (
                               <td className={`cd-mb-cell${titleLocked ? " cd-mb-dimmed" : ""}`}>
                                 {mbTrack?.title || ""}
                               </td>
                             )}
 
-                            {/* Locked Title */}
                             <td>
                               {titleLocked || !hasCandidates ? (
                                 <input
                                   type="text"
-                                  className="cd-track-input"
-                                  value={lockedTitles.get(track.id) ?? ""}
+                                  className={`cd-track-input${titleDirty ? " cd-input-dirty" : ""}`}
+                                  value={
+                                    hasCandidates
+                                      ? effectiveTrackTitle(track.id)
+                                      : (lockedTitles.get(track.id) ?? "")
+                                  }
                                   onChange={(e) => {
-                                    const next = new Map(lockedTitles);
-                                    next.set(track.id, e.target.value);
-                                    setLockedTitles(next);
+                                    if (hasCandidates) {
+                                      setEditingTitles((prev) =>
+                                        new Map(prev).set(track.id, e.target.value)
+                                      );
+                                    } else {
+                                      setLockedTitles((prev) =>
+                                        new Map(prev).set(track.id, e.target.value)
+                                      );
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && titleDirty) {
+                                      saveTrackTitle(track.id);
+                                    }
                                   }}
                                 />
                               ) : (
@@ -368,41 +386,59 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                               )}
                             </td>
 
-                            {/* Lock Title button */}
                             {hasCandidates && (
                               <td className="cd-col-lock">
                                 <button
-                                  className={`cd-lock-btn${titleLocked ? " cd-lock-btn-active" : ""}`}
-                                  onClick={() =>
-                                    titleLocked
-                                      ? handleUnlockTitle(track.id)
-                                      : handleLockTitle(track.id, mbTrack?.title)
-                                  }
+                                  className={`cd-lock-btn${
+                                    titleLocked && !titleDirty ? " cd-lock-btn-active" : ""
+                                  }${titleDirty ? " cd-lock-btn-save" : ""}`}
+                                  onClick={() => {
+                                    if (!titleLocked) {
+                                      handleLockTitle(track.id, mbTrack?.title);
+                                    } else if (titleDirty) {
+                                      saveTrackTitle(track.id);
+                                    } else {
+                                      handleUnlockTitle(track.id);
+                                    }
+                                  }}
                                 >
-                                  {titleLocked ? "✓" : "Lock"}
+                                  {!titleLocked ? "Lock" : titleDirty ? "Save" : "✓"}
                                 </button>
                               </td>
                             )}
 
-                            {/* MB Artist (compilation + candidates) */}
                             {isCompilation && hasCandidates && (
                               <td className={`cd-mb-cell${artistLocked ? " cd-mb-dimmed" : ""}`}>
                                 {mbTrack?.artist || ""}
                               </td>
                             )}
 
-                            {/* Locked Artist (compilation) */}
                             {isCompilation && (
                               <td>
                                 {artistLocked || !hasCandidates ? (
                                   <input
                                     type="text"
-                                    className="cd-track-input"
-                                    value={lockedArtists.get(track.id) ?? ""}
+                                    className={`cd-track-input${artistDirty ? " cd-input-dirty" : ""}`}
+                                    value={
+                                      hasCandidates
+                                        ? effectiveTrackArtist(track.id)
+                                        : (lockedArtists.get(track.id) ?? "")
+                                    }
                                     onChange={(e) => {
-                                      const next = new Map(lockedArtists);
-                                      next.set(track.id, e.target.value);
-                                      setLockedArtists(next);
+                                      if (hasCandidates) {
+                                        setEditingArtists((prev) =>
+                                          new Map(prev).set(track.id, e.target.value)
+                                        );
+                                      } else {
+                                        setLockedArtists((prev) =>
+                                          new Map(prev).set(track.id, e.target.value)
+                                        );
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && artistDirty) {
+                                        saveTrackArtist(track.id);
+                                      }
                                     }}
                                   />
                                 ) : (
@@ -411,18 +447,23 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                               </td>
                             )}
 
-                            {/* Lock Artist button (compilation + candidates) */}
                             {isCompilation && hasCandidates && (
                               <td className="cd-col-lock">
                                 <button
-                                  className={`cd-lock-btn${artistLocked ? " cd-lock-btn-active" : ""}`}
-                                  onClick={() =>
-                                    artistLocked
-                                      ? handleUnlockArtist(track.id)
-                                      : handleLockArtist(track.id, mbTrack?.artist)
-                                  }
+                                  className={`cd-lock-btn${
+                                    artistLocked && !artistDirty ? " cd-lock-btn-active" : ""
+                                  }${artistDirty ? " cd-lock-btn-save" : ""}`}
+                                  onClick={() => {
+                                    if (!artistLocked) {
+                                      handleLockArtist(track.id, mbTrack?.artist);
+                                    } else if (artistDirty) {
+                                      saveTrackArtist(track.id);
+                                    } else {
+                                      handleUnlockArtist(track.id);
+                                    }
+                                  }}
                                 >
-                                  {artistLocked ? "✓" : "Lock"}
+                                  {!artistLocked ? "Lock" : artistDirty ? "Save" : "✓"}
                                 </button>
                               </td>
                             )}
@@ -451,6 +492,56 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AlbumRow({
+  label, mbValue, hasCandidates,
+  lockedValue, editingValue,
+  onType, onDirectChange, onLock, onUnlock, onSave,
+}) {
+  const isLocked = lockedValue !== null;
+  const isDirty = editingValue !== null;
+  const displayValue = isDirty ? editingValue : (lockedValue ?? "");
+
+  return (
+    <div className="cd-album-row">
+      <span className="cd-album-label">{label}</span>
+      {hasCandidates && (
+        <span className="cd-mb-cell" title={mbValue}>{mbValue || ""}</span>
+      )}
+      <div className="cd-locked-cell">
+        {isLocked ? (
+          <input
+            type="text"
+            className={`cd-album-input${isDirty ? " cd-input-dirty" : ""}`}
+            value={displayValue}
+            onChange={(e) =>
+              hasCandidates ? onType(e.target.value) : onDirectChange(e.target.value)
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && isDirty) onSave();
+            }}
+          />
+        ) : (
+          <span className="cd-not-locked">not locked</span>
+        )}
+      </div>
+      {hasCandidates && (
+        <button
+          className={`cd-lock-btn${
+            isLocked && !isDirty ? " cd-lock-btn-active" : ""
+          }${isDirty ? " cd-lock-btn-save" : ""}`}
+          onClick={() => {
+            if (!isLocked) onLock();
+            else if (isDirty) onSave();
+            else onUnlock();
+          }}
+        >
+          {!isLocked ? "Lock" : isDirty ? "Save" : "Locked ✓"}
+        </button>
+      )}
     </div>
   );
 }

@@ -1112,6 +1112,16 @@ button:disabled {
   border-color: var(--good);
 }
 
+.cd-lock-btn-save {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.cd-input-dirty {
+  border-color: var(--accent) !important;
+  outline: none;
+}
+
 /* Track section */
 
 .cd-track-section {
