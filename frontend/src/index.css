@@ -1002,7 +1002,7 @@ button:disabled {
 }
 
 .cd-identify-panel .identify-panel-body {
-  overflow-y: hidden;
+  overflow: hidden;
   padding: 0;
   gap: 0;
 }
@@ -1077,6 +1077,7 @@ button:disabled {
 
 .cd-album-input {
   width: 100%;
+  min-width: 0;
   height: 28px;
   font-size: 13px;
   padding: 2px 8px;
@@ -1092,7 +1093,18 @@ button:disabled {
   flex-shrink: 0;
   font-size: 11px;
   padding: 3px 8px;
-  min-width: 60px;
+}
+
+/* Album rows have enough space for a labelled lock button */
+.cd-album-row .cd-lock-btn {
+  min-width: 64px;
+}
+
+/* Table lock buttons must fit their fixed-width column */
+.cd-track-table .cd-lock-btn {
+  min-width: 0;
+  width: 100%;
+  padding: 3px 4px;
 }
 
 .cd-lock-btn-active {
@@ -1126,6 +1138,7 @@ button:disabled {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cd-track-table {
@@ -1151,12 +1164,13 @@ button:disabled {
 }
 
 .cd-col-num {
-  width: 36px;
+  width: 40px;
   text-align: right;
 }
 
+/* Fixed-width lock button column — buttons use width:100% to fill it */
 .cd-col-lock {
-  width: 52px;
+  width: 54px;
 }
 
 .cd-track-row {
@@ -1188,6 +1202,7 @@ button:disabled {
 
 .cd-track-input {
   width: 100%;
+  min-width: 0;
   height: 26px;
   font-size: 12px;
   padding: 1px 6px;

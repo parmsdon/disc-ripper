@@ -306,13 +306,22 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
                 <div className="cd-track-wrap">
                   <table className="cd-track-table">
+                    <colgroup>
+                      <col className="cd-col-num" />
+                      {hasCandidates && <col />}
+                      <col />
+                      {hasCandidates && <col className="cd-col-lock" />}
+                      {isCompilation && hasCandidates && <col />}
+                      {isCompilation && <col />}
+                      {isCompilation && hasCandidates && <col className="cd-col-lock" />}
+                    </colgroup>
                     <thead>
                       <tr>
                         <th className="cd-col-num">#</th>
-                        {hasCandidates && <th>MB Title</th>}
+                        {hasCandidates && <th>MB</th>}
                         <th>Title</th>
                         {hasCandidates && <th className="cd-col-lock"></th>}
-                        {isCompilation && hasCandidates && <th>MB Artist</th>}
+                        {isCompilation && hasCandidates && <th>MB</th>}
                         {isCompilation && <th>Artist</th>}
                         {isCompilation && hasCandidates && (
                           <th className="cd-col-lock"></th>
