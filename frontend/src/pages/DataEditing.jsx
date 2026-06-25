@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import CdIdentifyPanel from "./CdIdentifyPanel.jsx";
 import DvdIdentifyPanel from "./DvdIdentifyPanel.jsx";
 
 const POLL_INTERVAL_MS = 30000;
@@ -64,25 +65,6 @@ function QueueEntry({ disc, onIdentify }) {
   );
 }
 
-// Placeholder for CDs — replaced in the next prompt.
-function CdIdentifyPlaceholder({ disc, onClose }) {
-  return (
-    <div className="identify-panel-overlay" onClick={onClose}>
-      <div className="identify-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="identify-panel-header">
-          <span>CD — {disc.temp_name || "Unnamed"}</span>
-          <button className="mb-popover-close" onClick={onClose}>×</button>
-        </div>
-        <div style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
-          CD identification panel coming soon.
-        </div>
-        <div style={{ padding: "0 24px 24px", textAlign: "center" }}>
-          <button onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function DataEditing() {
   const [queue, setQueue] = useState(null);
@@ -152,8 +134,12 @@ export default function DataEditing() {
           onSkip={() => setSelectedDisc(null)}
         />
       )}
-      {selectedDisc && selectedDisc.type !== "dvd" && (
-        <CdIdentifyPlaceholder disc={selectedDisc} onClose={() => setSelectedDisc(null)} />
+      {selectedDisc && selectedDisc.type === "cd" && (
+        <CdIdentifyPanel
+          disc={selectedDisc}
+          onConfirm={() => { setSelectedDisc(null); fetchQueue(); }}
+          onSkip={() => setSelectedDisc(null)}
+        />
       )}
     </div>
   );

@@ -266,6 +266,7 @@ def get_disc_candidates(disc_id):
             "artist": data.get("artist"),
             "year": data.get("year"),
             "track_count": data.get("track_count"),
+            "tracks": data.get("tracks", []),
         })
     return jsonify(result)
 
