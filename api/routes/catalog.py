@@ -10,9 +10,9 @@ import threading
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, current_app, request
-from sqlalchemy import select, func
+from sqlalchemy import case, func, select
 
-from common.models import Catalog
+from common.models import Catalog, Disc
 from mymovies_sync.sync import run_sync
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,40 @@ def _catalog_to_dict(entry: Catalog) -> dict:
     }
 
 
+def _unmatched_filter():
+    """SQLAlchemy WHERE clause that excludes catalog entries already matched to a disc."""
+    return ~select(Disc.id).where(Disc.catalog_id == Catalog.id).exists()
+
+
+def _fuzzy_order(search: str):
+    """CASE expression: exact match first, then prefix, then anywhere."""
+    low = search.lower()
+    return case(
+        (func.lower(Catalog.title) == low, 0),
+        (Catalog.title.ilike(search + "%"), 1),
+        else_=2,
+    )
+
+
+@catalog_bp.route("/unmatched-suggestions", methods=["GET"])
+def unmatched_suggestions():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    title = request.args.get("title", "")
+    limit = min(int(request.args.get("limit", 3)), 20)
+
+    query = (
+        select(Catalog)
+        .where(Catalog.title.ilike(f"%{title}%"))
+        .where(_unmatched_filter())
+        .order_by(_fuzzy_order(title), Catalog.title)
+        .limit(limit)
+    )
+    entries = session.scalars(query).all()
+    return jsonify([_catalog_to_dict(e) for e in entries])
+
+
 @catalog_bp.route("/", methods=["GET"])
 def list_catalog():
     Session = current_app.config["DB_SESSION"]
@@ -49,11 +83,17 @@ def list_catalog():
 
     query = select(Catalog)
 
-    search = request.args.get("search")
+    search = request.args.get("search", "")
     if search:
         query = query.where(Catalog.title.ilike(f"%{search}%"))
+        query = query.order_by(_fuzzy_order(search), Catalog.title)
+    else:
+        query = query.order_by(Catalog.title)
 
-    entries = session.scalars(query.order_by(Catalog.title)).all()
+    if request.args.get("exclude_matched") == "true":
+        query = query.where(_unmatched_filter())
+
+    entries = session.scalars(query).all()
     return jsonify([_catalog_to_dict(e) for e in entries])
 
 

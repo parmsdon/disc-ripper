@@ -6,9 +6,9 @@ metadata editing endpoints will be expanded in later phases.
 """
 
 from flask import Blueprint, jsonify, current_app, request
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 
-from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus, LookupCandidate, naive_utcnow
+from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, LookupCandidate, naive_utcnow
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -61,6 +61,131 @@ def _track_to_dict(track: CDTrack) -> dict:
         "wav_filename": track.wav_filename,
         "rip_quality": track.rip_quality.value if track.rip_quality else None,
     }
+
+
+@discs_bp.route("/identification-queue", methods=["GET"])
+def identification_queue():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    discs = session.scalars(
+        select(Disc)
+        .where(
+            or_(
+                and_(
+                    Disc.type == DiscType.dvd,
+                    Disc.catalog_id.is_(None),
+                    Disc.status.in_([DiscStatus.ripped, DiscStatus.identifying]),
+                ),
+                and_(
+                    Disc.type == DiscType.cd,
+                    Disc.album_title.is_(None),
+                    Disc.status.in_([DiscStatus.ripped, DiscStatus.identifying]),
+                ),
+            )
+        )
+        .order_by(Disc.created_at.asc())
+    ).all()
+
+    result = []
+    for disc in discs:
+        candidate_count = session.scalar(
+            select(func.count()).select_from(LookupCandidate)
+            .where(LookupCandidate.disc_id == disc.id)
+        )
+        result.append({
+            "id": disc.id,
+            "type": disc.type.value,
+            "status": disc.status.value,
+            "temp_name": disc.temp_name,
+            "disc_fingerprint": disc.disc_fingerprint,
+            "created_at": disc.created_at.isoformat() if disc.created_at else None,
+            "ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
+            "mb_lookup_status": disc.mb_lookup_status if disc.type == DiscType.cd else None,
+            "candidate_count": candidate_count or 0,
+            "rip_quality": disc.rip_quality,
+            "rip_attempt_count": disc.rip_attempt_count,
+        })
+    return jsonify(result)
+
+
+@discs_bp.route("/<int:disc_id>/identify-dvd", methods=["PATCH"])
+def identify_dvd(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+    if disc.type != DiscType.dvd:
+        return jsonify({"error": "Not a DVD"}), 400
+
+    body = request.get_json(silent=True) or {}
+    catalog_id = body.get("catalog_id")
+    if catalog_id is None:
+        return jsonify({"error": "Missing field: catalog_id"}), 400
+
+    catalog = session.get(Catalog, catalog_id)
+    if catalog is None:
+        return jsonify({"error": "Catalog entry not found"}), 404
+
+    already_matched = session.scalar(
+        select(Disc.id).where(
+            Disc.catalog_id == catalog_id,
+            Disc.id != disc_id,
+        ).limit(1)
+    )
+    if already_matched is not None:
+        return jsonify({"error": "This catalog entry is already matched to another disc"}), 409
+
+    disc.catalog_id = catalog_id
+    session.commit()
+
+    return jsonify({
+        "id": disc.id,
+        "type": disc.type.value,
+        "status": disc.status.value,
+        "temp_name": disc.temp_name,
+        "catalog_id": disc.catalog_id,
+        "catalog_title": catalog.title,
+    })
+
+
+@discs_bp.route("/<int:disc_id>/identify-cd", methods=["PATCH"])
+def identify_cd(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+    if disc.type != DiscType.cd:
+        return jsonify({"error": "Not a CD"}), 400
+
+    body = request.get_json(silent=True) or {}
+    album_title = body.get("album_title")
+    if not album_title:
+        return jsonify({"error": "Missing field: album_title"}), 400
+
+    disc.album_title = album_title
+    disc.album_artist = body.get("album_artist") or None
+
+    for track_data in body.get("tracks", []):
+        track_id = track_data.get("id")
+        if track_id is None:
+            continue
+        track = session.get(CDTrack, track_id)
+        if track is not None and track.disc_id == disc_id:
+            track.title = track_data.get("title") or None
+            track.artist = track_data.get("artist") or None
+
+    selected_candidate_id = body.get("selected_candidate_id")
+    if selected_candidate_id is not None:
+        for candidate in disc.lookup_candidates:
+            candidate.selected = (candidate.id == selected_candidate_id)
+
+    session.commit()
+    return jsonify({"status": "ok"})
 
 
 @discs_bp.route("/", methods=["GET"])

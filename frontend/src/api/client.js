@@ -68,4 +68,19 @@ export const api = {
   triggerSync: () => request("/catalog/sync", { method: "POST" }),
   getSyncStatus: () => request("/catalog/sync/status"),
   getDiscCandidates: (discId) => request(`/discs/${discId}/candidates`),
+  getIdentificationQueue: () => request("/discs/identification-queue"),
+  identifyDvd: (discId, catalogId) =>
+    request(`/discs/${discId}/identify-dvd`, {
+      method: "PATCH",
+      body: JSON.stringify({ catalog_id: catalogId }),
+    }),
+  identifyCd: (discId, data) =>
+    request(`/discs/${discId}/identify-cd`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  getCatalogSuggestions: (title) =>
+    request(`/catalog/unmatched-suggestions?title=${encodeURIComponent(title)}&limit=3`),
+  searchCatalog: (query) =>
+    request(`/catalog/?search=${encodeURIComponent(query)}&exclude_matched=true`),
 };

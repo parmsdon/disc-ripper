@@ -1,13 +1,149 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { api } from "../api/client";
+
+const POLL_INTERVAL_MS = 30000;
+
+function formatDate(isoStr) {
+  if (!isoStr) return null;
+  return new Date(isoStr).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+}
+
+function MbStatusBadge({ disc }) {
+  if (disc.type !== "cd" || !disc.mb_lookup_status) return null;
+
+  if (disc.mb_lookup_status === "pending") {
+    return <span className="mb-queue-status pending">Looking up…</span>;
+  }
+  if (disc.mb_lookup_status === "found") {
+    const n = disc.candidate_count;
+    return (
+      <span className="mb-queue-status found">
+        {n} match{n !== 1 ? "es" : ""}
+      </span>
+    );
+  }
+  if (disc.mb_lookup_status === "not_found") {
+    return <span className="mb-queue-status not-found">No matches</span>;
+  }
+  return null;
+}
+
+function QueueEntry({ disc, onIdentify }) {
+  const rippedDate = formatDate(disc.ripped_at);
+  return (
+    <div className="queue-entry">
+      <span className={`queue-entry-type-badge ${disc.type}`}>
+        {disc.type.toUpperCase()}
+      </span>
+      <div className="queue-entry-info">
+        <div className="queue-entry-title">
+          {disc.temp_name
+            ? disc.temp_name
+            : <em className="queue-entry-unnamed">Unnamed</em>
+          }
+        </div>
+        <div className="queue-entry-meta">
+          {disc.disc_fingerprint}
+          {rippedDate && ` · ${rippedDate}`}
+        </div>
+      </div>
+      <div className="queue-entry-badges">
+        <MbStatusBadge disc={disc} />
+        {disc.rip_quality === "dirty" && (
+          <span className="dirty-rip-badge">⚠ dirty</span>
+        )}
+      </div>
+      <button onClick={() => onIdentify(disc)}>Identify</button>
+    </div>
+  );
+}
+
+// Placeholder — replaced by the DVD/CD panels in follow-up prompts.
+function IdentifyPanel({ disc, onClose }) {
+  return (
+    <div className="identify-panel-overlay" onClick={onClose}>
+      <div className="identify-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="identify-panel-header">
+          <span>{disc.type.toUpperCase()} — {disc.temp_name || "Unnamed"}</span>
+          <button className="mb-popover-close" onClick={onClose}>×</button>
+        </div>
+        <div style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
+          Identification panel coming soon.
+        </div>
+        <div style={{ padding: "0 24px 24px", textAlign: "center" }}>
+          <button onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DataEditing() {
-  return (
-    <div className="panel">
-      <h2>Data Editing</h2>
-      <div className="empty-state">
-        This tab will be used for matching ripped DVDs to My Movies catalog
-        entries and mapping CD tracks to MusicBrainz records.
+  const [queue, setQueue] = useState(null);
+  const [error, setError] = useState(null);
+  const [selectedDisc, setSelectedDisc] = useState(null);
+
+  const fetchQueue = useCallback(() => {
+    api.getIdentificationQueue()
+      .then((data) => { setQueue(data); setError(null); })
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    fetchQueue();
+    const interval = setInterval(fetchQueue, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchQueue]);
+
+  if (error) {
+    return (
+      <div className="panel">
+        <h2>Data Editing</h2>
+        <div className="empty-state">Error loading queue: {error}</div>
       </div>
+    );
+  }
+
+  if (queue === null) {
+    return (
+      <div className="panel">
+        <h2>Data Editing</h2>
+        <div className="empty-state">Loading…</div>
+      </div>
+    );
+  }
+
+  const dvdCount = queue.filter((d) => d.type === "dvd").length;
+  const cdCount = queue.filter((d) => d.type === "cd").length;
+  const parts = [];
+  if (dvdCount > 0) parts.push(`${dvdCount} DVD${dvdCount !== 1 ? "s" : ""}`);
+  if (cdCount > 0) parts.push(`${cdCount} CD${cdCount !== 1 ? "s" : ""}`);
+  const summary = `${queue.length} disc${queue.length !== 1 ? "s" : ""} awaiting identification` +
+    (parts.length ? ` (${parts.join(", ")})` : "");
+
+  return (
+    <div>
+      <div className="panel">
+        <h2>Identification Queue</h2>
+        {queue.length === 0 ? (
+          <div className="empty-state">✓ No discs awaiting identification</div>
+        ) : (
+          <>
+            <div className="queue-summary">{summary}</div>
+            <div className="identification-queue">
+              {queue.map((disc) => (
+                <QueueEntry key={disc.id} disc={disc} onIdentify={setSelectedDisc} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {selectedDisc && (
+        <IdentifyPanel disc={selectedDisc} onClose={() => setSelectedDisc(null)} />
+      )}
     </div>
   );
 }
