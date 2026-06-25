@@ -6,9 +6,9 @@ DEV-ONLY (same hard env gate as clean_dev_test_data.py - this is far more
 destructive, since it removes ALL discs/jobs/tracks/candidates, not just
 identified duplicates).
 
-Deletes every row from discs, and along with it (via the cascade="all,
-delete-orphan" relationships on Disc in common/models.py) every rip_job,
-encode_job, cd_track, and lookup_candidate row that referenced one. Also
+Explicitly deletes every row from cd_tracks, encode_jobs, rip_jobs, and
+lookup_candidates first (in FK order, since the DB FK constraints are NO
+ACTION not CASCADE), then discs. Also
 removes all files/directories under dvd_store/raw/ and cd_store/raw/, and
 under each encode profile's output_subfolder in both stores, on the
 configured datastore_root.
@@ -28,7 +28,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import get_db_url, get_store_path, load_config
@@ -92,11 +92,22 @@ def main(env: str) -> None:
         print("Aborted - no changes made.")
         return
 
-    discs = session.scalars(select(Disc)).all()
-    for disc in discs:
-        session.delete(disc)
+    # Explicit FK-ordered bulk DELETEs rather than ORM cascade. The DB FK
+    # constraints are all NO ACTION (not CASCADE), so children must be
+    # deleted before parents or Postgres will raise a FK violation. ORM
+    # cascade via session.delete() lazy-loads each disc's relationships
+    # individually before issuing DELETEs, which is slower and can order
+    # incorrectly if any lazy load races with the live ripper service's
+    # poll transaction. Bulk DELETE in the right order is simpler and safe.
+    session.execute(delete(CDTrack))
+    session.execute(delete(EncodeJob))
+    session.execute(delete(RipJob))
+    session.execute(delete(LookupCandidate))
+    session.execute(delete(Disc))
     session.commit()
-    print(f"Deleted {len(discs)} disc(s) and their rip_jobs/encode_jobs/cd_tracks/lookup_candidates.")
+    print(f"Deleted {disc_count} disc(s), {rip_job_count} rip_job(s), "
+          f"{encode_job_count} encode_job(s), {lookup_candidate_count} "
+          f"lookup_candidate(s), {cd_track_count} cd_track(s).")
 
     for directory in raw_dirs + profile_dirs:
         if _clear_dir_contents(directory):
