@@ -24,7 +24,7 @@ _QUERY = """
 """
 
 
-def sync_catalog(cfg: dict, session) -> dict:
+def sync_catalog(cfg: dict, session, progress_callback=None) -> dict:
     """
     Pull every row from My Movies' tblTitles and upsert it into our
     catalog table, keyed on mymovies_id. Each row is committed
@@ -34,6 +34,10 @@ def sync_catalog(cfg: dict, session) -> dict:
     media_type is always forced to MediaType.movie - nvcMediaType isn't
     reliably populated in this My Movies instance, and all titles in it
     are in fact movies.
+
+    progress_callback: optional callable(current, total) called after
+    each row is processed - used by the API background thread to push
+    live progress to the sync/status endpoint.
 
     Returns {"synced": int, "inserted": int, "updated": int,
     "errors": int, "duration_seconds": float}.
@@ -50,9 +54,10 @@ def sync_catalog(cfg: dict, session) -> dict:
     finally:
         conn.close()
 
+    total = len(rows)
     now = naive_utcnow()
 
-    for row in rows:
+    for i, row in enumerate(rows, 1):
         data = dict(zip(columns, row))
         try:
             mymovies_id = str(data["intId"])
@@ -93,6 +98,12 @@ def sync_catalog(cfg: dict, session) -> dict:
             session.rollback()
             errors += 1
 
+        if progress_callback is not None:
+            try:
+                progress_callback(i, total)
+            except Exception:
+                pass
+
     return {
         "synced": synced,
         "inserted": inserted,
@@ -102,13 +113,13 @@ def sync_catalog(cfg: dict, session) -> dict:
     }
 
 
-def run_sync(cfg: dict) -> dict:
+def run_sync(cfg: dict, progress_callback=None) -> dict:
     """Entry point for both manual and periodic invocation - owns its own DB session."""
     engine = create_engine(get_db_url(cfg))
     Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        return sync_catalog(cfg, session)
+        return sync_catalog(cfg, session, progress_callback=progress_callback)
     finally:
         session.close()
 

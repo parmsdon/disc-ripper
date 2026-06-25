@@ -27,6 +27,7 @@ _sync_lock = threading.Lock()
 _sync_running = False
 _last_result = None
 _last_run_at = None
+_sync_progress = None  # {"current": int, "total": int} while running, None otherwise
 
 
 def _catalog_to_dict(entry: Catalog) -> dict:
@@ -69,9 +70,15 @@ def get_catalog_entry(catalog_id):
 
 
 def _run_sync_in_background(cfg: dict) -> None:
-    global _sync_running, _last_result, _last_run_at
+    global _sync_running, _last_result, _last_run_at, _sync_progress
+
+    def _progress(current, total):
+        global _sync_progress
+        with _sync_lock:
+            _sync_progress = {"current": current, "total": total}
+
     try:
-        result = run_sync(cfg)
+        result = run_sync(cfg, progress_callback=_progress)
     except Exception as exc:
         logger.exception("My Movies sync (triggered via API) failed")
         result = {"error": str(exc)}
@@ -80,6 +87,7 @@ def _run_sync_in_background(cfg: dict) -> None:
             _last_result = result
             _last_run_at = datetime.now(timezone.utc).isoformat()
             _sync_running = False
+            _sync_progress = None
 
 
 @catalog_bp.route("/sync", methods=["POST"])
@@ -105,4 +113,5 @@ def sync_status():
             "running": _sync_running,
             "last_result": _last_result,
             "last_run_at": _last_run_at,
+            "progress": _sync_progress if _sync_running else None,
         })
