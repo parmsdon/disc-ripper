@@ -77,6 +77,7 @@ def list_drives():
                 "scheduled_start": current_job.scheduled_start.isoformat() if current_job and current_job.scheduled_start else None,
                 "progress_percent": current_job.progress_percent if current_job else None,
                 "progress_stage": current_job.progress_stage if current_job else None,
+                "mb_lookup_status": current_disc_row.mb_lookup_status,
             }
 
         drive_dict = _drive_summary(drive)

@@ -3,6 +3,7 @@ Flask-Cors>=4.0.1
 SQLAlchemy>=2.0.36
 alembic>=1.13.1
 PyYAML>=6.0.1
+musicbrainzngs>=0.7.1
 # psycopg2 and pyodbc are both installed via system package, not pip:
 #   sudo dnf install -y python3-psycopg2 python3-pyodbc
 # (psycopg2-binary fails to build on newer Fedora/Python — system package +

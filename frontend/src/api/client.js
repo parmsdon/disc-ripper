@@ -67,4 +67,5 @@ export const api = {
     request(`/catalog/${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   triggerSync: () => request("/catalog/sync", { method: "POST" }),
   getSyncStatus: () => request("/catalog/sync/status"),
+  getDiscCandidates: (discId) => request(`/discs/${discId}/candidates`),
 };

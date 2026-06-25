@@ -165,7 +165,7 @@ python3 -m mymovies_sync.scheduler
 ### System packages
 
 ```bash
-sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia cd-discid
+sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia cd-discid libdiscid regionset eject
 
 # libdvdcss via RPM Fusion (needed for dvdbackup to read commercial DVDs)
 sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
@@ -190,6 +190,9 @@ cd ripperdev
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
 pip install -r requirements-ripper.txt
+# discid and musicbrainzngs are installed via pip (libdiscid system package above
+# provides the shared library that discid wraps):
+pip install discid musicbrainzngs
 ```
 
 ### Config

@@ -1,4 +1,7 @@
 SQLAlchemy>=2.0.36
+PyYAML>=6.0.1
+discid>=1.1.0
+musicbrainzngs>=0.7.1
 # psycopg2 is installed via system package: sudo dnf install -y python3-psycopg2
 # (psycopg2-binary fails to build on newer Fedora/Python — use system package + --system-site-packages venv)
-PyYAML>=6.0.1
+# discid wraps libdiscid: sudo dnf install -y libdiscid

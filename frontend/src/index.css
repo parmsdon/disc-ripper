@@ -586,3 +586,41 @@ button:disabled {
 .catalog-table tbody tr:hover {
   background: var(--bg);
 }
+
+.temp-name-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mb-lookup-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.mb-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mb-candidate-btn {
+  background: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 460px;
+}
+
+.mb-candidate-btn:hover {
+  background: rgba(79, 140, 255, 0.1);
+  border-color: var(--accent);
+}

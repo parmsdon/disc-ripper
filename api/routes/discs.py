@@ -8,7 +8,7 @@ metadata editing endpoints will be expanded in later phases.
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import select
 
-from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus, naive_utcnow
+from common.models import Disc, DiscType, DiscStatus, CDTrack, Drive, JobStatus, LookupCandidate, naive_utcnow
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -44,6 +44,9 @@ def _disc_to_dict(disc: Disc) -> dict:
         "scheduled_start": active_job.scheduled_start.isoformat() if active_job and active_job.scheduled_start else None,
         "progress_percent": active_job.progress_percent if active_job else None,
         "progress_stage": active_job.progress_stage if active_job else None,
+        "mb_disc_id": disc.mb_disc_id,
+        "mb_toc": disc.mb_toc,
+        "mb_lookup_status": disc.mb_lookup_status,
     }
 
 
@@ -116,6 +119,30 @@ def update_temp_name(disc_id):
         disc.status = DiscStatus.ripped
     session.commit()
     return jsonify(_disc_to_dict(disc))
+
+
+@discs_bp.route("/<int:disc_id>/candidates", methods=["GET"])
+def get_disc_candidates(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    result = []
+    for candidate in sorted(disc.lookup_candidates, key=lambda c: c.id):
+        data = candidate.candidate_data or {}
+        result.append({
+            "id": candidate.id,
+            "source": candidate.source,
+            "selected": candidate.selected,
+            "title": data.get("title"),
+            "artist": data.get("artist"),
+            "year": data.get("year"),
+            "track_count": data.get("track_count"),
+        })
+    return jsonify(result)
 
 
 @discs_bp.route("/<int:disc_id>/eject", methods=["POST"])

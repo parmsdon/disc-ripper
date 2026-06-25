@@ -23,6 +23,7 @@ a genuine clean stop.
 
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -31,6 +32,7 @@ from sqlalchemy import select
 from common.config import load_config
 from common.models import CDTrack, Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob, Setting
 from ripper_service.cd_toc import read_table_of_contents
+from ripper_service.mb_lookup import compute_mb_disc_id, lookup_musicbrainz
 from ripper_service.db import get_session_factory
 from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
@@ -197,6 +199,7 @@ def run(cfg: dict) -> None:
             with Session() as session:
                 drive_states = sync_physical_drives(session, cfg)
 
+            pending_mb_lookups = []  # (mb_disc_id, mb_toc, db_disc_id) for CDs detected this poll
             with Session() as session:
                 for drive_cfg in cfg.get("drives", []):
                     if not drive_cfg.get("active", True):
@@ -333,6 +336,22 @@ def run(cfg: dict) -> None:
                                         drive_id=drive_id,
                                         status=JobStatus.queued,
                                     ))
+
+                                    mb_result = compute_mb_disc_id(device_path)
+                                    if mb_result.get("disc_id"):
+                                        disc.mb_disc_id = mb_result["disc_id"]
+                                        disc.mb_toc = mb_result["toc"]
+                                        disc.mb_lookup_status = "pending"
+                                        pending_mb_lookups.append(
+                                            (mb_result["disc_id"], mb_result["toc"], disc.id)
+                                        )
+                                    else:
+                                        disc.mb_lookup_status = "error"
+                                        logger.warning(
+                                            "Failed to compute MB disc ID for disc #%s: %s",
+                                            disc.id, mb_result.get("error"),
+                                        )
+
                                     logger.info(
                                         "Created disc #%s for %s (CD, %s tracks, fingerprint=%s) - "
                                         "rip job queued, waiting for ripping to be enabled",
@@ -360,6 +379,18 @@ def run(cfg: dict) -> None:
                             drive.tray_open = tray_open
 
                 session.commit()
+
+            for mb_disc_id, mb_toc, db_disc_id in pending_mb_lookups:
+                t = threading.Thread(
+                    target=lookup_musicbrainz,
+                    args=(mb_disc_id, mb_toc, db_disc_id, Session),
+                    daemon=True,
+                )
+                t.start()
+                logger.info(
+                    "MusicBrainz lookup started for disc #%s (MB disc ID: %s)",
+                    db_disc_id, mb_disc_id,
+                )
 
             with Session() as session:
                 process_pending_actions(session, cfg)

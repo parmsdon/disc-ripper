@@ -203,6 +203,16 @@ class Disc(Base):
     rip_quality = Column(String, nullable=True)
     rip_attempt_count = Column(Integer, nullable=False, default=1, server_default="1")
 
+    # MusicBrainz fields (CD only). mb_disc_id is a SHA-1-based ID computed
+    # from the TOC by libdiscid (distinct from disc_fingerprint, which is the
+    # CDDB-style ID computed by cd-discid). mb_toc is the TOC string passed
+    # to MB for fuzzy fallback when the exact disc ID has no releases.
+    # mb_lookup_status: "pending" while the background thread is running,
+    # "found"/"not_found"/"error" once it completes.
+    mb_disc_id = Column(String, nullable=True)
+    mb_toc = Column(String, nullable=True)
+    mb_lookup_status = Column(String, nullable=True)
+
     # Region(s) the drive supported at the time this disc was ripped, as a
     # space-separated digit string (same format as PhysicalDrive.region).
     # Captured as a snapshot for historical record even though the drive's
