@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import DvdIdentifyPanel from "./DvdIdentifyPanel.jsx";
 
 const POLL_INTERVAL_MS = 30000;
 
-function formatDate(isoStr) {
+function formatRippedAt(isoStr) {
   if (!isoStr) return null;
-  return new Date(isoStr).toLocaleDateString("en-GB", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  const d = new Date(isoStr);
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
 }
 
 function MbStatusBadge({ disc }) {
@@ -31,7 +33,7 @@ function MbStatusBadge({ disc }) {
 }
 
 function QueueEntry({ disc, onIdentify }) {
-  const rippedDate = formatDate(disc.ripped_at);
+  const rippedAt = formatRippedAt(disc.ripped_at);
   return (
     <div className="queue-entry">
       <span className={`queue-entry-type-badge ${disc.type}`}>
@@ -44,10 +46,12 @@ function QueueEntry({ disc, onIdentify }) {
             : <em className="queue-entry-unnamed">Unnamed</em>
           }
         </div>
-        <div className="queue-entry-meta">
-          {disc.disc_fingerprint}
-          {rippedDate && ` · ${rippedDate}`}
-        </div>
+        {disc.disc_fingerprint && (
+          <div className="queue-entry-meta">{disc.disc_fingerprint}</div>
+        )}
+        {rippedAt && (
+          <div className="queue-entry-date">Ripped: {rippedAt}</div>
+        )}
       </div>
       <div className="queue-entry-badges">
         <MbStatusBadge disc={disc} />
@@ -60,17 +64,17 @@ function QueueEntry({ disc, onIdentify }) {
   );
 }
 
-// Placeholder — replaced by the DVD/CD panels in follow-up prompts.
-function IdentifyPanel({ disc, onClose }) {
+// Placeholder for CDs — replaced in the next prompt.
+function CdIdentifyPlaceholder({ disc, onClose }) {
   return (
     <div className="identify-panel-overlay" onClick={onClose}>
       <div className="identify-panel" onClick={(e) => e.stopPropagation()}>
         <div className="identify-panel-header">
-          <span>{disc.type.toUpperCase()} — {disc.temp_name || "Unnamed"}</span>
+          <span>CD — {disc.temp_name || "Unnamed"}</span>
           <button className="mb-popover-close" onClick={onClose}>×</button>
         </div>
         <div style={{ padding: "24px", textAlign: "center", color: "var(--text-dim)" }}>
-          Identification panel coming soon.
+          CD identification panel coming soon.
         </div>
         <div style={{ padding: "0 24px 24px", textAlign: "center" }}>
           <button onClick={onClose}>Close</button>
@@ -141,8 +145,15 @@ export default function DataEditing() {
         )}
       </div>
 
-      {selectedDisc && (
-        <IdentifyPanel disc={selectedDisc} onClose={() => setSelectedDisc(null)} />
+      {selectedDisc && selectedDisc.type === "dvd" && (
+        <DvdIdentifyPanel
+          disc={selectedDisc}
+          onConfirm={() => { setSelectedDisc(null); fetchQueue(); }}
+          onSkip={() => setSelectedDisc(null)}
+        />
+      )}
+      {selectedDisc && selectedDisc.type !== "dvd" && (
+        <CdIdentifyPlaceholder disc={selectedDisc} onClose={() => setSelectedDisc(null)} />
       )}
     </div>
   );

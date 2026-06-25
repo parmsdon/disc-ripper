@@ -713,12 +713,169 @@ button:disabled {
 
 .identify-panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--panel-border);
-  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.identify-panel-title {
+  font-size: 11px;
   font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.identify-disc-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.identify-disc-fp {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.identify-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.identify-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.identify-selection-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.identify-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.identify-error {
+  font-size: 12px;
+  color: var(--error);
+  padding: 8px 12px;
+  background: rgba(224, 92, 92, 0.1);
+  border: 1px solid rgba(224, 92, 92, 0.3);
+  border-radius: 4px;
+}
+
+/* Queue entry date line */
+
+.queue-entry-date {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* DVD identification panel */
+
+.suggestion-cards {
+  display: flex;
+  gap: 8px;
+}
+
+.suggestion-card {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.suggestion-card:hover {
+  border-color: var(--accent);
+}
+
+.suggestion-card.selected {
+  border-color: var(--accent);
+  background: rgba(79, 140, 255, 0.08);
+}
+
+.suggestion-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-card-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+.catalog-search-results {
+  margin-top: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+
+.catalog-result-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.catalog-result-row:last-child {
+  border-bottom: none;
+}
+
+.catalog-result-row:hover {
+  background: var(--bg);
+}
+
+.catalog-result-row.selected {
+  background: rgba(79, 140, 255, 0.08);
+}
+
+.catalog-result-title {
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-result-meta {
+  font-size: 11px;
+  color: var(--text-dim);
   flex-shrink: 0;
 }
 
