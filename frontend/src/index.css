@@ -800,6 +800,8 @@ button:disabled {
 .suggestion-cards {
   display: flex;
   gap: 8px;
+  height: 64px;
+  align-items: stretch;
 }
 
 .suggestion-card {
@@ -837,10 +839,20 @@ button:disabled {
 
 .catalog-search-results {
   margin-top: 8px;
-  max-height: 240px;
+  height: 240px;
   overflow-y: auto;
   border: 1px solid var(--panel-border);
   border-radius: 6px;
+}
+
+.suggestions-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-style: italic;
 }
 
 .catalog-result-row {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -39,13 +39,8 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
       .catch(() => setSuggestions([]));
   }, [disc.id, disc.temp_name]);
 
-  // Debounced catalog search
+  // Debounced catalog search — empty query returns the full unmatched list
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults(null);
-      setSearchLoading(false);
-      return;
-    }
     setSearchLoading(true);
     const handle = setTimeout(() => {
       api.searchCatalog(searchQuery)
@@ -104,13 +99,15 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
           <div className="identify-section">
             <div className="identify-section-label">Suggested matches</div>
-            {suggestions === null ? (
-              <div className="empty-state">Loading suggestions…</div>
-            ) : suggestions.length === 0 ? (
-              <div className="empty-state">No automatic suggestions — please search below</div>
-            ) : (
-              <div className="suggestion-cards">
-                {suggestions.map((entry) => (
+            <div className="suggestion-cards">
+              {suggestions === null || suggestions.length === 0 ? (
+                <div className="suggestions-hint">
+                  {suggestions === null
+                    ? "Loading suggestions…"
+                    : "No automatic suggestions — please search below"}
+                </div>
+              ) : (
+                suggestions.map((entry) => (
                   <div
                     key={entry.id}
                     className={`suggestion-card${selected?.id === entry.id ? " selected" : ""}`}
@@ -123,9 +120,9 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
 
           <div className="identify-section">
@@ -137,24 +134,22 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            {searchQuery.trim() && (
-              <div className="catalog-search-results">
-                {searchLoading && (
-                  <div className="empty-state">Searching…</div>
-                )}
-                {!searchLoading && searchResults !== null && searchResults.length === 0 && (
-                  <div className="empty-state">No matches in My Movies catalog</div>
-                )}
-                {!searchLoading && searchResults && searchResults.map((entry) => (
-                  <CatalogRow
-                    key={entry.id}
-                    entry={entry}
-                    selected={selected?.id === entry.id}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="catalog-search-results">
+              {searchLoading && (
+                <div className="empty-state">Searching…</div>
+              )}
+              {!searchLoading && searchResults !== null && searchResults.length === 0 && (
+                <div className="empty-state">No matches in My Movies catalog</div>
+              )}
+              {!searchLoading && searchResults && searchResults.map((entry) => (
+                <CatalogRow
+                  key={entry.id}
+                  entry={entry}
+                  selected={selected?.id === entry.id}
+                  onSelect={handleSelect}
+                />
+              ))}
+            </div>
           </div>
 
           {confirmError && (
