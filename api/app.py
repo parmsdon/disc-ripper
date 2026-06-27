@@ -26,6 +26,7 @@ from api.routes.health import health_bp
 from api.routes.encode_profiles import encode_profiles_bp
 from api.routes.settings import settings_bp
 from api.routes.catalog import catalog_bp
+from api.routes.log import log_bp
 
 
 def create_app(env: str | None = None) -> Flask:
@@ -53,6 +54,7 @@ def create_app(env: str | None = None) -> Flask:
     app.register_blueprint(encode_profiles_bp, url_prefix="/api/encode-profiles")
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(catalog_bp, url_prefix="/api/catalog")
+    app.register_blueprint(log_bp, url_prefix="/api/log")
 
     @app.route("/api/ping")
     def ping():

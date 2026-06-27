@@ -23,6 +23,7 @@ from common.config import get_store_path
 from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob, RipQuality, Setting, naive_utcnow
 from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
+from ripper_service.log_writer import write_log_event
 from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,8 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
         rip_job.started_at = now
         disc.status = DiscStatus.ripping
         session.commit()
+
+        write_log_event(session_factory, "rip_started", drive_label=label, disc_id=disc.id, working_title=disc.temp_name)
 
         active_count += 1
 
@@ -249,6 +252,10 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
             "Rip job %s (%s) completed successfully - ISO at %s (rip_quality=%s)",
             rip_job_id, label, relative_path, disc.rip_quality,
         )
+
+        elapsed = (rip_job.completed_at - rip_job.started_at).total_seconds() if rip_job.started_at else None
+        write_log_event(session_factory, "rip_completed", drive_label=label, disc_id=disc_id,
+            working_title=disc.temp_name, outcome=disc.rip_quality, elapsed_seconds=elapsed)
     finally:
         session.close()
         _cleanup_scratch_dir(scratch_dir)
@@ -272,6 +279,12 @@ def _fail_job(rip_job_id, label, result, scratch_dir, session_factory) -> None:
 
         session.commit()
         logger.warning("Rip job %s (%s) failed: %s", rip_job_id, label, error_message)
+
+        elapsed = (rip_job.completed_at - rip_job.started_at).total_seconds() if rip_job.started_at else None
+        write_log_event(session_factory, "rip_failed", drive_label=label,
+            disc_id=disc.id if disc else None,
+            working_title=disc.temp_name if disc else None,
+            outcome="error", elapsed_seconds=elapsed)
     finally:
         session.close()
         _cleanup_scratch_dir(scratch_dir)
@@ -297,6 +310,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
             logger.warning("RipJob %s has no disc - aborting CD job", rip_job_id)
             return
         disc_id = disc.id
+        working_title = disc.temp_name
 
         # Fresh disc: every track has rip_quality=None, so all of them
         # need ripping. Re-rip of a dirty disc: only the imperfect/failed
@@ -330,6 +344,10 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
         # just a single bad track.
         inject_dirty_this_track = inject_dirty and track_number % 2 == 1
 
+        track_start = naive_utcnow()
+        write_log_event(session_factory, "track_started", drive_label=label, disc_id=disc_id,
+            working_title=working_title, track_number=track_number)
+
         try:
             result = run_cdparanoia(
                 device_path, track_number, output_path, track_durations.get(track_number), stage_label,
@@ -353,6 +371,12 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
         # drive/device problem worth aborting the whole disc for.
         hard_failure = not result["success"] and result.get("return_code") is None
         _record_track_result(disc_id, track_number, result, label, session_factory)
+
+        track_outcome = ("imperfect" if result.get("dirty") else "good") if result["success"] else "failed"
+        track_elapsed = (naive_utcnow() - track_start).total_seconds()
+        write_log_event(session_factory, "track_completed", drive_label=label, disc_id=disc_id,
+            working_title=working_title, track_number=track_number,
+            outcome=track_outcome, elapsed_seconds=track_elapsed)
 
         if hard_failure:
             _fail_cd_job(rip_job_id, label, disc_id, result, session_factory)
@@ -413,6 +437,10 @@ def _finish_cd_job(rip_job_id, label, disc_id, session_factory) -> None:
             "CD rip job %s (%s) completed - disc #%s rip_quality=%s",
             rip_job_id, label, disc_id, disc.rip_quality,
         )
+
+        elapsed = (rip_job.completed_at - rip_job.started_at).total_seconds() if rip_job.started_at else None
+        write_log_event(session_factory, "rip_completed", drive_label=label, disc_id=disc_id,
+            working_title=disc.temp_name, outcome=disc.rip_quality, elapsed_seconds=elapsed)
     finally:
         session.close()
 
@@ -438,6 +466,11 @@ def _fail_cd_job(rip_job_id, label, disc_id, result, session_factory) -> None:
             "CD rip job %s (%s) aborted - drive/device problem, not just a bad track: %s",
             rip_job_id, label, error_message,
         )
+
+        elapsed = (rip_job.completed_at - rip_job.started_at).total_seconds() if rip_job.started_at else None
+        write_log_event(session_factory, "rip_failed", drive_label=label, disc_id=disc_id,
+            working_title=disc.temp_name if disc else None,
+            outcome="error", elapsed_seconds=elapsed)
     finally:
         session.close()
 

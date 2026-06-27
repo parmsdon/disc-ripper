@@ -705,6 +705,92 @@ button:disabled {
   padding: 24px 0;
 }
 
+/* Activity log */
+
+.log-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.log-filter-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.log-limit-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.log-limit-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.log-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.log-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px 8px;
+  border-bottom: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+
+.log-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: middle;
+}
+
+.log-row:hover {
+  background: var(--bg);
+}
+
+.log-time {
+  font-family: monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.log-title {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-empty {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 32px 0;
+}
+
 /* Identification queue */
 
 .queue-summary {

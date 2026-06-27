@@ -83,6 +83,10 @@ export const api = {
     request(`/catalog/unmatched-suggestions?title=${encodeURIComponent(title)}&limit=3`),
   searchCatalog: (query) =>
     request(`/catalog/?search=${encodeURIComponent(query)}&exclude_matched=true`),
+  getLog: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/log/${qs ? `?${qs}` : ""}`);
+  },
   getDvdCatalogue: (filter, search) =>
     request(`/catalog/dvd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   getCdCatalogue: (filter, search) =>
