@@ -172,8 +172,15 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       const selectedCandidate = selectedCandidateId != null
         ? candidates.find((c) => c.id === selectedCandidateId)
         : null;
+      let albumTitleToSave = effectiveAlbumTitle;
+      if (disc.mb_medium_count > 1) {
+        const discSuffix = disc.mb_medium_title
+          ? disc.mb_medium_title
+          : `Disc ${disc.mb_medium_position ?? "?"} of ${disc.mb_medium_count}`;
+        albumTitleToSave = `${effectiveAlbumTitle} (${discSuffix})`;
+      }
       await api.identifyCd(disc.id, {
-        album_title: effectiveAlbumTitle,
+        album_title: albumTitleToSave,
         album_artist: effectiveAlbumArtist,
         mb_release_id: selectedCandidate?.mb_release_id ?? null,
         tracks: physicalTracks.map((t) => ({
