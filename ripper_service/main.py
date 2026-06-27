@@ -23,6 +23,7 @@ a genuine clean stop.
 
 import logging
 import os
+import shutil
 import threading
 import time
 from datetime import datetime, timezone
@@ -160,8 +161,10 @@ def run(cfg: dict) -> None:
     # /tmp-based scratch space may not survive a reboot - make sure it
     # exists before relying on it, rather than assuming manual setup.
     scratch_dir = cfg["storage"]["scratch_dir"]
-    os.makedirs(scratch_dir, exist_ok=True)
-    logger.info("Scratch directory ready: %s", scratch_dir)
+    if os.path.exists(scratch_dir):
+        shutil.rmtree(scratch_dir)
+    os.makedirs(scratch_dir)
+    logger.info("Scratch directory cleaned and recreated: %s", scratch_dir)
 
     # Safety default: a restart should never silently resume mass-ripping,
     # regardless of whatever was last persisted.

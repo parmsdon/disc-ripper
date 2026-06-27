@@ -328,15 +328,24 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     finally:
         session.close()
 
+    # Phase 1 (ripping): cdparanoia writes WAVs to a per-disc scratch
+    # subdirectory. Phase 2 (building): move them to NFS after all tracks
+    # succeed, so the NFS destination is never left in a partial state.
+    scratch_subdir = Path(cfg["storage"]["scratch_dir"]) / str(disc_id)
+    os.makedirs(scratch_subdir, exist_ok=True)
+
     total = len(track_numbers)
     if total == 0:
         logger.warning("RipJob %s (disc %s) has no tracks needing a rip - nothing to do", rip_job_id, disc_id)
+        _cleanup_scratch_dir(str(scratch_subdir))
         _finish_cd_job(rip_job_id, label, disc_id, session_factory)
         active_jobs.unregister(rip_job_id)
         return
 
+    ripped_in_this_run = []   # track numbers successfully ripped this pass, to move to NFS
+
     for index, track_number in enumerate(track_numbers, start=1):
-        output_path = str(cd_dir / f"track{track_number:02d}.wav")
+        scratch_path = str(scratch_subdir / f"track{track_number:02d}.cdda.wav")
         stage_label = f"Track {index}/{total}"
         # fake_dirty_mode simulates several bad tracks on a disc, not a
         # wholly unreadable one - every odd-numbered track gets it, so
@@ -350,7 +359,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
 
         try:
             result = run_cdparanoia(
-                device_path, track_number, output_path, track_durations.get(track_number), stage_label,
+                device_path, track_number, scratch_path, track_durations.get(track_number), stage_label,
                 fake_rip_mode, rip_job_id, session_factory, inject_dirty=inject_dirty_this_track,
             )
         except Exception:
@@ -362,6 +371,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
                 "Rip job %s was rolled back externally during track %s - skipping normal completion handling",
                 rip_job_id, track_number,
             )
+            _cleanup_scratch_dir(str(scratch_subdir))
             active_jobs.unregister(rip_job_id)
             return
 
@@ -372,6 +382,9 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
         hard_failure = not result["success"] and result.get("return_code") is None
         _record_track_result(disc_id, track_number, result, label, session_factory)
 
+        if result["success"]:
+            ripped_in_this_run.append(track_number)
+
         track_outcome = ("imperfect" if result.get("dirty") else "good") if result["success"] else "failed"
         track_elapsed = (naive_utcnow() - track_start).total_seconds()
         write_log_event(session_factory, "track_completed", drive_label=label, disc_id=disc_id,
@@ -380,11 +393,45 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
 
         if hard_failure:
             _fail_cd_job(rip_job_id, label, disc_id, result, session_factory)
+            _cleanup_scratch_dir(str(scratch_subdir))
             active_jobs.unregister(rip_job_id)
             return
 
+    # Phase 2 (building): move ripped WAVs from scratch to their final NFS
+    # location. The disc shows "building" while the move is in progress.
+    _mark_cd_building(rip_job_id, disc_id, label, session_factory)
+    logger.info("Moving %d WAV file(s) to NFS for disc #%s (%s)", len(ripped_in_this_run), disc_id, label)
+    try:
+        os.makedirs(str(cd_dir), exist_ok=True)
+        for track_number in ripped_in_this_run:
+            shutil.move(
+                str(scratch_subdir / f"track{track_number:02d}.cdda.wav"),
+                str(cd_dir / f"track{track_number:02d}.wav"),
+            )
+    except Exception:
+        logger.exception("Failed to move WAV files to NFS for disc #%s (%s)", disc_id, label)
+        _fail_cd_job(rip_job_id, label, disc_id,
+            {"log": "Failed to move WAV files to NFS - see service logs", "return_code": 1},
+            session_factory)
+        _cleanup_scratch_dir(str(scratch_subdir))
+        active_jobs.unregister(rip_job_id)
+        return
+
+    _cleanup_scratch_dir(str(scratch_subdir))
     _finish_cd_job(rip_job_id, label, disc_id, session_factory)
     active_jobs.unregister(rip_job_id)
+
+
+def _mark_cd_building(rip_job_id, disc_id, label, session_factory) -> None:
+    session = session_factory()
+    try:
+        disc = session.get(Disc, disc_id)
+        if disc is not None:
+            disc.status = DiscStatus.building
+            session.commit()
+        logger.info("CD rip job %s (%s) entering building phase (moving WAVs to NFS)", rip_job_id, label)
+    finally:
+        session.close()
 
 
 def _record_track_result(disc_id, track_number, result, label, session_factory) -> None:
