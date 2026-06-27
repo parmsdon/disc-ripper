@@ -173,6 +173,8 @@ def identify_cd(disc_id):
     disc.album_title = album_title
     disc.album_artist = body.get("album_artist") or None
     disc.mb_release_id = body.get("mb_release_id") or None
+    if "temp_name" in body:
+        disc.temp_name = body["temp_name"] or None
 
     for track_data in body.get("tracks", []):
         track_id = track_data.get("id")
