@@ -424,7 +424,15 @@ function MbPopover({ candidates, onSelect, onClose }) {
                 key={c.id}
                 type="button"
                 className="mb-popover-item"
-                onClick={() => { onSelect(c.title); onClose(); }}
+                onClick={() => {
+                  let title = c.title;
+                  if (c.medium_count > 1) {
+                    const suffix = c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`;
+                    title = `${title} (${suffix})`;
+                  }
+                  onSelect(title);
+                  onClose();
+                }}
               >
                 <span className="mb-popover-title">
                   {c.title}
