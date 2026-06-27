@@ -321,6 +321,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                   />
                   Compilation album
                 </label>
+
+                {disc.mb_medium_count > 1 && (
+                  <label className="cd-compilation-toggle cd-multidisc-indicator">
+                    <input type="checkbox" checked readOnly disabled />
+                    Multi-disc · Disc {disc.mb_medium_position ?? "?"} of {disc.mb_medium_count}
+                  </label>
+                )}
               </div>
 
               {/* Track section */}

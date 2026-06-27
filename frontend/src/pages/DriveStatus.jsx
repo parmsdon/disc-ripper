@@ -426,7 +426,14 @@ function MbPopover({ candidates, onSelect, onClose }) {
                 className="mb-popover-item"
                 onClick={() => { onSelect(c.title); onClose(); }}
               >
-                <span className="mb-popover-title">{c.title}</span>
+                <span className="mb-popover-title">
+                  {c.title}
+                  {c.medium_count > 1 && (
+                    <span className="mb-popover-disc">
+                      {" "}({c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`})
+                    </span>
+                  )}
+                </span>
                 <span className="mb-popover-meta">
                   {[c.artist, c.year, c.track_count != null ? `${c.track_count} tracks` : null]
                     .filter(Boolean).join(" · ")}

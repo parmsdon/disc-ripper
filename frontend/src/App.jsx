@@ -18,7 +18,7 @@ const TABS = [
   { path: "/db-health", label: "DB Health" },
   { path: "/dvd-catalogue", label: "DVD Catalogue" },
   { path: "/cd-catalogue", label: "CD Catalogue" },
-  { path: "/data-editing", label: "Data Editing" },
+  { path: "/data-editing", label: "Identification" },
   { path: "/log", label: "Log" },
 ];
 

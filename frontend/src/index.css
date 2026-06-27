@@ -1254,6 +1254,16 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.cd-multidisc-indicator {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.mb-popover-disc {
+  color: var(--text-dim);
+  font-size: 0.9em;
+}
+
 .cd-album-row {
   display: flex;
   align-items: center;

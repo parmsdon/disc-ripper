@@ -86,7 +86,7 @@ export default function DataEditing() {
   if (error) {
     return (
       <div className="panel">
-        <h2>Data Editing</h2>
+        <h2>Identification</h2>
         <div className="empty-state">Error loading queue: {error}</div>
       </div>
     );
@@ -95,7 +95,7 @@ export default function DataEditing() {
   if (queue === null) {
     return (
       <div className="panel">
-        <h2>Data Editing</h2>
+        <h2>Identification</h2>
         <div className="empty-state">Loading…</div>
       </div>
     );
