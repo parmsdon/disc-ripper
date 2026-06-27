@@ -1202,7 +1202,8 @@ button:disabled {
 /* CD identification panel */
 
 .cd-identify-panel {
-  width: 860px;
+  width: 900px;
+  max-width: min(900px, 90vw);
 }
 
 .cd-identify-panel .identify-panel-body {
