@@ -85,6 +85,7 @@ def main(env: str) -> None:
     print("  all files under:")
     for directory in raw_dirs + profile_dirs:
         print(f"    {directory}")
+    print("  identification data (catalog matches, album/track metadata) will be reset")
     print("\ndrives, physical_drives, encode_profiles, and settings will NOT be touched.")
 
     confirmation = input("\nType 'yes' to proceed: ").strip()
@@ -104,9 +105,14 @@ def main(env: str) -> None:
     session.execute(delete(RipJob))
     session.execute(delete(LookupCandidate))
     session.execute(delete(Disc))
-    # Clear MB fields on any surviving disc rows (no-op when all discs were
-    # deleted above, but future-proofs the script for a --keep-discs mode).
+    # The UPDATEs below are no-ops when all discs/tracks/candidates were
+    # deleted above, but are kept as explicit steps for a future --keep-discs
+    # mode so the identification queue is fully repopulated on next rip.
     session.execute(update(Disc).values(mb_disc_id=None, mb_toc=None, mb_lookup_status=None))
+    session.execute(update(Disc).values(catalog_id=None))
+    session.execute(update(Disc).values(album_title=None, album_artist=None))
+    session.execute(update(CDTrack).values(title=None, artist=None))
+    session.execute(update(LookupCandidate).values(selected=False))
     session.commit()
     print(f"Deleted {disc_count} disc(s), {rip_job_count} rip_job(s), "
           f"{encode_job_count} encode_job(s), {lookup_candidate_count} "
