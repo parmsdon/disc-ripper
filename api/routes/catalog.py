@@ -170,7 +170,8 @@ def dvd_catalogue():
             "catalog_imdb_id": catalog.imdb_id,
         }
 
-    if filter_param in ("all", "matched"):
+    # "identified" = matched; "unidentified" = unripped + unmatched_rip
+    if filter_param in ("all", "matched", "identified"):
         q = select(Catalog, Disc).join(Disc, Disc.catalog_id == Catalog.id).where(
             Disc.type == DiscType.dvd,
             Disc.status.in_(_DVD_RIPPED_STATUSES),
@@ -184,7 +185,7 @@ def dvd_catalogue():
         for catalog, disc in session.execute(q):
             rows.append({"row_type": "matched", **_catalog_fields(catalog), **_disc_fields(disc)})
 
-    if filter_param in ("all", "unripped"):
+    if filter_param in ("all", "unripped", "unidentified"):
         has_disc = select(Disc.id).where(Disc.catalog_id == Catalog.id).exists()
         q = _search_matches_catalog(
             select(Catalog).where(~has_disc).order_by(Catalog.title)
@@ -197,12 +198,12 @@ def dvd_catalogue():
                 "disc_ripped_at": None, "disc_rip_quality": None,
             })
 
-    if filter_param in ("all", "unmatched_rip"):
+    if filter_param in ("all", "unmatched_rip", "unidentified"):
         q = _search_matches_disc(
             select(Disc).where(
                 Disc.type == DiscType.dvd,
                 Disc.catalog_id.is_(None),
-                Disc.status.in_(_DVD_RIPPED_STATUSES),
+                Disc.status != DiscStatus.error,
             ).order_by(Disc.temp_name)
         )
         for disc in session.scalars(q):

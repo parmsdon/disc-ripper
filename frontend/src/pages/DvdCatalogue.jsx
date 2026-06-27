@@ -6,9 +6,9 @@ const POLL_INTERVAL_MS = 3000;
 
 const FILTERS = [
   { key: "all", label: "All" },
-  { key: "matched", label: "Matched" },
+  { key: "identified", label: "Identified" },
+  { key: "unidentified", label: "Unidentified" },
   { key: "unripped", label: "Unripped" },
-  { key: "unmatched_rip", label: "Unmatched Rips" },
 ];
 
 function formatDate(isoStr) {
@@ -180,16 +180,20 @@ export default function DvdCatalogue() {
                     ) : <span className="catalogue-dim">—</span>}
                   </td>
                   <td>
-                    {row.disc_temp_name || row.disc_fingerprint ? (
+                    {row.disc_id == null ? (
+                      <span className="catalogue-dim">—</span>
+                    ) : (
                       <>
-                        {row.disc_temp_name && <div>{row.disc_temp_name}</div>}
+                        <div>
+                          {row.disc_temp_name || <em className="catalogue-dim">Unnamed</em>}
+                        </div>
                         {row.disc_fingerprint && (
                           <div className="catalogue-meta catalogue-mono">
                             {row.disc_fingerprint}
                           </div>
                         )}
                       </>
-                    ) : <span className="catalogue-dim">—</span>}
+                    )}
                   </td>
                   <td>
                     {row.disc_ripped_at

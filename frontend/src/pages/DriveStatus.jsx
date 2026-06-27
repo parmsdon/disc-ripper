@@ -322,7 +322,10 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasRe
           ♫
         </button>
       )}
-      <button onClick={handleSave} disabled={saving}>
+      <button
+        onClick={handleSave}
+        disabled={saving || !value.trim() || value.trim() === disc.temp_name}
+      >
         {saving ? "Saving…" : "Save"}
       </button>
       {disc.status === "identifying" && (
