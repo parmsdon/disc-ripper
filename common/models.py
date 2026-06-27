@@ -212,6 +212,11 @@ class Disc(Base):
     mb_disc_id = Column(String, nullable=True)
     mb_toc = Column(String, nullable=True)
     mb_lookup_status = Column(String, nullable=True)
+    # Which physical disc in the set this CD is (e.g. 1 of 2 for a 2-CD set).
+    # Set from the first MusicBrainz candidate that matches our disc ID.
+    mb_medium_position = Column(Integer, nullable=True)
+    mb_medium_count = Column(Integer, nullable=True)
+    mb_medium_title = Column(String, nullable=True)
 
     # Region(s) the drive supported at the time this disc was ripped, as a
     # space-separated digit string (same format as PhysicalDrive.region).

@@ -1248,6 +1248,12 @@ button:disabled {
   text-align: center;
 }
 
+.cd-disc-position {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
 .cd-album-row {
   display: flex;
   align-items: center;

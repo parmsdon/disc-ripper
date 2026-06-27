@@ -61,34 +61,58 @@ def _artist_credit_string(credit_list: list) -> str:
     return "".join(parts).strip()
 
 
-def _normalize_release(release: dict) -> dict:
-    """Return the candidate_data dict stored in LookupCandidate for one MB release."""
+def _normalize_release(release: dict, mb_disc_id: str) -> dict:
+    """
+    Return the candidate_data dict stored in LookupCandidate for one MB release.
+
+    Finds the specific medium (disc) within the release that contains mb_disc_id
+    in its disc-list, so multi-disc albums show only the tracks for this physical
+    disc. Falls back to the first medium if no match is found (shouldn't happen
+    for results returned by a disc-ID lookup, but handled gracefully).
+
+    NOTE: existing lookup_candidates rows stored before this fix (pre-0017) may
+    have tracks from the first medium rather than the matched medium for multi-disc
+    albums. To refresh, eject and reinsert the disc to trigger a new lookup.
+    """
     artist = _artist_credit_string(release.get("artist-credit", []))
     date = release.get("date", "")
     year = date[:4] if date else ""
 
-    track_count = None
-    tracks = []
     medium_list = release.get("medium-list", [])
-    if medium_list:
-        medium = medium_list[0]  # first medium = standard single-disc release
-        track_count = medium.get("track-count")
-        for track in medium.get("track-list", []):
-            recording = track.get("recording", {})
-            track_artist = _artist_credit_string(
-                track.get("artist-credit") or recording.get("artist-credit", [])
-            )
-            tracks.append({
-                "number": track.get("number") or track.get("position"),
-                "title": recording.get("title") or track.get("title", ""),
-                "artist": track_artist,
-            })
+    medium_count = len(medium_list)
+
+    # Find the medium whose disc-list contains our MB disc ID
+    matched_medium = None
+    for m in medium_list:
+        if any(d.get("id") == mb_disc_id for d in m.get("disc-list", [])):
+            matched_medium = m
+            break
+
+    medium = matched_medium if matched_medium is not None else (medium_list[0] if medium_list else {})
+    medium_position = int(medium["position"]) if matched_medium is not None and medium.get("position") else None
+    medium_title = medium.get("title") or None
+
+    track_count = medium.get("track-count")
+    tracks = []
+    for track in medium.get("track-list", []):
+        recording = track.get("recording", {})
+        track_artist = _artist_credit_string(
+            track.get("artist-credit") or recording.get("artist-credit", [])
+        )
+        tracks.append({
+            "number": track.get("number") or track.get("position"),
+            "title": recording.get("title") or track.get("title", ""),
+            "artist": track_artist,
+        })
 
     return {
         "mb_release_id": release["id"],
         "title": release.get("title", ""),
         "artist": artist,
         "year": year,
+        "medium_position": medium_position,
+        "medium_count": medium_count or None,
+        "medium_title": medium_title,
         "track_count": track_count,
         "tracks": tracks,
         "raw": release,
@@ -113,18 +137,31 @@ def lookup_musicbrainz(
             _set_status(session, disc_db_id, "error")
             return
 
-        for release in releases:
+        candidate_data_list = [_normalize_release(r, disc_id) for r in releases]
+
+        for data in candidate_data_list:
             session.add(LookupCandidate(
                 disc_id=disc_db_id,
                 source="musicbrainz",
                 selected=False,
-                candidate_data=_normalize_release(release),
+                candidate_data=data,
             ))
 
         status = "found" if releases else "not_found"
         disc = session.get(Disc, disc_db_id)
         if disc:
             disc.mb_lookup_status = status
+            # Set medium position/count/title from the first candidate that has a
+            # confirmed disc-ID match (medium_position is None when no match was
+            # found). All candidates for the same physical disc should have the
+            # same position/count since they matched the same disc ID.
+            if disc.mb_medium_position is None:
+                for data in candidate_data_list:
+                    if data.get("medium_position") is not None:
+                        disc.mb_medium_position = data["medium_position"]
+                        disc.mb_medium_count = data["medium_count"]
+                        disc.mb_medium_title = data["medium_title"]
+                        break
         session.commit()
 
         logger.info(

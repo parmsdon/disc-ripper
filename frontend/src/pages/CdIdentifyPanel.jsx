@@ -256,6 +256,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                   </div>
                 )}
 
+                {hasCandidates && currentCandidate?.medium_count > 1 && (
+                  <div className="cd-disc-position">
+                    Disc {currentCandidate.medium_position ?? "?"} of {currentCandidate.medium_count}
+                    {currentCandidate.medium_title ? ` — ${currentCandidate.medium_title}` : ""}
+                  </div>
+                )}
+
                 {/* Album title row */}
                 <AlbumRow
                   label="Album"

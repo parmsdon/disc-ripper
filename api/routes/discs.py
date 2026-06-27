@@ -47,6 +47,9 @@ def _disc_to_dict(disc: Disc) -> dict:
         "mb_disc_id": disc.mb_disc_id,
         "mb_toc": disc.mb_toc,
         "mb_lookup_status": disc.mb_lookup_status,
+        "mb_medium_position": disc.mb_medium_position,
+        "mb_medium_count": disc.mb_medium_count,
+        "mb_medium_title": disc.mb_medium_title,
     }
 
 
@@ -260,6 +263,9 @@ def get_disc_candidates(disc_id):
             "title": data.get("title"),
             "artist": data.get("artist"),
             "year": data.get("year"),
+            "medium_position": data.get("medium_position"),
+            "medium_count": data.get("medium_count"),
+            "medium_title": data.get("medium_title"),
             "track_count": data.get("track_count"),
             "tracks": data.get("tracks", []),
         })
