@@ -68,21 +68,16 @@ def identification_queue():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
+    _terminal = [DiscStatus.done, DiscStatus.error]
     discs = session.scalars(
         select(Disc)
         .where(
+            Disc.temp_name.isnot(None),
+            Disc.status.notin_(_terminal),
             or_(
-                and_(
-                    Disc.type == DiscType.dvd,
-                    Disc.catalog_id.is_(None),
-                    Disc.status.in_([DiscStatus.ripped, DiscStatus.identifying]),
-                ),
-                and_(
-                    Disc.type == DiscType.cd,
-                    Disc.album_title.is_(None),
-                    Disc.status.in_([DiscStatus.ripped, DiscStatus.identifying]),
-                ),
-            )
+                and_(Disc.type == DiscType.dvd, Disc.catalog_id.is_(None)),
+                and_(Disc.type == DiscType.cd,  Disc.album_title.is_(None)),
+            ),
         )
         .order_by(Disc.created_at.asc())
     ).all()
