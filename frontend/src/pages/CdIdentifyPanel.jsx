@@ -291,6 +291,24 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                   onUnlock={() => { setAlbumArtistLock(null); setEditingAlbumArtist(null); }}
                   onSave={saveAlbumArtist}
                 />
+
+                {/* Compilation toggle */}
+                <label className="cd-compilation-toggle">
+                  <input
+                    type="checkbox"
+                    checked={isCompilation}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAlbumArtistLock("Various");
+                        setEditingAlbumArtist(null);
+                      } else {
+                        setAlbumArtistLock(hasCandidates ? null : "");
+                        setEditingAlbumArtist(null);
+                      }
+                    }}
+                  />
+                  Compilation album
+                </label>
               </div>
 
               {/* Track section */}
