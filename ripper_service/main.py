@@ -216,8 +216,32 @@ def run(cfg: dict) -> None:
                     tray_open = tray_open_from_status(get_tray_status(device_path))
 
                     was_present = media_present_by_device.get(device_path, False)
+                    fresh_insert = media_present and not was_present
 
-                    if media_present and not was_present:
+                    # Reconciliation: if the disc is already present in memory but
+                    # has no active DB row (e.g. reset_dev_data.py wiped rows while
+                    # the service was running, or a service restart with a disc
+                    # already loaded), treat it as a fresh insert so detection
+                    # re-runs and a new Disc row is created. The DB query is cheap
+                    # in steady state (there IS an active row → returns immediately).
+                    if not fresh_insert and media_present and drive_id is not None:
+                        has_active_row = session.scalar(
+                            select(Disc.id)
+                            .where(
+                                Disc.drive_id == drive_id,
+                                Disc.status.notin_([DiscStatus.done, DiscStatus.error]),
+                            )
+                            .limit(1)
+                        ) is not None
+                        if not has_active_row:
+                            logger.info(
+                                "Drive %s: disc present but no active DB row - reconciling "
+                                "(post-reset or restart with disc already loaded)",
+                                label,
+                            )
+                            fresh_insert = True
+
+                    if fresh_insert:
                         logger.info("Disc detected in %s, type=%s", label, media_type)
 
                         if media_type == "dvd":
@@ -364,7 +388,7 @@ def run(cfg: dict) -> None:
                                 "(unsupported media type)",
                                 label, media_type,
                             )
-                    elif was_present and not media_present:
+                    elif not media_present and was_present:
                         logger.info("Disc removed from %s", label)
 
                     media_present_by_device[device_path] = media_present
