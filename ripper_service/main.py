@@ -38,6 +38,7 @@ from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.job_starter import start_eligible_rip_jobs
+from ripper_service.log_writer import write_log_event
 from ripper_service.pending_actions import process_pending_actions
 from ripper_service.tray_status import get_tray_status, tray_open_from_status
 from ripper_service.udev_helper import get_drive_info
@@ -199,7 +200,8 @@ def run(cfg: dict) -> None:
             with Session() as session:
                 drive_states = sync_physical_drives(session, cfg)
 
-            pending_mb_lookups = []  # (mb_disc_id, mb_toc, db_disc_id) for CDs detected this poll
+            pending_mb_lookups = []   # (mb_disc_id, mb_toc, db_disc_id) for CDs detected this poll
+            pending_log_events = []   # (event_type, kwargs) to write after session.commit()
             with Session() as session:
                 for drive_cfg in cfg.get("drives", []):
                     if not drive_cfg.get("active", True):
@@ -308,6 +310,11 @@ def run(cfg: dict) -> None:
                                         "rip job queued, waiting for ripping to be enabled",
                                         disc.id, label, volume_info["volume_id"], volume_info["volume_set_id"],
                                     )
+                                    pending_log_events.append(("disc_inserted", {
+                                        "drive_label": label,
+                                        "disc_id": disc.id,
+                                        "working_title": disc.temp_name,
+                                    }))
 
                         elif media_type == "cd":
                             if drive_id is not None:
@@ -381,6 +388,11 @@ def run(cfg: dict) -> None:
                                         "rip job queued, waiting for ripping to be enabled",
                                         disc.id, label, toc["track_count"], disc_fingerprint,
                                     )
+                                    pending_log_events.append(("disc_inserted", {
+                                        "drive_label": label,
+                                        "disc_id": disc.id,
+                                        "working_title": disc.temp_name,
+                                    }))
 
                         else:
                             logger.info(
@@ -416,8 +428,11 @@ def run(cfg: dict) -> None:
                     db_disc_id, mb_disc_id,
                 )
 
+            for event_type, kwargs in pending_log_events:
+                write_log_event(Session, event_type, **kwargs)
+
             with Session() as session:
-                process_pending_actions(session, cfg)
+                process_pending_actions(session, cfg, Session)
 
             with Session() as session:
                 start_eligible_rip_jobs(session, cfg, Session)

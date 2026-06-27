@@ -317,6 +317,25 @@ class EncodeJob(Base):
     profile = relationship("EncodeProfile", back_populates="encode_jobs")
 
 
+class RipLogEvent(Base):
+    """Activity log: one row per notable disc/track ripping event."""
+    __tablename__ = "rip_log_events"
+
+    id = Column(Integer, primary_key=True)
+    occurred_at = Column(DateTime, nullable=False)
+    drive_label = Column(String, nullable=True)
+    # Nullable FK with ON DELETE SET NULL so log entries survive disc row deletion.
+    disc_id = Column(Integer, ForeignKey("discs.id", ondelete="SET NULL"), nullable=True)
+    working_title = Column(String, nullable=True)
+    track_number = Column(Integer, nullable=True)
+    # "disc_inserted", "rip_started", "rip_completed", "rip_failed",
+    # "track_started", "track_completed", "disc_ejected"
+    event_type = Column(String, nullable=False)
+    # "clean", "dirty", "error", "good", "imperfect", "failed"
+    outcome = Column(String, nullable=True)
+    elapsed_seconds = Column(Float, nullable=True)
+
+
 class Setting(Base):
     """Generic key/value app settings (e.g. max_rippers)."""
     __tablename__ = "settings"

@@ -11,8 +11,9 @@ import time
 
 from sqlalchemy import select
 
-from common.models import Drive
+from common.models import Disc, Drive
 from ripper_service.eject_helper import close_tray, eject_drive
+from ripper_service.log_writer import write_log_event
 from ripper_service.regionset_helper import read_region
 from ripper_service.tray_status import get_tray_status, tray_open_from_status
 
@@ -22,7 +23,7 @@ _TRAY_CONFIRM_ATTEMPTS = 5
 _TRAY_CONFIRM_INTERVAL_SECONDS = 1
 
 
-def process_pending_actions(session, cfg: dict) -> None:
+def process_pending_actions(session, cfg: dict, session_factory=None) -> None:
     env = cfg["environment"]
 
     drives = session.scalars(
@@ -33,11 +34,31 @@ def process_pending_actions(session, cfg: dict) -> None:
         label = drive.label or drive.device_path
         action = drive.pending_action
 
+        # Look up the most recent disc for this drive so eject events can
+        # reference it in the log. Done before the action so the disc row is
+        # still present even if something changes it during handling.
+        recent_disc = session.scalars(
+            select(Disc).where(Disc.drive_id == drive.id)
+            .order_by(Disc.created_at.desc()).limit(1)
+        ).first()
+        recent_disc_id = recent_disc.id if recent_disc else None
+        recent_disc_title = recent_disc.temp_name if recent_disc else None
+
+        # Capture eject intent before _handle_eject mutates drive.tray_open.
+        was_ejecting = action == "eject" and not bool(drive.tray_open)
+
         try:
             if action == "read_region":
                 _handle_read_region(drive, label)
             elif action == "eject":
                 _handle_eject(drive, label)
+                if was_ejecting and session_factory is not None:
+                    write_log_event(
+                        session_factory, "disc_ejected",
+                        drive_label=label,
+                        disc_id=recent_disc_id,
+                        working_title=recent_disc_title,
+                    )
             else:
                 logger.warning("Drive %s has unknown pending_action %r - clearing", label, action)
         except Exception:
