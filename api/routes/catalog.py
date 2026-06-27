@@ -130,7 +130,8 @@ def _run_sync_in_background(cfg: dict) -> None:
             _sync_progress = None
 
 
-_DVD_RIPPED_STATUSES = [DiscStatus.ripped, DiscStatus.identifying, DiscStatus.done]
+_RIPPED_STATUSES = [DiscStatus.ripped, DiscStatus.identifying, DiscStatus.done]
+_IN_PROGRESS_STATUSES = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.error]
 
 
 @catalog_bp.route("/dvd-catalogue", methods=["GET"])
@@ -170,21 +171,29 @@ def dvd_catalogue():
             "catalog_imdb_id": catalog.imdb_id,
         }
 
-    # "identified" = matched; "unidentified" = unripped + unmatched_rip
-    if filter_param in ("all", "matched", "identified"):
+    # matched rows: catalog entry joined to disc via catalog_id
+    if filter_param in ("all", "matched", "ripped", "identified", "unidentified", "unripped"):
         q = select(Catalog, Disc).join(Disc, Disc.catalog_id == Catalog.id).where(
             Disc.type == DiscType.dvd,
-            Disc.status.in_(_DVD_RIPPED_STATUSES),
-        ).order_by(Catalog.title)
+        )
+        if filter_param in ("matched", "ripped"):
+            q = q.where(Disc.status.in_(_RIPPED_STATUSES))
+        elif filter_param == "identified":
+            q = q.where(Disc.temp_name.isnot(None))
+        elif filter_param == "unidentified":
+            q = q.where(Disc.temp_name.is_(None))
+        elif filter_param == "unripped":
+            q = q.where(Disc.status.in_(_IN_PROGRESS_STATUSES))
         if search:
             q = q.where(
                 Catalog.title.ilike(f"%{search}%")
                 | Disc.temp_name.ilike(f"%{search}%")
                 | Disc.disc_fingerprint.ilike(f"%{search}%")
             )
-        for catalog, disc in session.execute(q):
+        for catalog, disc in session.execute(q.order_by(Catalog.title)):
             rows.append({"row_type": "matched", **_catalog_fields(catalog), **_disc_fields(disc)})
 
+    # unripped rows: My Movies catalog entries with no disc yet
     if filter_param in ("all", "unripped", "unidentified"):
         has_disc = select(Disc.id).where(Disc.catalog_id == Catalog.id).exists()
         q = _search_matches_catalog(
@@ -198,15 +207,24 @@ def dvd_catalogue():
                 "disc_ripped_at": None, "disc_rip_quality": None,
             })
 
-    if filter_param in ("all", "unmatched_rip", "unidentified"):
-        q = _search_matches_disc(
-            select(Disc).where(
-                Disc.type == DiscType.dvd,
-                Disc.catalog_id.is_(None),
-                Disc.status != DiscStatus.error,
-            ).order_by(Disc.temp_name)
+    # unmatched_rip rows: DVD discs with no catalog match
+    if filter_param in ("all", "unmatched_rip", "ripped", "identified", "unidentified", "unripped"):
+        q = select(Disc).where(
+            Disc.type == DiscType.dvd,
+            Disc.catalog_id.is_(None),
         )
-        for disc in session.scalars(q):
+        if filter_param == "unmatched_rip":
+            q = q.where(Disc.status != DiscStatus.error)
+        elif filter_param == "ripped":
+            q = q.where(Disc.status.in_(_RIPPED_STATUSES))
+        elif filter_param == "identified":
+            q = q.where(Disc.temp_name.isnot(None))
+        elif filter_param == "unidentified":
+            q = q.where(Disc.temp_name.is_(None))
+        elif filter_param == "unripped":
+            q = q.where(Disc.status.in_(_IN_PROGRESS_STATUSES))
+        # "all": no additional status filter
+        for disc in session.scalars(_search_matches_disc(q).order_by(Disc.temp_name)):
             rows.append({
                 "row_type": "unmatched_rip",
                 "catalog_id": None, "catalog_title": None,

@@ -6,6 +6,7 @@ const POLL_INTERVAL_MS = 3000;
 
 const FILTERS = [
   { key: "all", label: "All" },
+  { key: "ripped", label: "Ripped" },
   { key: "identified", label: "Identified" },
   { key: "unidentified", label: "Unidentified" },
   { key: "unripped", label: "Unripped" },
