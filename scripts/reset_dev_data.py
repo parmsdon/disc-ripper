@@ -108,7 +108,10 @@ def main(env: str) -> None:
     # The UPDATEs below are no-ops when all discs/tracks/candidates were
     # deleted above, but are kept as explicit steps for a future --keep-discs
     # mode so the identification queue is fully repopulated on next rip.
-    session.execute(update(Disc).values(mb_disc_id=None, mb_toc=None, mb_lookup_status=None))
+    session.execute(update(Disc).values(
+        mb_disc_id=None, mb_toc=None, mb_lookup_status=None,
+        mb_medium_position=None, mb_medium_count=None, mb_medium_title=None,
+    ))
     session.execute(update(Disc).values(catalog_id=None))
     session.execute(update(Disc).values(album_title=None, album_artist=None))
     session.execute(update(CDTrack).values(title=None, artist=None))

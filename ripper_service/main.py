@@ -331,6 +331,23 @@ def run(cfg: dict) -> None:
                                         "resuming existing record",
                                         disc_fingerprint, existing_active_disc.id, label,
                                     )
+                                    # Re-trigger MB lookup if status was cleared (e.g. manual
+                                    # reset or a future --keep-discs mode of reset_dev_data.py).
+                                    if existing_active_disc.mb_lookup_status is None:
+                                        mb_result = compute_mb_disc_id(device_path)
+                                        if mb_result.get("disc_id"):
+                                            existing_active_disc.mb_disc_id = mb_result["disc_id"]
+                                            existing_active_disc.mb_toc = mb_result["toc"]
+                                            existing_active_disc.mb_lookup_status = "pending"
+                                            pending_mb_lookups.append(
+                                                (mb_result["disc_id"], mb_result["toc"], existing_active_disc.id)
+                                            )
+                                        else:
+                                            existing_active_disc.mb_lookup_status = "error"
+                                            logger.warning(
+                                                "Failed to compute MB disc ID for existing disc #%s: %s",
+                                                existing_active_disc.id, mb_result.get("error"),
+                                            )
                                 elif existing_completed_disc is not None and existing_completed_disc.needs_rerip:
                                     attempt = _reuse_for_rerip(session, existing_completed_disc, drive_id)
                                     logger.info(
