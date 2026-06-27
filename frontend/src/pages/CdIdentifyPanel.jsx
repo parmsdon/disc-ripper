@@ -169,9 +169,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     setConfirming(true);
     setConfirmError(null);
     try {
+      const selectedCandidate = selectedCandidateId != null
+        ? candidates.find((c) => c.id === selectedCandidateId)
+        : null;
       await api.identifyCd(disc.id, {
         album_title: effectiveAlbumTitle,
         album_artist: effectiveAlbumArtist,
+        mb_release_id: selectedCandidate?.mb_release_id ?? null,
         tracks: physicalTracks.map((t) => ({
           id: t.id,
           title: effectiveTrackTitle(t.id),
@@ -258,8 +262,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
                 {hasCandidates && currentCandidate?.medium_count > 1 && (
                   <div className="cd-disc-position">
-                    Disc {currentCandidate.medium_position ?? "?"} of {currentCandidate.medium_count}
-                    {currentCandidate.medium_title ? ` — ${currentCandidate.medium_title}` : ""}
+                    {currentCandidate.medium_title
+                      ? currentCandidate.medium_title
+                      : `Disc ${currentCandidate.medium_position ?? "?"} of ${currentCandidate.medium_count}`}
                   </div>
                 )}
 

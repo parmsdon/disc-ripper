@@ -50,6 +50,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "mb_medium_position": disc.mb_medium_position,
         "mb_medium_count": disc.mb_medium_count,
         "mb_medium_title": disc.mb_medium_title,
+        "mb_release_id": disc.mb_release_id,
     }
 
 
@@ -167,6 +168,7 @@ def identify_cd(disc_id):
 
     disc.album_title = album_title
     disc.album_artist = body.get("album_artist") or None
+    disc.mb_release_id = body.get("mb_release_id") or None
 
     for track_data in body.get("tracks", []):
         track_id = track_data.get("id")
@@ -260,6 +262,7 @@ def get_disc_candidates(disc_id):
             "id": candidate.id,
             "source": candidate.source,
             "selected": candidate.selected,
+            "mb_release_id": data.get("mb_release_id"),
             "title": data.get("title"),
             "artist": data.get("artist"),
             "year": data.get("year"),

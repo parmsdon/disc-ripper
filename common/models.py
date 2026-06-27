@@ -217,6 +217,10 @@ class Disc(Base):
     mb_medium_position = Column(Integer, nullable=True)
     mb_medium_count = Column(Integer, nullable=True)
     mb_medium_title = Column(String, nullable=True)
+    # MusicBrainz release UUID, set when the user confirms a candidate.
+    # Same value across all physical discs from the same MB release,
+    # enabling grouping of multi-disc sets.
+    mb_release_id = Column(String, nullable=True, index=True)
 
     # Region(s) the drive supported at the time this disc was ripped, as a
     # space-separated digit string (same format as PhysicalDrive.region).
