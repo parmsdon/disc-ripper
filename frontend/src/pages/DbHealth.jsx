@@ -31,7 +31,7 @@ export default function DbHealth() {
     return <div className="panel"><h2>DB Health</h2><div className="empty-state">Loading…</div></div>;
   }
 
-  const { library: lib, identification: id, quality: qual, musicbrainz: mb, pipeline } = health;
+  const { library: lib, my_movies: mm, identification: id, quality: qual, musicbrainz: mb, pipeline } = health;
 
   const pipelineActive =
     pipeline.currently_ripping > 0 ||
@@ -47,7 +47,22 @@ export default function DbHealth() {
           <Stat value={lib.dvd_count}      label="DVDs" />
           <Stat value={lib.cd_count}       label="CDs" />
           <Stat value={lib.cd_track_count} label="CD Tracks" />
-          <Stat value={lib.catalog_count}  label="My Movies Catalog" />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading-row">
+          <h2>My Movies</h2>
+          <span className="panel-subtitle">
+            {mm.last_sync
+              ? `Last synced: ${new Date(mm.last_sync).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+              : "Never synced"}
+          </span>
+        </div>
+        <div className="grid">
+          <Stat value={mm.catalog_count}    label="Catalog Entries" />
+          <Stat value={mm.matched_to_ripped} label="Matched to Ripped Disc" tone={t(mm.matched_to_ripped, "good")} />
+          <Stat value={mm.never_ripped}     label="Never Ripped" />
         </div>
       </div>
 

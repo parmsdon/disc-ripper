@@ -3,7 +3,7 @@ Health endpoints — library statistics dashboard.
 """
 
 from flask import Blueprint, jsonify, current_app
-from sqlalchemy import select, func
+from sqlalchemy import exists, select, func
 
 from common.models import Catalog, CDTrack, Disc, DiscStatus, DiscType, RipQuality
 
@@ -23,13 +23,26 @@ def health():
             q = q.where(*where)
         return session.scalar(q) or 0
 
+    disc_exists = select(Disc.id).where(Disc.catalog_id == Catalog.id).correlate(Catalog).exists()
+    matched_count = session.scalar(
+        select(func.count()).select_from(Catalog).where(disc_exists)
+    ) or 0
+    catalog_total = count(Catalog)
+    last_sync_dt = session.scalar(select(func.max(Catalog.synced_at)))
+    last_sync = last_sync_dt.isoformat() if last_sync_dt else None
+
     return jsonify({
         "status": "ok",
         "library": {
             "dvd_count": count(Disc, Disc.type == DiscType.dvd),
             "cd_count": count(Disc, Disc.type == DiscType.cd),
             "cd_track_count": count(CDTrack),
-            "catalog_count": count(Catalog),
+        },
+        "my_movies": {
+            "catalog_count": catalog_total,
+            "matched_to_ripped": matched_count,
+            "never_ripped": catalog_total - matched_count,
+            "last_sync": last_sync,
         },
         "identification": {
             "dvds_matched": count(Disc, Disc.type == DiscType.dvd, Disc.catalog_id.isnot(None)),
