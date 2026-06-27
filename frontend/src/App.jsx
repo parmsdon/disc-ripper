@@ -6,7 +6,8 @@ import DriveStatus from "./pages/DriveStatus.jsx";
 import DvdEncoders from "./pages/DvdEncoders.jsx";
 import CdEncoders from "./pages/CdEncoders.jsx";
 import DbHealth from "./pages/DbHealth.jsx";
-import MyMovies from "./pages/MyMovies.jsx";
+import DvdCatalogue from "./pages/DvdCatalogue.jsx";
+import CdCatalogue from "./pages/CdCatalogue.jsx";
 import DataEditing from "./pages/DataEditing.jsx";
 
 const TABS = [
@@ -14,7 +15,8 @@ const TABS = [
   { path: "/dvd-encoders", label: "DVD Encoders" },
   { path: "/cd-encoders", label: "CD Encoders" },
   { path: "/db-health", label: "DB Health" },
-  { path: "/my-movies", label: "My Movies" },
+  { path: "/dvd-catalogue", label: "DVD Catalogue" },
+  { path: "/cd-catalogue", label: "CD Catalogue" },
   { path: "/data-editing", label: "Data Editing" },
 ];
 
@@ -137,7 +139,8 @@ export default function App() {
             <Route path="/dvd-encoders" element={<DvdEncoders />} />
             <Route path="/cd-encoders" element={<CdEncoders />} />
             <Route path="/db-health" element={<DbHealth />} />
-            <Route path="/my-movies" element={<MyMovies />} />
+            <Route path="/dvd-catalogue" element={<DvdCatalogue />} />
+            <Route path="/cd-catalogue" element={<CdCatalogue />} />
             <Route path="/data-editing" element={<DataEditing />} />
           </Routes>
         </main>

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import case, func, select
 
-from common.models import Catalog, Disc
+from common.models import Catalog, Disc, DiscStatus, DiscType
 from mymovies_sync.sync import run_sync
 
 logger = logging.getLogger(__name__)
@@ -128,6 +128,92 @@ def _run_sync_in_background(cfg: dict) -> None:
             _last_run_at = datetime.now(timezone.utc).isoformat()
             _sync_running = False
             _sync_progress = None
+
+
+_DVD_RIPPED_STATUSES = [DiscStatus.ripped, DiscStatus.identifying, DiscStatus.done]
+
+
+@catalog_bp.route("/dvd-catalogue", methods=["GET"])
+def dvd_catalogue():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    filter_param = request.args.get("filter", "all")
+    search = request.args.get("search", "").strip()
+
+    rows = []
+
+    def _search_matches_catalog(q):
+        return q.where(Catalog.title.ilike(f"%{search}%")) if search else q
+
+    def _search_matches_disc(q):
+        if not search:
+            return q
+        return q.where(
+            Disc.temp_name.ilike(f"%{search}%") | Disc.disc_fingerprint.ilike(f"%{search}%")
+        )
+
+    def _disc_fields(disc):
+        return {
+            "disc_id": disc.id,
+            "disc_fingerprint": disc.disc_fingerprint,
+            "disc_temp_name": disc.temp_name,
+            "disc_ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
+            "disc_rip_quality": disc.rip_quality,
+        }
+
+    def _catalog_fields(catalog):
+        return {
+            "catalog_id": catalog.id,
+            "catalog_title": catalog.title,
+            "catalog_year": catalog.year,
+            "catalog_imdb_id": catalog.imdb_id,
+        }
+
+    if filter_param in ("all", "matched"):
+        q = select(Catalog, Disc).join(Disc, Disc.catalog_id == Catalog.id).where(
+            Disc.type == DiscType.dvd,
+            Disc.status.in_(_DVD_RIPPED_STATUSES),
+        ).order_by(Catalog.title)
+        if search:
+            q = q.where(
+                Catalog.title.ilike(f"%{search}%")
+                | Disc.temp_name.ilike(f"%{search}%")
+                | Disc.disc_fingerprint.ilike(f"%{search}%")
+            )
+        for catalog, disc in session.execute(q):
+            rows.append({"row_type": "matched", **_catalog_fields(catalog), **_disc_fields(disc)})
+
+    if filter_param in ("all", "unripped"):
+        has_disc = select(Disc.id).where(Disc.catalog_id == Catalog.id).exists()
+        q = _search_matches_catalog(
+            select(Catalog).where(~has_disc).order_by(Catalog.title)
+        )
+        for catalog in session.scalars(q):
+            rows.append({
+                "row_type": "unripped",
+                **_catalog_fields(catalog),
+                "disc_id": None, "disc_fingerprint": None, "disc_temp_name": None,
+                "disc_ripped_at": None, "disc_rip_quality": None,
+            })
+
+    if filter_param in ("all", "unmatched_rip"):
+        q = _search_matches_disc(
+            select(Disc).where(
+                Disc.type == DiscType.dvd,
+                Disc.catalog_id.is_(None),
+                Disc.status.in_(_DVD_RIPPED_STATUSES),
+            ).order_by(Disc.temp_name)
+        )
+        for disc in session.scalars(q):
+            rows.append({
+                "row_type": "unmatched_rip",
+                "catalog_id": None, "catalog_title": None,
+                "catalog_year": None, "catalog_imdb_id": None,
+                **_disc_fields(disc),
+            })
+
+    return jsonify(rows)
 
 
 @catalog_bp.route("/sync", methods=["POST"])

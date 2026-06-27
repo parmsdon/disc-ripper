@@ -6,7 +6,7 @@ metadata editing endpoints will be expanded in later phases.
 """
 
 from flask import Blueprint, jsonify, current_app, request
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 
 from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, LookupCandidate, naive_utcnow
 
@@ -267,6 +267,75 @@ def get_disc_candidates(disc_id):
             "year": data.get("year"),
             "track_count": data.get("track_count"),
             "tracks": data.get("tracks", []),
+        })
+    return jsonify(result)
+
+
+@discs_bp.route("/cd-catalogue", methods=["GET"])
+def cd_catalogue():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    filter_param = request.args.get("filter", "all")
+    search = request.args.get("search", "").strip()
+
+    # Pre-fetch track counts and candidate counts in two GROUP BY queries
+    # to avoid N+1 queries when building the response.
+    track_rows = session.execute(
+        select(
+            CDTrack.disc_id,
+            func.count().label("total"),
+            func.count(CDTrack.title).label("titled"),
+        ).group_by(CDTrack.disc_id)
+    ).all()
+    track_counts = {r.disc_id: (r.total, r.titled) for r in track_rows}
+
+    cand_rows = session.execute(
+        select(LookupCandidate.disc_id, func.count().label("cnt"))
+        .group_by(LookupCandidate.disc_id)
+    ).all()
+    cand_counts = {r.disc_id: r.cnt for r in cand_rows}
+
+    q = select(Disc).where(Disc.type == DiscType.cd)
+
+    if filter_param == "identified":
+        q = q.where(Disc.album_title.isnot(None))
+    elif filter_param == "unidentified":
+        q = q.where(Disc.album_title.is_(None))
+    elif filter_param == "no_mb_match":
+        q = q.where(Disc.mb_lookup_status == "not_found")
+    elif filter_param == "mb_pending_error":
+        q = q.where(Disc.mb_lookup_status.in_(["pending", "error"]))
+
+    if search:
+        q = q.where(
+            Disc.temp_name.ilike(f"%{search}%")
+            | Disc.disc_fingerprint.ilike(f"%{search}%")
+            | Disc.album_title.ilike(f"%{search}%")
+        )
+
+    # Identified discs first (sorted by album_title), then unidentified (by temp_name).
+    order_group = case((Disc.album_title.isnot(None), 0), else_=1)
+    q = q.order_by(order_group, func.lower(Disc.album_title), func.lower(Disc.temp_name))
+
+    discs = session.scalars(q).all()
+    result = []
+    for disc in discs:
+        total, titled = track_counts.get(disc.id, (0, 0))
+        result.append({
+            "disc_id": disc.id,
+            "disc_fingerprint": disc.disc_fingerprint,
+            "disc_temp_name": disc.temp_name,
+            "disc_ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
+            "disc_rip_quality": disc.rip_quality,
+            "disc_rip_attempt_count": disc.rip_attempt_count or 1,
+            "album_title": disc.album_title,
+            "album_artist": disc.album_artist,
+            "track_count": total,
+            "titled_tracks": titled,
+            "mb_lookup_status": disc.mb_lookup_status,
+            "mb_candidate_count": cand_counts.get(disc.id, 0),
+            "identified": disc.album_title is not None,
         })
     return jsonify(result)
 
