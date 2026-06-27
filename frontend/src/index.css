@@ -151,6 +151,11 @@ body {
   letter-spacing: 0.04em;
 }
 
+.stat-good  { border-left: 3px solid var(--good); }
+.stat-warn  { border-left: 3px solid var(--warn); }
+.stat-error { border-left: 3px solid var(--error); }
+.stat-info  { border-left: 3px solid var(--accent); }
+
 .empty-state {
   color: var(--text-dim);
   font-size: 13px;
