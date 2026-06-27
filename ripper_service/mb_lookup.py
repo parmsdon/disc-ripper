@@ -18,6 +18,8 @@ lookup_musicbrainz(disc_id, toc, disc_db_id, session_factory) -> None
 
 import logging
 
+logging.getLogger("musicbrainzngs").setLevel(logging.WARNING)
+
 import discid
 import musicbrainzngs
 
