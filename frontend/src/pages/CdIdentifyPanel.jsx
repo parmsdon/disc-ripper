@@ -178,9 +178,17 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         const discSuffix = disc.mb_medium_title
           ? disc.mb_medium_title
           : `Disc ${disc.mb_medium_position ?? "?"} of ${disc.mb_medium_count}`;
-        albumTitleToSave = `${effectiveAlbumTitle} (${discSuffix})`;
+        const suffixTag = `(${discSuffix})`;
+        const suffixTagLower = suffixTag.toLowerCase();
+        if (!effectiveAlbumTitle.toLowerCase().includes(suffixTagLower)) {
+          albumTitleToSave = `${effectiveAlbumTitle} ${suffixTag}`;
+        }
         const baseTempName = disc.temp_name ?? effectiveAlbumTitle;
-        tempNameToSave = `${baseTempName} (${discSuffix})`;
+        if (!baseTempName.toLowerCase().includes(suffixTagLower)) {
+          tempNameToSave = `${baseTempName} ${suffixTag}`;
+        } else {
+          tempNameToSave = baseTempName;
+        }
       }
       await api.identifyCd(disc.id, {
         album_title: albumTitleToSave,
