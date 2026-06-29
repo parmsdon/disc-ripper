@@ -10,7 +10,9 @@ loop.
 
 import logging
 import os
+import pty
 import re
+import select
 import subprocess
 import time
 
@@ -369,15 +371,6 @@ def run_cdparanoia(
             )
             return {"success": False, "log": "Rolled back before starting", "return_code": None}
 
-        proc = subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-        active_jobs.set_process(rip_job_id, proc)
-
         # Sector range from cdparanoia's header lines; populated before the
         # first PROGRESS line appears. last_progress_write starts at 0.0
         # each call (per-track, not carried over) so the first progress
@@ -387,6 +380,7 @@ def run_cdparanoia(
         track_start_time = time.time()
         progress_samples = []   # (elapsed_seconds, percent) captured at each DB write
         last_progress_write = 0.0
+
         def _handle_line(line: str) -> None:
             nonlocal start_sector, end_sector, last_progress_write
             log_lines.append(line)
@@ -422,21 +416,84 @@ def run_cdparanoia(
                     last_progress_write = now
                     progress_samples.append((now - track_start_time, percent))
 
-        buf = ""
-        while True:
-            ch = proc.stderr.read(1)
-            if not ch:
-                break
-            if ch in ('\n', '\r'):
-                if buf.strip():
-                    _handle_line(buf.strip())
-                buf = ""
-            else:
-                buf += ch
-        if buf.strip():
-            _handle_line(buf.strip())
+        if fake_mode:
+            # fake_cdparanoia is a Python script we control; PIPE works fine.
+            proc = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            active_jobs.set_process(rip_job_id, proc)
 
-        proc.wait()
+            buf = ""
+            while True:
+                ch = proc.stderr.read(1)
+                if not ch:
+                    break
+                if ch in ('\r', '\n'):
+                    if buf.strip():
+                        _handle_line(buf.strip())
+                    buf = ""
+                else:
+                    buf += ch
+            if buf.strip():
+                _handle_line(buf.strip())
+
+            proc.wait()
+        else:
+            # Real cdparanoia suppresses PROGRESS lines when stderr is not a
+            # terminal. Use a pty so it believes it's writing to one.
+            master_fd, slave_fd = pty.openpty()
+            proc = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=slave_fd,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            active_jobs.set_process(rip_job_id, proc)
+
+            buf = ""
+            while True:
+                r, _, _ = select.select([master_fd], [], [], 0.1)
+                if r:
+                    try:
+                        data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
+                        buf += data
+                        while "\r" in buf or "\n" in buf:
+                            for sep in ("\r\n", "\r", "\n"):
+                                if sep in buf:
+                                    line, buf = buf.split(sep, 1)
+                                    if line.strip():
+                                        _handle_line(line.strip())
+                                    break
+                    except OSError:
+                        break
+                if proc.poll() is not None:
+                    try:
+                        while True:
+                            r, _, _ = select.select([master_fd], [], [], 0.05)
+                            if not r:
+                                break
+                            data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
+                            buf += data
+                    except OSError:
+                        pass
+                    break
+
+            if buf.strip():
+                _handle_line(buf.strip())
+
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
+
+            proc.wait()
+
+        returncode = proc.returncode
 
         full_log = "\n".join(log_lines)
         if progress_samples:
@@ -446,13 +503,13 @@ def run_cdparanoia(
         rip_job = session.get(RipJob, rip_job_id)
         if rip_job is not None:
             rip_job.log = (rip_job.log + f"\n\n--- {stage_label} ---\n" if rip_job.log else "") + full_log
-            if proc.returncode == 0:
+            if returncode == 0:
                 rip_job.progress_percent = 100
                 rip_job.progress_stage = stage_label
             session.commit()
 
-        success = proc.returncode == 0
-        result = {"success": success, "log": full_log, "return_code": proc.returncode}
+        success = returncode == 0
+        result = {"success": success, "log": full_log, "return_code": returncode}
         if success:
             result["dirty"] = detect_dirty_track(full_log)
         return result
