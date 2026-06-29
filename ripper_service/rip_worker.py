@@ -256,6 +256,7 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
 
 
 _PROGRESS_THROTTLE_SECONDS = 3.0
+_CD_PROGRESS_THROTTLE_SECONDS = 1.0
 
 
 def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: str | None = None, last_write: float = 0.0) -> float:
@@ -325,7 +326,7 @@ def _maybe_update_cd_progress(line: str, rip_job_id: int, session, stage_label: 
     whole track, so the running max is an approximation of position, not
     an exact one.
 
-    DB writes are throttled to at most once every _PROGRESS_THROTTLE_SECONDS
+    DB writes are throttled to at most once every _CD_PROGRESS_THROTTLE_SECONDS
     since cdparanoia emits a line per sector (potentially thousands per track).
     """
     match = _CD_PROGRESS_RE.search(line)
@@ -335,7 +336,7 @@ def _maybe_update_cd_progress(line: str, rip_job_id: int, session, stage_label: 
     max_bytes_seen = max(max_bytes_seen, int(match.group(2)))
 
     now = time.time()
-    if now - last_write < _PROGRESS_THROTTLE_SECONDS:
+    if now - last_write < _CD_PROGRESS_THROTTLE_SECONDS:
         return max_bytes_seen, last_write
 
     rip_job = session.get(RipJob, rip_job_id)
@@ -409,17 +410,31 @@ def run_cdparanoia(
         )
         active_jobs.set_process(rip_job_id, proc)
 
+        # last_progress_write starts at 0.0 each call so the first progress
+        # line of every track writes to the DB immediately (no carry-over
+        # from the previous track's final write).
+        track_start_time = time.time()
+        progress_samples = []   # (elapsed_seconds, percent) captured at each DB write
         last_progress_write = 0.0
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
+            prev_write = last_progress_write
             max_bytes_seen, last_progress_write = _maybe_update_cd_progress(
                 line, rip_job_id, session, stage_label, total_bytes, max_bytes_seen, last_progress_write,
             )
+            if last_progress_write != prev_write and total_bytes:
+                elapsed = last_progress_write - track_start_time
+                pct = min(99, int(max_bytes_seen / total_bytes * 100))
+                progress_samples.append((elapsed, pct))
 
         proc.wait()
 
         full_log = "\n".join(log_lines)
+        if progress_samples:
+            sample_str = ", ".join(f"{p}%@{t:.0f}s" for t, p in progress_samples)
+            full_log += f"\n--- Progress samples: {sample_str}"
+
         rip_job = session.get(RipJob, rip_job_id)
         if rip_job is not None:
             rip_job.log = (rip_job.log + f"\n\n--- {stage_label} ---\n" if rip_job.log else "") + full_log
