@@ -288,18 +288,14 @@ def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: 
 # CD (cdparanoia) - one call per track, no separate build step.
 # ---------------------------------------------------------------------------
 
-# cdparanoia real output formats:
+# cdparanoia -e stderr formats:
 #   Header:   "Ripping from sector   32025 (track  3 [0:00.00])"
 #             "          to sector   50599 (track  3 [4:07.49])"
-#   Progress: " (== PROGRESS == [          >                   | 037910 00 ] == :-) O ==)"
-# The PROGRESS line's sector after the pipe is the current read position.
-_CD_PROGRESS_RE = re.compile(r'\(== PROGRESS ==.*\|\s*(\d+)')
+#   Progress: "##: 0 [read] @ 104190072"
+#             group 1 = operation name, group 2 = absolute byte offset
+_CD_PROGRESS_RE = re.compile(r'##:\s*-?\d+\s*\[(\w[\w-]*)\]\s*@\s*(\d+)')
 _FROM_SECTOR_RE = re.compile(r'Ripping from sector\s+(\d+)')
 _TO_SECTOR_RE = re.compile(r'to sector\s+(\d+)')
-
-# Callback format from cdparanoia's -e mode (kept for dirty-track detection
-# even though progress parsing now uses the PROGRESS line format above).
-_CD_CALLBACK_RE = re.compile(r"##:\s*-?\d+\s*\[(\w[\w-]*)\]\s*@\s*(\d+)")
 _DIRTY_TRACK_OPS = {"skip", "scratch", "dropped", "duped", "backoff", "drift"}
 
 # 16-bit stereo PCM at 44.1kHz - used only to size the --total-bytes arg
@@ -308,7 +304,7 @@ _CD_BYTES_PER_SECOND = 176400
 
 
 def _is_dirty_track_line(line: str) -> bool:
-    match = _CD_CALLBACK_RE.search(line)
+    match = _CD_PROGRESS_RE.search(line)
     return bool(match and match.group(1).lower() in _DIRTY_TRACK_OPS)
 
 
@@ -332,10 +328,11 @@ def run_cdparanoia(
     CD - this writes the final WAV directly.
 
     Progress is derived from the sector range in cdparanoia's header lines
-    ("Ripping from sector X ... to sector Y") and the current sector in
-    each PROGRESS line. duration_seconds is passed to the fake stand-in
-    only (so it knows how long to simulate); it is not used for progress
-    on real hardware.
+    ("Ripping from sector X ... to sector Y") and the byte offset in each
+    "##: N [op] @ BYTE" progress line; percent = (byte - start_byte) /
+    total_bytes * 100 where start/total come from start_sector * 2352.
+    duration_seconds is passed to the fake stand-in only (so it knows how
+    long to simulate); it is not used for progress on real hardware.
 
     inject_dirty only has an effect when fake_mode is also True - see
     job_starter's fake_dirty_mode handling, which decides when this is
@@ -389,15 +386,14 @@ def run_cdparanoia(
         track_start_time = time.time()
         progress_samples = []   # (elapsed_seconds, percent) captured at each DB write
         last_progress_write = 0.0
-
-        for line in proc.stderr:
-            line = line.rstrip("\n")
+        def _handle_line(line: str) -> None:
+            nonlocal start_sector, end_sector, last_progress_write
             log_lines.append(line)
 
             m = _FROM_SECTOR_RE.search(line)
             if m:
                 start_sector = int(m.group(1))
-                continue
+                return
 
             m = _TO_SECTOR_RE.search(line)
             if m:
@@ -407,16 +403,14 @@ def run_cdparanoia(
                         "Track %s: sectors %s to %s (total: %s)",
                         track_number, start_sector, end_sector, end_sector - start_sector,
                     )
-                continue
+                return
 
             m = _CD_PROGRESS_RE.search(line)
             if m and start_sector is not None and end_sector is not None and end_sector > start_sector:
-                current_sector = int(m.group(1))
-                if not progress_samples:
-                    logger.info("PROGRESS match: sector=%s from line: %s", current_sector, line)
-                percent = max(0, min(99, int(
-                    (current_sector - start_sector) / (end_sector - start_sector) * 100
-                )))
+                byte_offset = int(m.group(2))
+                start_byte = start_sector * 2352
+                total_bytes = (end_sector - start_sector) * 2352
+                percent = max(0, min(99, int((byte_offset - start_byte) / total_bytes * 100)))
                 now = time.time()
                 if now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS:
                     rip_job = session.get(RipJob, rip_job_id)
@@ -426,6 +420,20 @@ def run_cdparanoia(
                         session.commit()
                     last_progress_write = now
                     progress_samples.append((now - track_start_time, percent))
+
+        buf = ""
+        while True:
+            ch = proc.stderr.read(1)
+            if not ch:
+                break
+            if ch in ('\n', '\r'):
+                if buf.strip():
+                    _handle_line(buf.strip())
+                buf = ""
+            else:
+                buf += ch
+        if buf.strip():
+            _handle_line(buf.strip())
 
         proc.wait()
 
