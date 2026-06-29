@@ -407,6 +407,11 @@ def run_cdparanoia(
                     (current_sector - start_sector) / (end_sector - start_sector) * 100
                 )))
                 now = time.time()
+                logger.debug(
+                    "PROGRESS sector=%d pct=%d throttle_gap=%.2fs write=%s",
+                    current_sector, percent, now - last_progress_write,
+                    now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS,
+                )
                 if now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS:
                     rip_job = session.get(RipJob, rip_job_id)
                     if rip_job is not None:
@@ -427,19 +432,10 @@ def run_cdparanoia(
             )
             active_jobs.set_process(rip_job_id, proc)
 
-            buf = ""
-            while True:
-                ch = proc.stderr.read(1)
-                if not ch:
-                    break
-                if ch in ('\r', '\n'):
-                    if buf.strip():
-                        _handle_line(buf.strip())
-                    buf = ""
-                else:
-                    buf += ch
-            if buf.strip():
-                _handle_line(buf.strip())
+            for line in proc.stderr:
+                line = line.rstrip('\r\n')
+                if line:
+                    _handle_line(line)
 
             proc.wait()
         else:
