@@ -258,7 +258,7 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
 
 
 _PROGRESS_THROTTLE_SECONDS = 3.0
-_CD_PROGRESS_THROTTLE_SECONDS = 1.0
+_CD_PROGRESS_THROTTLE_SECONDS = 0.5
 
 
 def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: str | None = None, last_write: float = 0.0) -> float:

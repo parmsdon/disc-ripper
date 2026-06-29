@@ -11,8 +11,8 @@ import argparse
 import sys
 import time
 
-_STEPS = 12
-_STEP_SECONDS = 6 / _STEPS
+_FAKE_DURATION_SECONDS = 10.0
+_PROGRESS_INTERVAL_SECONDS = 0.5
 _FAKE_START_SECTOR = 0
 _BYTES_PER_SECTOR = 2352
 _DEFAULT_SECTORS = 20000   # fallback when --total-bytes is 0
@@ -41,27 +41,37 @@ def main() -> None:
 
     sector_count = (args.total_bytes // _BYTES_PER_SECTOR) if args.total_bytes else _DEFAULT_SECTORS
     end_sector = _FAKE_START_SECTOR + sector_count
-    sectors_per_step = sector_count // _STEPS
 
     # Emit the same header lines cdparanoia writes to stderr.
     _err(f"Ripping from sector {_FAKE_START_SECTOR:>7} (track {args.track_number:>2} [0:00.00])")
     _err(f"          to sector {end_sector:>7} (track {args.track_number:>2} [fake])")
 
-    dirty_step = _STEPS // 2 if args.dirty else -1
+    dirty_emitted = False
+    start_time = time.monotonic()
 
-    for step in range(1, _STEPS + 1):
-        current_sector = _FAKE_START_SECTOR + step * sectors_per_step
-        # Visual PROGRESS line: \r-terminated like the real cdparanoia.
+    while True:
+        elapsed = time.monotonic() - start_time
+        if elapsed >= _FAKE_DURATION_SECONDS:
+            break
+
+        fraction = elapsed / _FAKE_DURATION_SECONDS
+        current_sector = _FAKE_START_SECTOR + int(fraction * sector_count)
         progress_line = (
             f" (== PROGRESS == [    >                    | {current_sector:06d} 00 ] == :-) O ==)"
         )
         _err(progress_line, end="\r")
 
-        if step == dirty_step:
-            # Emit a read error line that dirty-track detection should catch.
+        if args.dirty and not dirty_emitted and fraction >= 0.5:
             _err(f"\nread error on sector {current_sector} (fake dirty)")
+            dirty_emitted = True
 
-        time.sleep(_STEP_SECONDS)
+        time.sleep(_PROGRESS_INTERVAL_SECONDS)
+
+    # Emit final sector so the last PROGRESS line reaches 100%.
+    progress_line = (
+        f" (== PROGRESS == [    >                    | {end_sector:06d} 00 ] == :-) O ==)"
+    )
+    _err(progress_line, end="\r")
 
     # Final newline so the terminal isn't left mid-line.
     _err("")
