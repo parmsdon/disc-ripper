@@ -288,15 +288,19 @@ def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: 
 # CD (cdparanoia) - one call per track, no separate build step.
 # ---------------------------------------------------------------------------
 
-# cdparanoia -e stderr formats:
+# cdparanoia (without -e) stderr formats:
 #   Header:   "Ripping from sector   32025 (track  3 [0:00.00])"
 #             "          to sector   50599 (track  3 [4:07.49])"
-#   Progress: "##: 0 [read] @ 104190072"
-#             group 1 = operation name, group 2 = absolute byte offset
-_CD_PROGRESS_RE = re.compile(r'##:\s*-?\d+\s*\[(\w[\w-]*)\]\s*@\s*(\d+)')
+#   Progress: " (== PROGRESS == [    >                    | 037910 00 ] == :-) O ==)"
+#             group 1 = current sector number after the pipe
+_CD_PROGRESS_RE = re.compile(r'\(== PROGRESS ==.*\|\s*(\d+)\s')
 _FROM_SECTOR_RE = re.compile(r'Ripping from sector\s+(\d+)')
 _TO_SECTOR_RE = re.compile(r'to sector\s+(\d+)')
-_DIRTY_TRACK_OPS = {"skip", "scratch", "dropped", "duped", "backoff", "drift"}
+
+# Dirty-track detection without -e: cdparanoia prints error text to stderr
+# when it can't read a sector. Patterns are best-effort and need real-world
+# verification against a scratched disc.
+_CD_DIRTY_RE = re.compile(r'(read error|jitter|skip|can.t read|uncorrectable)', re.IGNORECASE)
 
 # 16-bit stereo PCM at 44.1kHz - used only to size the --total-bytes arg
 # passed to the fake cdparanoia stand-in.
@@ -304,16 +308,13 @@ _CD_BYTES_PER_SECOND = 176400
 
 
 def _is_dirty_track_line(line: str) -> bool:
-    match = _CD_PROGRESS_RE.search(line)
-    return bool(match and match.group(1).lower() in _DIRTY_TRACK_OPS)
+    return bool(_CD_DIRTY_RE.search(line))
 
 
 def detect_dirty_track(log_text: str) -> bool:
     """
-    Best-effort scan of cdparanoia's -e callback stream for trouble
-    indicators (jitter/scratch/skip-style operations - see
-    _DIRTY_TRACK_OPS) rather than the plain "read"/"verify"/"overlap"
-    operations a clean rip shows.
+    Best-effort scan of cdparanoia stderr for read-error indicators.
+    Patterns may need refinement against real scratched-disc output.
     """
     return any(_is_dirty_track_line(line) for line in log_text.splitlines())
 
@@ -352,7 +353,7 @@ def run_cdparanoia(
         if inject_dirty:
             command.append("--dirty")
     else:
-        command = ["cdparanoia", "-e", "-d", device_path, str(track_number), output_wav_path]
+        command = ["cdparanoia", "-d", device_path, "-w", str(track_number), output_wav_path]
 
     log_lines = []
     session = session_factory()
@@ -399,21 +400,18 @@ def run_cdparanoia(
             if m:
                 end_sector = int(m.group(1))
                 if start_sector is not None:
-                    start_byte = start_sector * 2352
-                    total_bytes = (end_sector - start_sector) * 2352
                     logger.info(
-                        "Track %s byte range: %s to %s (sectors %s-%s, total_bytes=%s)",
-                        track_number, start_byte, start_byte + total_bytes,
-                        start_sector, end_sector, total_bytes,
+                        "Track %s sector range: %s to %s (%s sectors)",
+                        track_number, start_sector, end_sector, end_sector - start_sector,
                     )
                 return
 
             m = _CD_PROGRESS_RE.search(line)
             if m and start_sector is not None and end_sector is not None and end_sector > start_sector:
-                byte_offset = int(m.group(2))
-                start_byte = start_sector * 2352
-                total_bytes = (end_sector - start_sector) * 2352
-                percent = max(0, min(99, int((byte_offset - start_byte) / total_bytes * 100)))
+                current_sector = int(m.group(1))
+                percent = max(0, min(99, int(
+                    (current_sector - start_sector) / (end_sector - start_sector) * 100
+                )))
                 now = time.time()
                 if now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS:
                     rip_job = session.get(RipJob, rip_job_id)
