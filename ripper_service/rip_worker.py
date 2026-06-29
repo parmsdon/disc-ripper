@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 
 from common.models import RipJob
 from ripper_service import active_jobs
@@ -123,10 +124,11 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         active_jobs.set_process(rip_job_id, proc)
 
         dirty_detected_live = False
+        last_progress_write = 0.0
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
-            _maybe_update_progress(line, rip_job_id, session)
+            last_progress_write = _maybe_update_progress(line, rip_job_id, session, last_write=last_progress_write)
             if not dirty_detected_live and _is_dirty_rip_line(line):
                 dirty_detected_live = _flag_dirty_rip_live(rip_job_id, line, session)
 
@@ -213,10 +215,13 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
         )
         active_jobs.set_process(rip_job_id, proc)
 
+        last_progress_write = 0.0
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
-            _maybe_update_progress(line, rip_job_id, session, stage_override="Building ISO")
+            last_progress_write = _maybe_update_progress(
+                line, rip_job_id, session, stage_override="Building ISO", last_write=last_progress_write,
+            )
 
         proc.wait()
 
@@ -246,10 +251,17 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
         session.close()
 
 
-def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: str | None = None) -> None:
+_PROGRESS_THROTTLE_SECONDS = 3.0
+
+
+def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: str | None = None, last_write: float = 0.0) -> float:
     match = _PROGRESS_RE.search(line)
     if not match:
-        return
+        return last_write
+
+    now = time.time()
+    if now - last_write < _PROGRESS_THROTTLE_SECONDS:
+        return last_write
 
     percent = int(float(match.group(1)))
     if stage_override is not None:
@@ -259,11 +271,12 @@ def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: 
 
     rip_job = session.get(RipJob, rip_job_id)
     if rip_job is None:
-        return
+        return last_write
 
     rip_job.progress_percent = percent
     rip_job.progress_stage = stage
     session.commit()
+    return now
 
 
 # ---------------------------------------------------------------------------
@@ -298,32 +311,38 @@ def detect_dirty_track(log_text: str) -> bool:
     return any(_is_dirty_track_line(line) for line in log_text.splitlines())
 
 
-def _maybe_update_cd_progress(line: str, rip_job_id: int, session, stage_label: str, total_bytes, max_bytes_seen: int) -> int:
+def _maybe_update_cd_progress(line: str, rip_job_id: int, session, stage_label: str, total_bytes, max_bytes_seen: int, last_write: float = 0.0) -> tuple[int, float]:
     """
     Updates rip_job.progress_stage/progress_percent from a cdparanoia
-    callback line, returning the (possibly unchanged) running max byte
-    count seen so far.
+    callback line, returning (max_bytes_seen, last_write).
 
     cdparanoia's own byte counter resets across its internal overlap/
     verification passes rather than increasing monotonically over the
     whole track, so the running max is an approximation of position, not
     an exact one.
+
+    DB writes are throttled to at most once every _PROGRESS_THROTTLE_SECONDS
+    since cdparanoia emits a line per sector (potentially thousands per track).
     """
     match = _CD_PROGRESS_RE.search(line)
     if not match:
-        return max_bytes_seen
+        return max_bytes_seen, last_write
 
     max_bytes_seen = max(max_bytes_seen, int(match.group(2)))
 
+    now = time.time()
+    if now - last_write < _PROGRESS_THROTTLE_SECONDS:
+        return max_bytes_seen, last_write
+
     rip_job = session.get(RipJob, rip_job_id)
     if rip_job is None:
-        return max_bytes_seen
+        return max_bytes_seen, last_write
 
     rip_job.progress_stage = stage_label
     if total_bytes:
         rip_job.progress_percent = min(99, int(max_bytes_seen / total_bytes * 100))
     session.commit()
-    return max_bytes_seen
+    return max_bytes_seen, now
 
 
 def run_cdparanoia(
@@ -386,10 +405,13 @@ def run_cdparanoia(
         )
         active_jobs.set_process(rip_job_id, proc)
 
+        last_progress_write = 0.0
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
-            max_bytes_seen = _maybe_update_cd_progress(line, rip_job_id, session, stage_label, total_bytes, max_bytes_seen)
+            max_bytes_seen, last_progress_write = _maybe_update_cd_progress(
+                line, rip_job_id, session, stage_label, total_bytes, max_bytes_seen, last_progress_write,
+            )
 
         proc.wait()
 
