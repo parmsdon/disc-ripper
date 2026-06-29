@@ -400,13 +400,23 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     # Phase 2 (building): move ripped WAVs from scratch to their final NFS
     # location. The disc shows "building" while the move is in progress.
     _mark_cd_building(rip_job_id, disc_id, label, session_factory)
-    logger.info("Moving %d WAV file(s) to NFS for disc #%s (%s)", len(ripped_in_this_run), disc_id, label)
+    total_to_move = len(ripped_in_this_run)
+    logger.info("Moving %d WAV file(s) to NFS for disc #%s (%s)", total_to_move, disc_id, label)
+    _update_rip_job_progress(rip_job_id, 0, "Moving tracks to library", session_factory)
+    moved_count = 0
     try:
         os.makedirs(str(cd_dir), exist_ok=True)
         for track_number in ripped_in_this_run:
             shutil.move(
                 str(scratch_subdir / f"track{track_number:02d}.cdda.wav"),
                 str(cd_dir / f"track{track_number:02d}.wav"),
+            )
+            moved_count += 1
+            _update_rip_job_progress(
+                rip_job_id,
+                int(moved_count / total_to_move * 100),
+                f"Moving track {moved_count} of {total_to_move}",
+                session_factory,
             )
     except Exception:
         logger.exception("Failed to move WAV files to NFS for disc #%s (%s)", disc_id, label)
@@ -420,6 +430,18 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     _cleanup_scratch_dir(str(scratch_subdir))
     _finish_cd_job(rip_job_id, label, disc_id, session_factory)
     active_jobs.unregister(rip_job_id)
+
+
+def _update_rip_job_progress(rip_job_id, percent: int, stage: str, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        if rip_job is not None:
+            rip_job.progress_percent = percent
+            rip_job.progress_stage = stage
+            session.commit()
+    finally:
+        session.close()
 
 
 def _mark_cd_building(rip_job_id, disc_id, label, session_factory) -> None:

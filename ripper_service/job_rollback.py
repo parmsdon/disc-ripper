@@ -24,6 +24,11 @@ _TERMINATE_TIMEOUT_SECONDS = 5
 _KILL_TIMEOUT_SECONDS = 5
 
 
+def rollback_job(session, rip_job: RipJob, cfg: dict) -> None:
+    """Roll back one specific rip job (e.g. tray opened mid-rip)."""
+    _rollback_one_job(session, rip_job, cfg)
+
+
 def rollback_excess_jobs(session, target_active_count: int, cfg: dict) -> None:
     """
     Kill and reset running RipJobs down to target_active_count, newest

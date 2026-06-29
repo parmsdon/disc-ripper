@@ -37,7 +37,7 @@ from ripper_service.mb_lookup import compute_mb_disc_id, lookup_musicbrainz
 from ripper_service.db import get_session_factory
 from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
-from ripper_service.job_rollback import rollback_excess_jobs
+from ripper_service.job_rollback import rollback_excess_jobs, rollback_job
 from ripper_service.job_starter import start_eligible_rip_jobs
 from ripper_service.log_writer import write_log_event
 from ripper_service.pending_actions import process_pending_actions
@@ -157,6 +157,7 @@ def shutdown(cfg: dict) -> None:
 def run(cfg: dict) -> None:
     Session = get_session_factory(cfg)
     media_present_by_device = {}
+    tray_open_by_device = {}
 
     # /tmp-based scratch space may not survive a reboot - make sure it
     # exists before relying on it, rather than assuming manual setup.
@@ -424,6 +425,35 @@ def run(cfg: dict) -> None:
                         logger.info("Disc removed from %s", label)
 
                     media_present_by_device[device_path] = media_present
+
+                    # Detect tray-open transition and cancel any active rip job
+                    # so it doesn't run against a disc that's no longer present.
+                    tray_was_open = tray_open_by_device.get(device_path, False)
+                    if tray_open and not tray_was_open and drive_id is not None:
+                        active_rip_job = session.scalars(
+                            select(RipJob)
+                            .where(
+                                RipJob.drive_id == drive_id,
+                                RipJob.status.in_([JobStatus.queued, JobStatus.running]),
+                            )
+                        ).first()
+                        if active_rip_job is not None:
+                            if active_rip_job.status == JobStatus.running:
+                                logger.warning(
+                                    "Tray opened on %s while ripping — aborting rip job %s",
+                                    label, active_rip_job.id,
+                                )
+                                rollback_job(session, active_rip_job, cfg)
+                            else:
+                                active_rip_job.scheduled_start = None
+                                if active_rip_job.disc is not None:
+                                    active_rip_job.disc.status = DiscStatus.queued
+                                session.commit()
+                                logger.info(
+                                    "Tray opened on %s while job was queued — pausing until disc reseated",
+                                    label,
+                                )
+                    tray_open_by_device[device_path] = tray_open
 
                     # Persist current media presence and tray state so the
                     # API/UI (which has no direct hardware access) can

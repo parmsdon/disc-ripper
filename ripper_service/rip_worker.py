@@ -125,9 +125,13 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
 
         dirty_detected_live = False
         last_progress_write = 0.0
+        progress_sample_logged = False
         for line in proc.stdout:
             line = line.rstrip("\n")
             log_lines.append(line)
+            if not progress_sample_logged and _PROGRESS_RE.search(line):
+                logger.info("dvdbackup progress line format (rip_job %s): %r", rip_job_id, line)
+                progress_sample_logged = True
             last_progress_write = _maybe_update_progress(line, rip_job_id, session, last_write=last_progress_write)
             if not dirty_detected_live and _is_dirty_rip_line(line):
                 dirty_detected_live = _flag_dirty_rip_live(rip_job_id, line, session)
@@ -419,6 +423,9 @@ def run_cdparanoia(
         rip_job = session.get(RipJob, rip_job_id)
         if rip_job is not None:
             rip_job.log = (rip_job.log + f"\n\n--- {stage_label} ---\n" if rip_job.log else "") + full_log
+            if proc.returncode == 0:
+                rip_job.progress_percent = 100
+                rip_job.progress_stage = stage_label
             session.commit()
 
         success = proc.returncode == 0
