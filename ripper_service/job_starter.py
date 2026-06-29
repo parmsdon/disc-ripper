@@ -90,7 +90,7 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
         if disc.type == DiscType.dvd:
             scratch_dir = str(Path(cfg["storage"]["scratch_dir"]) / str(disc.id))
-            disc_label = f"disc_{disc.id}"
+            disc_label = disc.disc_fingerprint or f"disc_{disc.id}"
             thread = threading.Thread(
                 target=_run_job,
                 args=(
