@@ -99,7 +99,7 @@ def _terminate_process(rip_job_id: int, label: str) -> None:
 
 def _cleanup_scratch_dir(scratch_dir: str) -> None:
     try:
-        if os.path.isdir(scratch_dir):
+        if os.path.exists(scratch_dir):
             shutil.rmtree(scratch_dir)
     except OSError:
         logger.warning("Failed to clean up scratch dir %s", scratch_dir, exc_info=True)

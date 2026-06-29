@@ -412,6 +412,8 @@ def run_cdparanoia(
             m = _CD_PROGRESS_RE.search(line)
             if m and start_sector is not None and end_sector is not None and end_sector > start_sector:
                 current_sector = int(m.group(1))
+                if not progress_samples:
+                    logger.info("PROGRESS match: sector=%s from line: %s", current_sector, line)
                 percent = max(0, min(99, int(
                     (current_sector - start_sector) / (end_sector - start_sector) * 100
                 )))
