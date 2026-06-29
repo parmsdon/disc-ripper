@@ -399,9 +399,12 @@ def run_cdparanoia(
             if m:
                 end_sector = int(m.group(1))
                 if start_sector is not None:
+                    start_byte = start_sector * 2352
+                    total_bytes = (end_sector - start_sector) * 2352
                     logger.info(
-                        "Track %s: sectors %s to %s (total: %s)",
-                        track_number, start_sector, end_sector, end_sector - start_sector,
+                        "Track %s byte range: %s to %s (sectors %s-%s, total_bytes=%s)",
+                        track_number, start_byte, start_byte + total_bytes,
+                        start_sector, end_sector, total_bytes,
                     )
                 return
 

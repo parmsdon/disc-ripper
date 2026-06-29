@@ -14,6 +14,7 @@ import time
 _STEPS = 12
 _STEP_SECONDS = 6 / _STEPS
 _FAKE_START_SECTOR = 0
+_BYTES_PER_SECTOR = 2352
 _DEFAULT_SECTORS = 20000   # fallback when --total-bytes is 0
 
 
@@ -36,21 +37,22 @@ def main() -> None:
     )
     args, _unknown = parser.parse_known_args()
 
-    # cdparanoia uses 2352-byte sectors; derive a fake sector count from total_bytes.
-    sector_count = (args.total_bytes // 2352) if args.total_bytes else _DEFAULT_SECTORS
+    # cdparanoia uses 2352-byte sectors; derive a fake sector/byte count.
+    sector_count = (args.total_bytes // _BYTES_PER_SECTOR) if args.total_bytes else _DEFAULT_SECTORS
+    total_track_bytes = sector_count * _BYTES_PER_SECTOR
     end_sector = _FAKE_START_SECTOR + sector_count
-    sectors_per_step = sector_count // _STEPS
+    bytes_per_step = total_track_bytes // _STEPS
 
     # Emit the same header lines cdparanoia writes to stderr.
     _err(f"Ripping from sector {_FAKE_START_SECTOR:>7} (track {args.track_number:>2} [0:00.00])")
     _err(f"          to sector {end_sector:>7} (track {args.track_number:>2} [fake])")
 
+    # Emit progress in cdparanoia -e callback format: "##: 0 [op] @ byte_offset".
+    # byte_offset is track-relative (0-based), matching how rip_worker.py interprets it.
     for step in range(1, _STEPS + 1):
-        current_sector = _FAKE_START_SECTOR + step * sectors_per_step
-        # Pad to match cdparanoia's fixed-width PROGRESS format.
-        sector_str = str(current_sector).zfill(6)
-        dirty_marker = " [skip]" if args.dirty and step == _STEPS // 2 else ""
-        _err(f" (== PROGRESS == [{dirty_marker:>20}>{'':20}| {sector_str} 00 ] == :-) O ==)")
+        op = "skip" if args.dirty and step == _STEPS // 2 else "read"
+        byte_offset = step * bytes_per_step
+        _err(f"##: 0 [{op}] @ {byte_offset}")
         time.sleep(_STEP_SECONDS)
 
     with open(args.output_wav, "wb") as f:
