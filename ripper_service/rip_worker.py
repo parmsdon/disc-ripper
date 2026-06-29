@@ -373,8 +373,8 @@ def run_cdparanoia(
 
         proc = subprocess.Popen(
             command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
         )
@@ -390,7 +390,7 @@ def run_cdparanoia(
         progress_samples = []   # (elapsed_seconds, percent) captured at each DB write
         last_progress_write = 0.0
 
-        for line in proc.stdout:
+        for line in proc.stderr:
             line = line.rstrip("\n")
             log_lines.append(line)
 
@@ -402,6 +402,11 @@ def run_cdparanoia(
             m = _TO_SECTOR_RE.search(line)
             if m:
                 end_sector = int(m.group(1))
+                if start_sector is not None:
+                    logger.info(
+                        "Track %s: sectors %s to %s (total: %s)",
+                        track_number, start_sector, end_sector, end_sector - start_sector,
+                    )
                 continue
 
             m = _CD_PROGRESS_RE.search(line)
