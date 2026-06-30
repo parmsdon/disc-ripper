@@ -258,7 +258,6 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
 
 
 _PROGRESS_THROTTLE_SECONDS = 3.0
-_CD_PROGRESS_THROTTLE_SECONDS = 0.5
 
 
 def _maybe_update_progress(line: str, rip_job_id: int, session, stage_override: str | None = None, last_write: float = 0.0) -> float:
@@ -372,17 +371,16 @@ def run_cdparanoia(
             return {"success": False, "log": "Rolled back before starting", "return_code": None}
 
         # Sector range from cdparanoia's header lines; populated before the
-        # first PROGRESS line appears. last_progress_write starts at 0.0
-        # each call (per-track, not carried over) so the first progress
-        # update of every track writes to the DB immediately.
+        # first PROGRESS line appears. last_written_percent starts at -1 so
+        # the first real update (0% or higher) always writes to the DB.
         start_sector = None
         end_sector = None
         track_start_time = time.time()
         progress_samples = []   # (elapsed_seconds, percent) captured at each DB write
-        last_progress_write = 0.0
+        last_written_percent = -1
 
         def _handle_line(line: str) -> None:
-            nonlocal start_sector, end_sector, last_progress_write
+            nonlocal start_sector, end_sector, last_written_percent
             log_lines.append(line)
 
             m = _FROM_SECTOR_RE.search(line)
@@ -406,20 +404,19 @@ def run_cdparanoia(
                 percent = max(0, min(99, int(
                     (current_sector - start_sector) / (end_sector - start_sector) * 100
                 )))
-                now = time.time()
                 logger.debug(
-                    "PROGRESS sector=%d pct=%d throttle_gap=%.2fs write=%s",
-                    current_sector, percent, now - last_progress_write,
-                    now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS,
+                    "PROGRESS sector=%d pct=%d last_pct=%d write=%s",
+                    current_sector, percent, last_written_percent,
+                    percent != last_written_percent,
                 )
-                if now - last_progress_write >= _CD_PROGRESS_THROTTLE_SECONDS:
+                if percent != last_written_percent:
                     rip_job = session.get(RipJob, rip_job_id)
                     if rip_job is not None:
                         rip_job.progress_percent = percent
                         rip_job.progress_stage = stage_label
                         session.commit()
-                    last_progress_write = now
-                    progress_samples.append((now - track_start_time, percent))
+                    last_written_percent = percent
+                    progress_samples.append((time.time() - track_start_time, percent))
 
         if fake_mode:
             # fake_cdparanoia is a Python script we control; PIPE works fine.
