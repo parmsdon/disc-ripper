@@ -22,11 +22,14 @@ from ripper_service import active_jobs
 logger = logging.getLogger(__name__)
 
 _PROGRESS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:done)?", re.IGNORECASE)
-_DIRTY_RIP_RE = re.compile(r"Error reading.*padding", re.IGNORECASE)
+_DIRTY_ERROR_RE = re.compile(r"error reading", re.IGNORECASE)
+_DIRTY_PADDING_RE = re.compile(r"padding\s+\d+\s+blocks", re.IGNORECASE)
 
 
 def _is_dirty_rip_line(line: str) -> bool:
-    return bool(_DIRTY_RIP_RE.search(line))
+    # dvdbackup splits "Error reading" and "padding N blocks" across separate
+    # lines, so treat either phrase alone as sufficient evidence.
+    return bool(_DIRTY_ERROR_RE.search(line) or _DIRTY_PADDING_RE.search(line))
 
 
 def detect_dirty_rip(log_text: str) -> bool:
@@ -42,7 +45,10 @@ def detect_dirty_rip(log_text: str) -> bool:
     ends up doing real work if a dirty line was somehow missed there
     (e.g. split across a buffered read boundary).
     """
-    return any(_is_dirty_rip_line(line) for line in log_text.splitlines())
+    return bool(
+        re.search(r"error reading", log_text, re.IGNORECASE)
+        or re.search(r"padding\s+\d+\s+blocks", log_text, re.IGNORECASE)
+    )
 
 
 def _mark_dirty(disc) -> None:
