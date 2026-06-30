@@ -597,7 +597,7 @@ export default function DriveStatus() {
       fetchRippingEnabled();
       fetchServiceStatus();
       fetchServiceHeartbeat();
-    }, 5000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled, fetchServiceStatus, fetchServiceHeartbeat]);
 
