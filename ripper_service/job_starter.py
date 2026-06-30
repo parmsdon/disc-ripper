@@ -76,6 +76,13 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
             logger.warning("RipJob %s missing disc/drive - skipping", rip_job.id)
             continue
 
+        if drive.tray_open is True:
+            logger.info(
+                "RipJob %s: drive %s tray is open - skipping until disc reseated",
+                rip_job.id, drive.label or drive.device_path,
+            )
+            continue
+
         label = drive.label or drive.device_path
         inject_dirty = fake_dirty_mode and drive.label == _FAKE_DIRTY_DRIVE_LABEL
 
