@@ -15,7 +15,7 @@ drives_bp = Blueprint("drives", __name__)
 
 _ACTIVE_STATUSES = [
     DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.identifying,
-    DiscStatus.ripped, DiscStatus.encoding,
+    DiscStatus.ripped, DiscStatus.encoding, DiscStatus.error,
 ]
 
 
