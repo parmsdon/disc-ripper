@@ -310,97 +310,105 @@ def run(cfg: dict) -> None:
                                 toc = read_table_of_contents(device_path)
                                 disc_fingerprint = toc["fingerprint"]
 
-                                existing_active_disc, existing_completed_disc = _find_existing_disc(
-                                    session, drive_id, disc_fingerprint,
-                                )
-
-                                if existing_active_disc is not None:
-                                    logger.info(
-                                        "Disc %s already tracked as disc #%s on Drive %s, "
-                                        "resuming existing record",
-                                        disc_fingerprint, existing_active_disc.id, label,
+                                if not disc_fingerprint or not toc.get("track_count"):
+                                    logger.warning(
+                                        "cd-discid failed for Drive %s (fingerprint=%r, "
+                                        "track_count=%r) - will retry next poll",
+                                        label, disc_fingerprint, toc.get("track_count"),
                                     )
-                                    # Re-trigger MB lookup if status was cleared (e.g. manual
-                                    # reset or a future --keep-discs mode of reset_dev_data.py).
-                                    if existing_active_disc.mb_lookup_status is None:
-                                        mb_result = compute_mb_disc_id(device_path)
-                                        if mb_result.get("disc_id"):
-                                            existing_active_disc.mb_disc_id = mb_result["disc_id"]
-                                            existing_active_disc.mb_toc = mb_result["toc"]
-                                            existing_active_disc.mb_lookup_status = "pending"
-                                            pending_mb_lookups.append(
-                                                (mb_result["disc_id"], mb_result["toc"], existing_active_disc.id)
-                                            )
-                                        else:
-                                            existing_active_disc.mb_lookup_status = "error"
-                                            logger.warning(
-                                                "Failed to compute MB disc ID for existing disc #%s: %s",
-                                                existing_active_disc.id, mb_result.get("error"),
-                                            )
-                                elif existing_completed_disc is not None and (
-                                    existing_completed_disc.status == DiscStatus.error
-                                    or existing_completed_disc.rip_quality == "dirty"
-                                ):
-                                    logger.info(
-                                        "Disc %s previously had errors/dirty rip - disc #%s on "
-                                        "Drive %s, awaiting user action",
-                                        disc_fingerprint, existing_completed_disc.id, label,
-                                    )
-                                elif existing_completed_disc is not None:
-                                    logger.info(
-                                        "Disc %s already processed as disc #%s on Drive %s - "
-                                        "ignoring reinsertion",
-                                        disc_fingerprint, existing_completed_disc.id, label,
-                                    )
+                                    # Skip disc creation; tray/presence tracking still runs below.
                                 else:
-                                    disc = Disc(
-                                        type=DiscType.cd,
-                                        status=DiscStatus.queued,
-                                        drive_id=drive_id,
-                                        disc_fingerprint=disc_fingerprint,
+                                    existing_active_disc, existing_completed_disc = _find_existing_disc(
+                                        session, drive_id, disc_fingerprint,
                                     )
-                                    session.add(disc)
-                                    session.flush()
 
-                                    for track in toc["tracks"]:
-                                        duration = track["length_sectors"] / 75.0 if track["length_sectors"] else None
-                                        session.add(CDTrack(
-                                            disc_id=disc.id,
-                                            track_number=track["number"],
-                                            duration_seconds=duration,
-                                        ))
-
-                                    session.add(RipJob(
-                                        disc_id=disc.id,
-                                        drive_id=drive_id,
-                                        status=JobStatus.queued,
-                                    ))
-
-                                    mb_result = compute_mb_disc_id(device_path)
-                                    if mb_result.get("disc_id"):
-                                        disc.mb_disc_id = mb_result["disc_id"]
-                                        disc.mb_toc = mb_result["toc"]
-                                        disc.mb_lookup_status = "pending"
-                                        pending_mb_lookups.append(
-                                            (mb_result["disc_id"], mb_result["toc"], disc.id)
+                                    if existing_active_disc is not None:
+                                        logger.info(
+                                            "Disc %s already tracked as disc #%s on Drive %s, "
+                                            "resuming existing record",
+                                            disc_fingerprint, existing_active_disc.id, label,
+                                        )
+                                        # Re-trigger MB lookup if status was cleared (e.g. manual
+                                        # reset or a future --keep-discs mode of reset_dev_data.py).
+                                        if existing_active_disc.mb_lookup_status is None:
+                                            mb_result = compute_mb_disc_id(device_path)
+                                            if mb_result.get("disc_id"):
+                                                existing_active_disc.mb_disc_id = mb_result["disc_id"]
+                                                existing_active_disc.mb_toc = mb_result["toc"]
+                                                existing_active_disc.mb_lookup_status = "pending"
+                                                pending_mb_lookups.append(
+                                                    (mb_result["disc_id"], mb_result["toc"], existing_active_disc.id)
+                                                )
+                                            else:
+                                                existing_active_disc.mb_lookup_status = "error"
+                                                logger.warning(
+                                                    "Failed to compute MB disc ID for existing disc #%s: %s",
+                                                    existing_active_disc.id, mb_result.get("error"),
+                                                )
+                                    elif existing_completed_disc is not None and (
+                                        existing_completed_disc.status == DiscStatus.error
+                                        or existing_completed_disc.rip_quality == "dirty"
+                                    ):
+                                        logger.info(
+                                            "Disc %s previously had errors/dirty rip - disc #%s on "
+                                            "Drive %s, awaiting user action",
+                                            disc_fingerprint, existing_completed_disc.id, label,
+                                        )
+                                    elif existing_completed_disc is not None:
+                                        logger.info(
+                                            "Disc %s already processed as disc #%s on Drive %s - "
+                                            "ignoring reinsertion",
+                                            disc_fingerprint, existing_completed_disc.id, label,
                                         )
                                     else:
-                                        disc.mb_lookup_status = "error"
-                                        logger.warning(
-                                            "Failed to compute MB disc ID for disc #%s: %s",
-                                            disc.id, mb_result.get("error"),
+                                        disc = Disc(
+                                            type=DiscType.cd,
+                                            status=DiscStatus.queued,
+                                            drive_id=drive_id,
+                                            disc_fingerprint=disc_fingerprint,
                                         )
+                                        session.add(disc)
+                                        session.flush()
 
-                                    logger.info(
-                                        "Created disc #%s for %s (CD, %s tracks, fingerprint=%s) - "
-                                        "rip job queued, waiting for ripping to be enabled",
-                                        disc.id, label, toc["track_count"], disc_fingerprint,
-                                    )
-                                    pending_log_events.append(("disc_inserted", {
-                                        "drive_label": label,
-                                        "disc_id": disc.id,
-                                        "working_title": disc.temp_name,
-                                    }))
+                                        for track in toc["tracks"]:
+                                            duration = track["length_sectors"] / 75.0 if track["length_sectors"] else None
+                                            session.add(CDTrack(
+                                                disc_id=disc.id,
+                                                track_number=track["number"],
+                                                duration_seconds=duration,
+                                            ))
+
+                                        session.add(RipJob(
+                                            disc_id=disc.id,
+                                            drive_id=drive_id,
+                                            status=JobStatus.queued,
+                                        ))
+
+                                        mb_result = compute_mb_disc_id(device_path)
+                                        if mb_result.get("disc_id"):
+                                            disc.mb_disc_id = mb_result["disc_id"]
+                                            disc.mb_toc = mb_result["toc"]
+                                            disc.mb_lookup_status = "pending"
+                                            pending_mb_lookups.append(
+                                                (mb_result["disc_id"], mb_result["toc"], disc.id)
+                                            )
+                                        else:
+                                            disc.mb_lookup_status = "error"
+                                            logger.warning(
+                                                "Failed to compute MB disc ID for disc #%s: %s",
+                                                disc.id, mb_result.get("error"),
+                                            )
+
+                                        logger.info(
+                                            "Created disc #%s for %s (CD, %s tracks, fingerprint=%s) - "
+                                            "rip job queued, waiting for ripping to be enabled",
+                                            disc.id, label, toc["track_count"], disc_fingerprint,
+                                        )
+                                        pending_log_events.append(("disc_inserted", {
+                                            "drive_label": label,
+                                            "disc_id": disc.id,
+                                            "working_title": disc.temp_name,
+                                        }))
 
                         else:
                             logger.info(

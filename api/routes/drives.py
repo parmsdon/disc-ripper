@@ -7,7 +7,7 @@ tail) will be populated once the ripper service writes job state.
 """
 
 from flask import Blueprint, jsonify, current_app
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from common.models import Drive, Disc, DiscStatus, RipJob, JobStatus, naive_utcnow
 
@@ -54,12 +54,26 @@ def list_drives():
             .order_by(RipJob.created_at.desc())
         ).first()
 
-        # Most recent disc for this drive in an active (non-terminal) status
+        # Most recent disc for this drive in an active (non-terminal) status.
+        # Priority: actively-ripping > queued > fingerprinted over phantom.
+        _status_priority = case(
+            (Disc.status == DiscStatus.ripping,    1),
+            (Disc.status == DiscStatus.building,   2),
+            (Disc.status == DiscStatus.identifying, 3),
+            (Disc.status == DiscStatus.ripped,     4),
+            (Disc.status == DiscStatus.error,      5),
+            (Disc.status == DiscStatus.queued,     6),
+            else_=7,
+        )
+        _fingerprint_priority = case(
+            (Disc.disc_fingerprint.isnot(None), 0),
+            else_=1,
+        )
         current_disc_row = session.scalars(
             select(Disc)
             .where(Disc.drive_id == drive.id)
             .where(Disc.status.in_(_ACTIVE_STATUSES))
-            .order_by(Disc.created_at.desc())
+            .order_by(_status_priority, _fingerprint_priority, Disc.created_at.desc())
         ).first()
 
         current_disc = None
