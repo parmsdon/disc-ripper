@@ -8,7 +8,7 @@ metadata editing endpoints will be expanded in later phases.
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import and_, case, func, or_, select
 
-from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, LookupCandidate, naive_utcnow
+from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, RipJob, LookupCandidate, naive_utcnow
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -348,6 +348,67 @@ def cd_catalogue():
             "identified": disc.album_title is not None,
         })
     return jsonify(result)
+
+
+@discs_bp.route("/<int:disc_id>/retry-rip", methods=["POST"])
+def retry_rip(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    if disc.status != DiscStatus.error and disc.rip_quality != "dirty":
+        return jsonify({"error": "Disc is not in a retryable state (must be status=error or rip_quality=dirty)"}), 400
+
+    disc.status = DiscStatus.queued
+    disc.error_message = None
+    disc.rip_quality = None
+    disc.needs_rerip = False
+    disc.rip_attempt_count = (disc.rip_attempt_count or 1) + 1
+
+    if disc.type == DiscType.cd:
+        for track in disc.tracks:
+            track.rip_quality = None
+
+    session.add(RipJob(disc_id=disc.id, drive_id=disc.drive_id, status=JobStatus.queued))
+    session.commit()
+    session.refresh(disc)
+    return jsonify(_disc_to_dict(disc))
+
+
+@discs_bp.route("/<int:disc_id>/cancel-rip", methods=["POST"])
+def cancel_rip(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    if disc.status not in (DiscStatus.ripping, DiscStatus.building):
+        return jsonify({"error": "Disc is not currently ripping or building"}), 400
+
+    disc.status = DiscStatus.error
+    disc.error_message = "Cancelled by user"
+
+    active_job = next(
+        (j for j in disc.rip_jobs if j.status in (JobStatus.queued, JobStatus.running)),
+        None,
+    )
+    if active_job is not None:
+        active_job.status = JobStatus.error
+        active_job.error_message = "Cancelled by user"
+
+    if disc.drive_id is not None:
+        drive = session.get(Drive, disc.drive_id)
+        if drive is not None:
+            drive.pending_action = "eject"
+            drive.pending_action_requested_at = naive_utcnow()
+
+    session.commit()
+    return jsonify({"status": "ok"})
 
 
 @discs_bp.route("/<int:disc_id>/eject", methods=["POST"])

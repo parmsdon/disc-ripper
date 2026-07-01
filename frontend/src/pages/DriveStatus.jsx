@@ -337,7 +337,61 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasRe
 
 const _IN_PROGRESS_DISC_STATUSES = ["queued", "ripping", "building"];
 
-function DiscStatusZone({ disc }) {
+function CancelRipButton({ disc, onRefresh }) {
+  const [cancelling, setCancelling] = useState(false);
+
+  async function handleClick() {
+    setCancelling(true);
+    try {
+      await api.cancelRip(disc.id);
+      onRefresh();
+    } catch (e) {
+      console.error("Cancel rip failed:", e);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <button
+      className="cancel-rip-btn"
+      onClick={handleClick}
+      disabled={cancelling}
+      title="Cancel this rip and eject the disc"
+    >
+      {cancelling ? "Cancelling…" : "Cancel"}
+    </button>
+  );
+}
+
+function RetryRipButton({ disc, onRefresh }) {
+  const [retrying, setRetrying] = useState(false);
+
+  async function handleClick() {
+    setRetrying(true);
+    try {
+      await api.retryRip(disc.id);
+      onRefresh();
+    } catch (e) {
+      console.error("Retry rip failed:", e);
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  return (
+    <button
+      className="retry-rip-btn"
+      onClick={handleClick}
+      disabled={retrying}
+      title="Retry the rip for this disc"
+    >
+      {retrying ? "Retrying…" : "Retry Rip"}
+    </button>
+  );
+}
+
+function DiscStatusZone({ disc, onRefresh }) {
   // Not scoped to a particular status - dirty is now flagged live as
   // soon as a read error streams in (see rip_worker._flag_dirty_rip_live),
   // so this can be true while the disc is still "ripping"/"building".
@@ -345,6 +399,11 @@ function DiscStatusZone({ disc }) {
   const isRerip = disc.rip_attempt_count > 1;
   const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
   const pillLabel = reripInProgress ? "re-ripping" : disc.status;
+
+  const showCancel = disc.status === "ripping" || disc.status === "building";
+  const showRetryRip = disc.status === "error" || (
+    isDirty && disc.status !== "ripping" && disc.status !== "building" && disc.status !== "queued"
+  );
 
   return (
     <div className="disc-status-zone">
@@ -362,16 +421,21 @@ function DiscStatusZone({ disc }) {
         {isDirty && (
           <span
             className="dirty-rip-badge"
-            title="Rip completed with read errors - will be re-attempted if reinserted"
+            title="Rip completed with read errors — use Retry Rip to attempt again"
           >
             ⚠ Dirty rip
           </span>
         )}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
+        {showRetryRip && <RetryRipButton disc={disc} onRefresh={onRefresh} />}
       </div>
 
+      {disc.status === "error" && disc.error_message && (
+        <p className="error-hint">{disc.error_message}</p>
+      )}
+
       {reripInProgress && (
-        <p className="rerip-hint">Re-ripping after a previous dirty attempt</p>
+        <p className="rerip-hint">Re-ripping after a previous dirty/failed attempt</p>
       )}
 
       {disc.status === "identifying" && (
@@ -379,7 +443,10 @@ function DiscStatusZone({ disc }) {
       )}
 
       {(disc.status === "ripping" || disc.status === "building") && (
-        <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
+        <div className="progress-and-cancel">
+          <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
+          {showCancel && <CancelRipButton disc={disc} onRefresh={onRefresh} />}
+        </div>
       )}
     </div>
   );
@@ -494,7 +561,7 @@ function DrivePanel({ drive, onRefresh }) {
         ) : !disc ? (
           <span className="status-pill idle">idle</span>
         ) : (
-          <DiscStatusZone disc={disc} />
+          <DiscStatusZone disc={disc} onRefresh={onRefresh} />
         )}
       </div>
 

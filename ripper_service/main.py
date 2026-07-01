@@ -47,16 +47,15 @@ from ripper_service.udev_helper import get_drive_info
 POLL_INTERVAL_SECONDS = 3
 
 # Statuses with an outstanding RipJob that job_starter can still act on.
-# A disc that's "ripped"/"error" (rip phase concluded) shouldn't match -
-# job_starter has nothing left to pick up for it, and reinserting that
-# physical disc later (e.g. a deliberate re-rip) should get a fresh record.
 _ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.building)
 
-# Statuses where the rip phase has concluded but the disc is still
-# physically the same one we'd see again on reinsertion. needs_rerip
-# distinguishes "dirty - reuse this row for a re-rip" (below) from
-# "clean - already done, ignore reinsertion entirely".
-_COMPLETED_DISC_STATUSES = (DiscStatus.ripped, DiscStatus.identifying)
+# All non-active rip-phase statuses. Includes error and done so that a
+# re-inserted disc with a prior error/dirty record is found and held for
+# user-initiated retry rather than auto-creating a new row.
+_COMPLETED_DISC_STATUSES = (
+    DiscStatus.ripped, DiscStatus.identifying, DiscStatus.encoding,
+    DiscStatus.done, DiscStatus.error,
+)
 
 _SERVICE_STATUS_KEY = "service_status"
 _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
@@ -96,22 +95,6 @@ def _find_existing_disc(session, drive_id, disc_fingerprint):
     ).first()
     return None, completed
 
-
-def _reuse_for_rerip(session, disc, drive_id) -> int:
-    """
-    Reuse a previously-completed dirty Disc for a fresh attempt: reset
-    to queued, bump the attempt count, clear the per-attempt fields, and
-    queue a new RipJob against the same Disc (same id -> same output
-    path, so a DVD's ISO/CD's WAVs get overwritten in place rather than
-    duplicated). CDTrack rows are left as-is; job_starter re-rips only
-    the ones still imperfect/failed.
-    """
-    disc.status = DiscStatus.queued
-    disc.rip_attempt_count += 1
-    disc.error_message = None
-    disc.rip_quality = None
-    session.add(RipJob(disc_id=disc.id, drive_id=drive_id, status=JobStatus.queued))
-    return disc.rip_attempt_count
 
 
 logging.basicConfig(
@@ -235,7 +218,7 @@ def run(cfg: dict) -> None:
                             select(Disc.id)
                             .where(
                                 Disc.drive_id == drive_id,
-                                Disc.status.notin_([DiscStatus.done, DiscStatus.error]),
+                                Disc.status.notin_([DiscStatus.done]),
                             )
                             .limit(1)
                         ) is not None
@@ -278,16 +261,18 @@ def run(cfg: dict) -> None:
                                         "resuming existing record",
                                         disc_fingerprint, existing_active_disc.id, label,
                                     )
-                                elif existing_completed_disc is not None and existing_completed_disc.needs_rerip:
-                                    attempt = _reuse_for_rerip(session, existing_completed_disc, drive_id)
+                                elif existing_completed_disc is not None and (
+                                    existing_completed_disc.status == DiscStatus.error
+                                    or existing_completed_disc.rip_quality == "dirty"
+                                ):
                                     logger.info(
-                                        "Disc %s previously had a dirty rip - starting re-rip "
-                                        "attempt #%s for disc #%s",
-                                        disc_fingerprint, attempt, existing_completed_disc.id,
+                                        "Disc %s previously had errors/dirty rip - disc #%s on "
+                                        "Drive %s, awaiting user action",
+                                        disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None:
                                     logger.info(
-                                        "Disc %s already ripped cleanly as disc #%s on Drive %s - "
+                                        "Disc %s already processed as disc #%s on Drive %s - "
                                         "ignoring reinsertion",
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )
@@ -352,16 +337,18 @@ def run(cfg: dict) -> None:
                                                 "Failed to compute MB disc ID for existing disc #%s: %s",
                                                 existing_active_disc.id, mb_result.get("error"),
                                             )
-                                elif existing_completed_disc is not None and existing_completed_disc.needs_rerip:
-                                    attempt = _reuse_for_rerip(session, existing_completed_disc, drive_id)
+                                elif existing_completed_disc is not None and (
+                                    existing_completed_disc.status == DiscStatus.error
+                                    or existing_completed_disc.rip_quality == "dirty"
+                                ):
                                     logger.info(
-                                        "Disc %s previously had a dirty rip - starting re-rip "
-                                        "attempt #%s for disc #%s",
-                                        disc_fingerprint, attempt, existing_completed_disc.id,
+                                        "Disc %s previously had errors/dirty rip - disc #%s on "
+                                        "Drive %s, awaiting user action",
+                                        disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None:
                                     logger.info(
-                                        "Disc %s already ripped cleanly as disc #%s on Drive %s - "
+                                        "Disc %s already processed as disc #%s on Drive %s - "
                                         "ignoring reinsertion",
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )

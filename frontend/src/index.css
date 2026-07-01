@@ -286,6 +286,58 @@ body {
   color: var(--text-dim);
 }
 
+.progress-and-cancel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cancel-rip-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--error, #c0392b);
+  color: var(--error, #c0392b);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cancel-rip-btn:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.1);
+}
+
+.cancel-rip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.retry-rip-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.retry-rip-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.retry-rip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-hint {
+  font-size: 11px;
+  color: var(--error, #c0392b);
+  margin: 4px 0 0;
+}
+
 button:disabled {
   color: var(--text-dim);
   border-color: var(--panel-border);
