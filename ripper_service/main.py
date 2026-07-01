@@ -418,6 +418,25 @@ def run(cfg: dict) -> None:
                             )
                     elif not media_present and was_present:
                         logger.info("Disc removed from %s", label)
+                        if drive_id is not None:
+                            removed_disc = session.scalars(
+                                select(Disc)
+                                .where(Disc.drive_id == drive_id)
+                                .where(Disc.status.notin_([DiscStatus.done]))
+                                .order_by(Disc.created_at.desc())
+                                .limit(1)
+                            ).first()
+                            _TERMINAL_STATUSES = {
+                                DiscStatus.ripped, DiscStatus.identifying,
+                                DiscStatus.done, DiscStatus.error,
+                            }
+                            if removed_disc is not None and removed_disc.status in _TERMINAL_STATUSES:
+                                removed_disc.drive_id = None
+                                session.commit()
+                                logger.info(
+                                    "Dissociated disc #%s (%s) from Drive %s on removal",
+                                    removed_disc.id, removed_disc.disc_fingerprint, label,
+                                )
 
                     media_present_by_device[device_path] = media_present
 
