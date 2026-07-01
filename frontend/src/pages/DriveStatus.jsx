@@ -391,7 +391,7 @@ function RetryRipButton({ disc, onRefresh }) {
   );
 }
 
-function DiscStatusZone({ disc, onRefresh }) {
+function DiscStatusZone({ disc }) {
   // Not scoped to a particular status - dirty is now flagged live as
   // soon as a read error streams in (see rip_worker._flag_dirty_rip_live),
   // so this can be true while the disc is still "ripping"/"building".
@@ -399,11 +399,6 @@ function DiscStatusZone({ disc, onRefresh }) {
   const isRerip = disc.rip_attempt_count > 1;
   const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
   const pillLabel = reripInProgress ? "re-ripping" : disc.status;
-
-  const showCancel = disc.status === "ripping" || disc.status === "building";
-  const showRetryRip = disc.status === "error" || (
-    isDirty && disc.status !== "ripping" && disc.status !== "building" && disc.status !== "queued"
-  );
 
   return (
     <div className="disc-status-zone">
@@ -427,7 +422,6 @@ function DiscStatusZone({ disc, onRefresh }) {
           </span>
         )}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
-        {showRetryRip && <RetryRipButton disc={disc} onRefresh={onRefresh} />}
       </div>
 
       {disc.status === "error" && disc.error_message && (
@@ -443,10 +437,7 @@ function DiscStatusZone({ disc, onRefresh }) {
       )}
 
       {(disc.status === "ripping" || disc.status === "building") && (
-        <div className="progress-and-cancel">
-          <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
-          {showCancel && <CancelRipButton disc={disc} onRefresh={onRefresh} />}
-        </div>
+        <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
       )}
     </div>
   );
@@ -553,6 +544,22 @@ function DrivePanel({ drive, onRefresh }) {
         <RegionBadge drive={drive} onRefresh={onRefresh} />
       </div>
 
+      <div className="drive-row-action">
+        {disc && (disc.status === "ripping" || disc.status === "building") && (
+          <CancelRipButton disc={disc} onRefresh={onRefresh} />
+        )}
+        {disc && (
+          disc.status === "error" || (
+            disc.rip_quality === "dirty"
+            && disc.status !== "ripping"
+            && disc.status !== "building"
+            && disc.status !== "queued"
+          )
+        ) && (
+          <RetryRipButton disc={disc} onRefresh={onRefresh} />
+        )}
+      </div>
+
       <div className="drive-row-status">
         {drive.tray_open ? (
           <span className="status-pill open">Open</span>
@@ -561,7 +568,7 @@ function DrivePanel({ drive, onRefresh }) {
         ) : !disc ? (
           <span className="status-pill idle">idle</span>
         ) : (
-          <DiscStatusZone disc={disc} onRefresh={onRefresh} />
+          <DiscStatusZone disc={disc} />
         )}
       </div>
 

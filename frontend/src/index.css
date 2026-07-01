@@ -286,12 +286,6 @@ body {
   color: var(--text-dim);
 }
 
-.progress-and-cancel {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .cancel-rip-btn {
   font-size: 11px;
   padding: 2px 8px;
@@ -419,7 +413,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 140px minmax(160px, 1fr) 480px 36px;
+  grid-template-columns: 140px 140px 100px minmax(160px, 1fr) 480px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
@@ -466,6 +460,14 @@ button:disabled {
 }
 
 .drive-row-region {
+  min-width: 0;
+}
+
+.drive-row-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
 }
 
