@@ -28,7 +28,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from common.config import load_config
 from common.models import CDTrack, Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob, Setting
@@ -277,6 +277,9 @@ def run(cfg: dict) -> None:
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 else:
+                                    session.execute(
+                                        update(Disc).where(Disc.drive_id == drive_id).values(drive_id=None)
+                                    )
                                     disc = Disc(
                                         type=DiscType.dvd,
                                         status=DiscStatus.queued,
@@ -361,6 +364,9 @@ def run(cfg: dict) -> None:
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
                                     else:
+                                        session.execute(
+                                            update(Disc).where(Disc.drive_id == drive_id).values(drive_id=None)
+                                        )
                                         disc = Disc(
                                             type=DiscType.cd,
                                             status=DiscStatus.queued,
