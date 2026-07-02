@@ -265,14 +265,12 @@ def run(cfg: dict) -> None:
                                     existing_completed_disc.status == DiscStatus.error
                                     or existing_completed_disc.rip_quality == "dirty"
                                 ):
-                                    existing_completed_disc.drive_id = drive_id
                                     logger.info(
                                         "Disc %s previously had errors/dirty rip - disc #%s on "
                                         "Drive %s, awaiting user action",
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None:
-                                    existing_completed_disc.drive_id = drive_id
                                     logger.info(
                                         "Disc %s already processed as disc #%s on Drive %s - "
                                         "ignoring reinsertion",
@@ -357,14 +355,12 @@ def run(cfg: dict) -> None:
                                         existing_completed_disc.status == DiscStatus.error
                                         or existing_completed_disc.rip_quality == "dirty"
                                     ):
-                                        existing_completed_disc.drive_id = drive_id
                                         logger.info(
                                             "Disc %s previously had errors/dirty rip - disc #%s on "
                                             "Drive %s, awaiting user action",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
                                     elif existing_completed_disc is not None:
-                                        existing_completed_disc.drive_id = drive_id
                                         logger.info(
                                             "Disc %s already processed as disc #%s on Drive %s - "
                                             "ignoring reinsertion",
@@ -437,15 +433,10 @@ def run(cfg: dict) -> None:
                             removed_disc = session.scalars(
                                 select(Disc)
                                 .where(Disc.drive_id == drive_id)
-                                .where(Disc.status.notin_([DiscStatus.done]))
                                 .order_by(Disc.created_at.desc())
                                 .limit(1)
                             ).first()
-                            _TERMINAL_STATUSES = {
-                                DiscStatus.ripped, DiscStatus.identifying,
-                                DiscStatus.done, DiscStatus.error,
-                            }
-                            if removed_disc is not None and removed_disc.status in _TERMINAL_STATUSES:
+                            if removed_disc is not None:
                                 removed_disc.drive_id = None
                                 session.commit()
                                 logger.info(

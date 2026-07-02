@@ -305,6 +305,15 @@ def _fail_job(rip_job_id, label, result, scratch_dir, session_factory) -> None:
 _NEEDS_RIP_TRACK_QUALITIES = (None, RipQuality.imperfect, RipQuality.failed)
 
 
+def _disc_still_on_drive(disc_id, expected_drive_id, session_factory) -> bool:
+    session = session_factory()
+    try:
+        disc = session.get(Disc, disc_id)
+        return disc is not None and disc.drive_id == expected_drive_id
+    finally:
+        session.close()
+
+
 def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty, session_factory) -> None:
     session = session_factory()
     try:
@@ -318,6 +327,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
             return
         disc_id = disc.id
         working_title = disc.temp_name
+        expected_drive_id = rip_job.drive_id
 
         # Fresh disc: every track has rip_quality=None, so all of them
         # need ripping. Re-rip of a dirty disc: only the imperfect/failed
@@ -407,6 +417,11 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     # Phase 2 (building): move ripped WAVs from scratch to their final NFS
     # location. The disc shows "building" while the move is in progress.
     _mark_cd_building(rip_job_id, disc_id, label, session_factory)
+    if not _disc_still_on_drive(disc_id, expected_drive_id, session_factory):
+        logger.warning(
+            "Disc #%s removed from drive during ripping phase - completing WAV move to NFS anyway",
+            disc_id,
+        )
     total_to_move = len(ripped_in_this_run)
     logger.info("Moving %d WAV file(s) to NFS for disc #%s (%s)", total_to_move, disc_id, label)
     _update_rip_job_progress(rip_job_id, 0, "Moving tracks to library", session_factory)
