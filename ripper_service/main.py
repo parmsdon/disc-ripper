@@ -477,6 +477,15 @@ def run(cfg: dict) -> None:
                                     "Tray opened on %s while job was queued — pausing until disc reseated",
                                     label,
                                 )
+                    if not tray_open and tray_was_open and not media_present and drive_id is not None:
+                        session.execute(
+                            update(Disc)
+                            .where(Disc.drive_id == drive_id)
+                            .values(drive_id=None)
+                        )
+                        session.commit()
+                        logger.info("Drive %s tray closed empty - cleared stale disc association", label)
+
                     tray_open_by_device[device_path] = tray_open
 
                     # Persist current media presence and tray state so the
