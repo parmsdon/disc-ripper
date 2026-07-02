@@ -62,12 +62,13 @@ _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
 
 
-def _find_existing_disc(session, drive_id, disc_fingerprint):
+def _find_existing_disc(session, disc_fingerprint):
     """
-    Look up an existing Disc for (drive_id, disc_fingerprint) - shared by
-    the DVD and CD detection branches below. An active disc (still has
-    outstanding work) takes priority over a completed one. Returns
-    (active_disc_or_None, completed_disc_or_None) - at most one is set.
+    Look up an existing Disc by fingerprint alone - shared by the DVD and
+    CD detection branches below. drive_id is intentionally excluded: it
+    gets cleared on removal and is unreliable for dedup; fingerprint is
+    the stable, correct key. An active disc takes priority over a completed
+    one. Returns (active_disc_or_None, completed_disc_or_None).
     """
     if not disc_fingerprint:
         return None, None
@@ -75,7 +76,6 @@ def _find_existing_disc(session, drive_id, disc_fingerprint):
     active = session.scalars(
         select(Disc)
         .where(
-            Disc.drive_id == drive_id,
             Disc.disc_fingerprint == disc_fingerprint,
             Disc.status.in_(_ACTIVE_DISC_STATUSES),
         )
@@ -87,7 +87,6 @@ def _find_existing_disc(session, drive_id, disc_fingerprint):
     completed = session.scalars(
         select(Disc)
         .where(
-            Disc.drive_id == drive_id,
             Disc.disc_fingerprint == disc_fingerprint,
             Disc.status.in_(_COMPLETED_DISC_STATUSES),
         )
@@ -252,10 +251,11 @@ def run(cfg: dict) -> None:
                                 # identifier we can't safely dedup, so fall back
                                 # to the old create-new behavior in that case.
                                 existing_active_disc, existing_completed_disc = _find_existing_disc(
-                                    session, drive_id, disc_fingerprint,
+                                    session, disc_fingerprint,
                                 )
 
                                 if existing_active_disc is not None:
+                                    existing_active_disc.drive_id = drive_id
                                     logger.info(
                                         "Disc %s already tracked as disc #%s on Drive %s, "
                                         "resuming existing record",
@@ -265,21 +265,20 @@ def run(cfg: dict) -> None:
                                     existing_completed_disc.status == DiscStatus.error
                                     or existing_completed_disc.rip_quality == "dirty"
                                 ):
+                                    existing_completed_disc.drive_id = drive_id
                                     logger.info(
                                         "Disc %s previously had errors/dirty rip - disc #%s on "
                                         "Drive %s, awaiting user action",
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None:
+                                    existing_completed_disc.drive_id = drive_id
                                     logger.info(
                                         "Disc %s already processed as disc #%s on Drive %s - "
                                         "ignoring reinsertion",
                                         disc_fingerprint, existing_completed_disc.id, label,
                                     )
                                 else:
-                                    session.execute(
-                                        update(Disc).where(Disc.drive_id == drive_id).values(drive_id=None)
-                                    )
                                     disc = Disc(
                                         type=DiscType.dvd,
                                         status=DiscStatus.queued,
@@ -288,6 +287,11 @@ def run(cfg: dict) -> None:
                                     )
                                     session.add(disc)
                                     session.flush()
+                                    session.execute(
+                                        update(Disc)
+                                        .where(Disc.drive_id == drive_id, Disc.id != disc.id)
+                                        .values(drive_id=None)
+                                    )
 
                                     # RipJob starts queued - job_starter promotes
                                     # it to running once ripping_enabled is true
@@ -322,10 +326,11 @@ def run(cfg: dict) -> None:
                                     # Skip disc creation; tray/presence tracking still runs below.
                                 else:
                                     existing_active_disc, existing_completed_disc = _find_existing_disc(
-                                        session, drive_id, disc_fingerprint,
+                                        session, disc_fingerprint,
                                     )
 
                                     if existing_active_disc is not None:
+                                        existing_active_disc.drive_id = drive_id
                                         logger.info(
                                             "Disc %s already tracked as disc #%s on Drive %s, "
                                             "resuming existing record",
@@ -352,21 +357,20 @@ def run(cfg: dict) -> None:
                                         existing_completed_disc.status == DiscStatus.error
                                         or existing_completed_disc.rip_quality == "dirty"
                                     ):
+                                        existing_completed_disc.drive_id = drive_id
                                         logger.info(
                                             "Disc %s previously had errors/dirty rip - disc #%s on "
                                             "Drive %s, awaiting user action",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
                                     elif existing_completed_disc is not None:
+                                        existing_completed_disc.drive_id = drive_id
                                         logger.info(
                                             "Disc %s already processed as disc #%s on Drive %s - "
                                             "ignoring reinsertion",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
                                     else:
-                                        session.execute(
-                                            update(Disc).where(Disc.drive_id == drive_id).values(drive_id=None)
-                                        )
                                         disc = Disc(
                                             type=DiscType.cd,
                                             status=DiscStatus.queued,
@@ -375,6 +379,11 @@ def run(cfg: dict) -> None:
                                         )
                                         session.add(disc)
                                         session.flush()
+                                        session.execute(
+                                            update(Disc)
+                                            .where(Disc.drive_id == drive_id, Disc.id != disc.id)
+                                            .values(drive_id=None)
+                                        )
 
                                         for track in toc["tracks"]:
                                             duration = track["length_sectors"] / 75.0 if track["length_sectors"] else None
