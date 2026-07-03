@@ -890,8 +890,8 @@ button:disabled {
 }
 
 .queue-entry-type-badge.cd {
-  background: rgba(76, 175, 109, 0.15);
-  color: var(--good);
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
 }
 
 .queue-entry-info {
