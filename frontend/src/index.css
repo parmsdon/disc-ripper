@@ -690,6 +690,21 @@ button:disabled {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.catalogue-filter-group-labeled {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalogue-filter-group-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .catalogue-filters {

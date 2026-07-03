@@ -27,19 +27,20 @@ export default function DvdCatalogue() {
   const [loadError, setLoadError] = useState(null);
   const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped"
   const [idStatus, setIdStatus] = useState(null);     // null | "identified" | "unidentified"
+  const [mmStatus, setMmStatus] = useState(null);     // null | "matched" | "unmatched"
   const [search, setSearch] = useState("");
 
-  const fetchRows = useCallback((rs, is, s) => {
-    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, search: s })
+  const fetchRows = useCallback((rs, is, ms, s) => {
+    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, mmStatus: ms, search: s })
       .then((data) => { setRows(data); setLoadError(null); })
       .catch((e) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, search), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, mmStatus, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [ripStatus, idStatus, search, fetchRows]);
+  }, [ripStatus, idStatus, mmStatus, search, fetchRows]);
 
   const refreshSyncStatus = useCallback(() => {
     api.getSyncStatus().then(setSyncStatus).catch(() => {});
@@ -52,11 +53,11 @@ export default function DvdCatalogue() {
     pollRef.current = setInterval(() => {
       api.getSyncStatus().then((data) => {
         setSyncStatus(data);
-        if (!data.running) fetchRows(ripStatus, idStatus, search);
+        if (!data.running) fetchRows(ripStatus, idStatus, mmStatus, search);
       }).catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
-  }, [syncStatus?.running, fetchRows, ripStatus, idStatus, search]);
+  }, [syncStatus?.running, fetchRows, ripStatus, idStatus, mmStatus, search]);
 
   async function handleSyncNow() {
     setTriggering(true);
@@ -137,6 +138,20 @@ export default function DvdCatalogue() {
                   {label}
                 </button>
               ))}
+            </div>
+            <div className="catalogue-filter-group-labeled">
+              <span className="catalogue-filter-group-label">My Movies:</span>
+              <div className="catalogue-filters">
+                {[["matched", "Matched"], ["unmatched", "Unmatched"]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`catalogue-filter-btn${mmStatus === key ? " active" : ""}`}
+                    onClick={() => { setMmStatus((v) => (v === key ? null : key)); setLoading(true); }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <input
