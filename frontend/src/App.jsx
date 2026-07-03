@@ -10,6 +10,7 @@ import DvdCatalogue from "./pages/DvdCatalogue.jsx";
 import CdCatalogue from "./pages/CdCatalogue.jsx";
 import DataEditing from "./pages/DataEditing.jsx";
 import Log from "./pages/Log.jsx";
+import Audit from "./pages/Audit.jsx";
 
 const TABS = [
   { path: "/drive-status", label: "Drive Status" },
@@ -20,6 +21,7 @@ const TABS = [
   { path: "/cd-catalogue", label: "CD Catalogue" },
   { path: "/data-editing", label: "Identification" },
   { path: "/log", label: "Log" },
+  { path: "/audit", label: "Audit" },
 ];
 
 const THEME_STORAGE_KEY = "discripper-theme";
@@ -145,6 +147,7 @@ export default function App() {
             <Route path="/cd-catalogue" element={<CdCatalogue />} />
             <Route path="/data-editing" element={<DataEditing />} />
             <Route path="/log" element={<Log />} />
+            <Route path="/audit" element={<Audit />} />
           </Routes>
         </main>
       </div>

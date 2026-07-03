@@ -95,4 +95,5 @@ export const api = {
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
   getOldIsos: () => request("/discs/old-isos"),
   reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
+  getAudit: () => request("/audit/"),
 };
