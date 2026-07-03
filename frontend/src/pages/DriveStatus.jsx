@@ -518,7 +518,7 @@ function MbPopover({ candidates, onSelect, onClose }) {
 
 function MatchIsoPanel({ drive, oldIsos, onClose, onSuccess }) {
   const disc = drive.current_disc;
-  const [titleValue, setTitleValue] = useState(disc?.disc_fingerprint || "");
+  const [titleValue, setTitleValue] = useState(disc?.temp_name || "");
   const [selectedIso, setSelectedIso] = useState(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -656,7 +656,12 @@ function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
           <RetryRipButton disc={disc} onRefresh={onRefresh} />
         )}
         {reconcileMode && disc && disc.type === "dvd" && disc.disc_fingerprint && (
-          <button className="match-iso-btn" onClick={() => onMatchIso(drive)}>
+          <button
+            className="match-iso-btn"
+            onClick={() => onMatchIso(drive)}
+            disabled={!disc.temp_name}
+            title={!disc.temp_name ? "Set a working title before matching" : "Match an existing ISO to this disc"}
+          >
             Match ISO
           </button>
         )}
