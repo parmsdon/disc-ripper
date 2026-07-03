@@ -9,18 +9,18 @@ cd_encoding_enabled and max_dvd_encoders / max_cd_encoders settings,
 and enforces dependency ordering (a job whose profile depends_on another
 profile is not started until that profile's job is done on the same disc).
 
+CD encoding (FLAC via flac, MP3 via ffmpeg/libmp3lame) is implemented.
+DVD encoding is stubbed and will be implemented in the DVD encoding phase.
+
 Uses separate settings keys from ripper_service to avoid collisions:
     encoder_service_status:     "running" | "stopped"
     encoder_service_heartbeat:  ISO timestamp, refreshed every poll
     encoder_service_command:    "" | "exit"
-
-Actual encode workers (handbrake / ffmpeg / flac subprocess wrappers) are
-not yet implemented - this skeleton logs the jobs it would start and leaves
-a clear hook (start_encode_worker) for Phase 3.
 """
 
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -30,6 +30,8 @@ from sqlalchemy.orm import sessionmaker
 from common.config import load_config, get_db_url
 from common.encode_queue import get_next_encode_jobs
 from common.models import EncodeJob, JobStatus, Setting
+from encoder_service.cd_encoder import encode_cd_track
+from encoder_service.job_rollback import rollback_encode_job
 
 POLL_INTERVAL_SECONDS = 5
 
@@ -84,29 +86,24 @@ def _get_command(session) -> str:
     return setting.value if setting else ""
 
 
-def start_encode_worker(job: EncodeJob) -> None:
-    """
-    Placeholder hook for Phase 3: spawn a worker thread that runs
-    handbrake / ffmpeg / flac for the given EncodeJob and updates
-    job.status / progress_percent / progress_stage / log on the fly.
-    """
-    raise NotImplementedError("Encode workers not yet implemented")
-
-
 def shutdown(Session: sessionmaker) -> None:
     """
-    Roll back any stale running jobs, mark service stopped, write final heartbeat.
+    Roll back all running encode jobs (DB query is the source of truth —
+    we don't rely on in-memory thread state so this is safe on KeyboardInterrupt
+    too), mark service stopped, write final heartbeat.
     """
+    # Find running jobs via DB, then reset each via the canonical rollback path.
     with Session() as session:
-        stale = session.scalars(
-            select(EncodeJob).where(EncodeJob.status == JobStatus.running)
-        ).all()
-        for job in stale:
-            job.status = JobStatus.queued
-            job.started_at = None
-            job.progress_percent = None
-            job.progress_stage = None
+        running_ids = [
+            job.id for job in session.scalars(
+                select(EncodeJob).where(EncodeJob.status == JobStatus.running)
+            ).all()
+        ]
 
+    for job_id in running_ids:
+        rollback_encode_job(job_id, Session)
+
+    with Session() as session:
         _set_setting(session, _STATUS_KEY, "stopped")
         _set_setting(session, _HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())
         _set_setting(session, _COMMAND_KEY, "")
@@ -140,43 +137,51 @@ def run(cfg: dict) -> None:
 
     logger.info("Encoder service started (env=%s)", cfg["environment"])
 
-    # IDs of EncodeJobs dispatched to worker threads; guards against
-    # double-dispatch across poll iterations.
-    running_job_ids: set[int] = set()
+    # {job_id: Thread} for each dispatched CD encode job.
+    # Reaped each poll by checking thread.is_alive().
+    running_cd_jobs: dict[int, threading.Thread] = {}
 
     while True:
         try:
+            # Reap threads that finished since the last poll.
+            finished = [jid for jid, t in running_cd_jobs.items() if not t.is_alive()]
+            for jid in finished:
+                del running_cd_jobs[jid]
+
             with Session() as session:
                 dvd_enabled = _get_bool(session, _DVD_ENCODING_ENABLED_KEY, False)
                 cd_enabled = _get_bool(session, _CD_ENCODING_ENABLED_KEY, False)
                 max_dvd = _get_int(session, _MAX_DVD_ENCODERS_KEY, _DEFAULT_MAX_DVD_ENCODERS)
                 max_cd = _get_int(session, _MAX_CD_ENCODERS_KEY, _DEFAULT_MAX_CD_ENCODERS)
 
-                for media_type, enabled, max_slots in (
-                    ("dvd", dvd_enabled, max_dvd),
-                    ("cd", cd_enabled, max_cd),
-                ):
-                    if not enabled:
-                        continue
-
-                    active_count = len(running_job_ids)
-                    if active_count >= max_slots:
-                        continue
-
-                    jobs = get_next_encode_jobs(
-                        session,
-                        media_type,
-                        max_slots - active_count,
-                        list(running_job_ids),
-                    )
-                    for job in jobs:
-                        logger.info(
-                            "TODO: start encode job %s (disc #%s, profile_id=%s, track_id=%s)",
-                            job.id, job.disc_id, job.profile_id, job.track_id,
+                # --- CD encoding ---
+                if cd_enabled:
+                    slots_free = max_cd - len(running_cd_jobs)
+                    if slots_free > 0:
+                        cd_jobs = get_next_encode_jobs(
+                            session, "cd", slots_free, list(running_cd_jobs.keys())
                         )
-                        # Phase 3: uncomment when workers are ready.
-                        # start_encode_worker(job)
-                        # running_job_ids.add(job.id)
+                        for job in cd_jobs:
+                            thread = threading.Thread(
+                                target=encode_cd_track,
+                                args=(job.id, Session),
+                                daemon=True,
+                            )
+                            thread.start()
+                            running_cd_jobs[job.id] = thread
+                            logger.info(
+                                "Started CD encode job %s (disc #%s, track_id=%s, profile_id=%s)",
+                                job.id, job.disc_id, job.track_id, job.profile_id,
+                            )
+
+                # --- DVD encoding (not yet implemented) ---
+                if dvd_enabled:
+                    dvd_jobs = get_next_encode_jobs(session, "dvd", max_dvd, [])
+                    for job in dvd_jobs:
+                        logger.info(
+                            "TODO: DVD encode job %s (disc #%s, profile_id=%s) - not yet implemented",
+                            job.id, job.disc_id, job.profile_id,
+                        )
 
             with Session() as session:
                 _set_setting(session, _HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())

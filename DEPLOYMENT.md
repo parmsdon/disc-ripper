@@ -22,6 +22,10 @@ sudo dnf install -y git
 sudo dnf install -y python3 python3-pip python3-psycopg2 postgresql postgresql-server nodejs npm
 sudo postgresql-setup --initdb
 sudo systemctl enable --now postgresql
+
+# Audio encoding tools (required by encoder_service for CD FLAC/MP3 output)
+sudo dnf install -y ffmpeg flac
+# HandBrakeCLI will be added in the DVD encoding phase
 ```
 
 ### Create the dev database/user
