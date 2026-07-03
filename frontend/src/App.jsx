@@ -16,12 +16,12 @@ const TABS = [
   { path: "/drive-status", label: "Drive Status" },
   { path: "/dvd-encoders", label: "DVD Encoders" },
   { path: "/cd-encoders", label: "CD Encoders" },
-  { path: "/db-health", label: "DB Health" },
   { path: "/dvd-catalogue", label: "DVD Catalogue" },
   { path: "/cd-catalogue", label: "CD Catalogue" },
   { path: "/data-editing", label: "Identification" },
-  { path: "/log", label: "Log" },
+  { path: "/db-health", label: "Health" },
   { path: "/audit", label: "Audit" },
+  { path: "/log", label: "Log" },
 ];
 
 const THEME_STORAGE_KEY = "discripper-theme";
