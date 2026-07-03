@@ -66,7 +66,7 @@ function RippingToggle({ rippingEnabled, saving, onToggle }) {
   );
 }
 
-const HEARTBEAT_STALE_THRESHOLD_MS = 10000;
+const HEARTBEAT_STALE_THRESHOLD_MS = 60000;
 
 function ServiceStatusIndicator({ serviceStatus, serviceHeartbeat, saving, onStop }) {
   const [now, setNow] = useState(Date.now());
@@ -404,8 +404,11 @@ function DiscStatusZone({ disc }) {
     <div className="disc-status-zone">
       <div className="disc-status-row">
         <span className={`status-pill ${disc.status}`}>{pillLabel}</span>
+        {disc.type ? (
+          <span className={`queue-entry-type-badge ${disc.type}`}>{disc.type.toUpperCase()}</span>
+        ) : null}
         <span className="disc-id-label">
-          {disc.type ? disc.type.toUpperCase() : "Disc"} #{disc.id}
+          #{disc.id}
           {disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
         </span>
         {disc.temp_name && (

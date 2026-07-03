@@ -208,6 +208,11 @@ body {
   color: var(--good);
 }
 
+.status-pill.ripped {
+  background: rgba(56, 178, 172, 0.15);
+  color: #4db6ac;
+}
+
 .status-pill.error,
 .status-pill.failed {
   background: rgba(224, 92, 92, 0.15);
