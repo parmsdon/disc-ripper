@@ -258,16 +258,36 @@ def reconcile_disc():
         return jsonify({"error": f"ISO not found: {old_iso_filename}"}), 404
 
     now = naive_utcnow()
-    disc = Disc(
-        type=DiscType.dvd,
-        status=DiscStatus.ripped,
-        drive_id=drive_id,
-        disc_fingerprint=disc_fingerprint,
-        temp_name=temp_name,
-        ripped_at=now,
+
+    existing = session.scalar(
+        select(Disc)
+        .where(Disc.disc_fingerprint == disc_fingerprint, Disc.type == DiscType.dvd)
+        .order_by(Disc.created_at.asc())
+        .limit(1)
     )
-    session.add(disc)
-    session.flush()
+
+    if existing is not None:
+        disc = existing
+        disc.status = DiscStatus.ripped
+        disc.temp_name = temp_name
+        disc.drive_id = drive_id
+        disc.ripped_at = now
+        session.execute(
+            update(RipJob)
+            .where(RipJob.disc_id == disc.id, RipJob.status == JobStatus.queued)
+            .values(status=JobStatus.done, error_message="Superseded by manual reconciliation")
+        )
+    else:
+        disc = Disc(
+            type=DiscType.dvd,
+            status=DiscStatus.ripped,
+            drive_id=drive_id,
+            disc_fingerprint=disc_fingerprint,
+            temp_name=temp_name,
+            ripped_at=now,
+        )
+        session.add(disc)
+        session.flush()
 
     dst_dir = datastore_root / "dvd_store" / "raw" / str(disc.id)
     dst = dst_dir / f"{disc_fingerprint}.iso"
