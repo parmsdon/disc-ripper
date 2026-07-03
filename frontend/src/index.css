@@ -678,6 +678,12 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+.catalogue-filter-groups {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .catalogue-filters {
   display: flex;
   gap: 6px;

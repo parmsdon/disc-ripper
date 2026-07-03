@@ -87,8 +87,14 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/log/${qs ? `?${qs}` : ""}`);
   },
-  getDvdCatalogue: (filter, search) =>
-    request(`/catalog/dvd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  getDvdCatalogue: ({ ripStatus, idStatus, search } = {}) => {
+    const p = new URLSearchParams();
+    if (ripStatus) p.set("rip_status", ripStatus);
+    if (idStatus) p.set("id_status", idStatus);
+    if (search) p.set("search", search);
+    const qs = p.toString();
+    return request(`/catalog/dvd-catalogue${qs ? `?${qs}` : ""}`);
+  },
   getCdCatalogue: (filter, search) =>
     request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),

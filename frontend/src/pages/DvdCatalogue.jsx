@@ -4,14 +4,6 @@ import { api } from "../api/client";
 const SEARCH_DEBOUNCE_MS = 300;
 const POLL_INTERVAL_MS = 3000;
 
-const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "ripped", label: "Ripped" },
-  { key: "identified", label: "Identified" },
-  { key: "unidentified", label: "Unidentified" },
-  { key: "unripped", label: "Unripped" },
-];
-
 function formatDate(isoStr) {
   if (!isoStr) return null;
   const d = new Date(isoStr);
@@ -33,20 +25,21 @@ export default function DvdCatalogue() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [filter, setFilter] = useState("all");
+  const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped"
+  const [idStatus, setIdStatus] = useState(null);     // null | "identified" | "unidentified"
   const [search, setSearch] = useState("");
 
-  const fetchRows = useCallback((f, s) => {
-    api.getDvdCatalogue(f, s)
+  const fetchRows = useCallback((rs, is, s) => {
+    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, search: s })
       .then((data) => { setRows(data); setLoadError(null); })
       .catch((e) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    const handle = setTimeout(() => fetchRows(filter, search), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [filter, search, fetchRows]);
+  }, [ripStatus, idStatus, search, fetchRows]);
 
   const refreshSyncStatus = useCallback(() => {
     api.getSyncStatus().then(setSyncStatus).catch(() => {});
@@ -59,11 +52,11 @@ export default function DvdCatalogue() {
     pollRef.current = setInterval(() => {
       api.getSyncStatus().then((data) => {
         setSyncStatus(data);
-        if (!data.running) fetchRows(filter, search);
+        if (!data.running) fetchRows(ripStatus, idStatus, search);
       }).catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
-  }, [syncStatus?.running, fetchRows, filter, search]);
+  }, [syncStatus?.running, fetchRows, ripStatus, idStatus, search]);
 
   async function handleSyncNow() {
     setTriggering(true);
@@ -122,16 +115,29 @@ export default function DvdCatalogue() {
       <div className="panel">
         <h2>DVD Catalogue</h2>
         <div className="catalogue-toolbar">
-          <div className="catalogue-filters">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                className={`catalogue-filter-btn${filter === f.key ? " active" : ""}`}
-                onClick={() => { setFilter(f.key); setLoading(true); }}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="catalogue-filter-groups">
+            <div className="catalogue-filters">
+              {[["ripped", "Ripped"], ["unripped", "Unripped"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`catalogue-filter-btn${ripStatus === key ? " active" : ""}`}
+                  onClick={() => { setRipStatus((v) => (v === key ? null : key)); setLoading(true); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="catalogue-filters">
+              {[["identified", "Identified"], ["unidentified", "Unidentified"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`catalogue-filter-btn${idStatus === key ? " active" : ""}`}
+                  onClick={() => { setIdStatus((v) => (v === key ? null : key)); setLoading(true); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <input
             type="text"
