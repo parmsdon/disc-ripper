@@ -2,6 +2,7 @@
 Seed script - populates initial reference data:
   - encode_profiles (Phase 2/3 targets; safe to run now, unused until then)
   - drives (from config/<env>.yaml drive list)
+  - settings (default values; skipped if already set)
 
 Usage:
     DISCRIPPER_ENV=dev python3 scripts/seed.py
@@ -17,23 +18,60 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
-from common.models import Drive, EncodeProfile, DiscType, EncodeTarget, Setting
+from common.models import Drive, EncodeProfile, DiscType, Setting
 
-
-DEFAULT_ENCODE_PROFILES = [
+# depends_on_name is resolved at seed time to depends_on_profile_id;
+# profiles must appear before any profile that depends on them.
+ENCODE_PROFILES = [
     {
-        "name": "flac",
-        "target": EncodeTarget.audio,
-        "format": "flac",
-        "params": {"compression_level": 5},
-        "output_subfolder": "flac",
+        "name": "DVD Extract",
+        "media_type": "dvd",
+        "output_folder": "dvd_store/extract",
+        "tool": "handbrake",
+        "tool_params": '{"extra_args": ["--main-feature", "--no-dvdnav", "-f", "av_mkv"]}',
+        "depends_on_name": None,
+        "enabled": True,
+        "display_order": 1,
     },
     {
-        "name": "mp3_320",
-        "target": EncodeTarget.audio,
-        "format": "mp3",
-        "params": {"bitrate_kbps": 320},
-        "output_subfolder": "mp3_320",
+        "name": "DVD Plex",
+        "media_type": "dvd",
+        "output_folder": "dvd_store/plex",
+        "tool": "handbrake",
+        "tool_params": '{"preset": "H.264 MKV 1080p30"}',
+        "depends_on_name": "DVD Extract",
+        "enabled": True,
+        "display_order": 2,
+    },
+    {
+        "name": "DVD iPhone",
+        "media_type": "dvd",
+        "output_folder": "dvd_store/iphone",
+        "tool": "handbrake",
+        "tool_params": '{"preset": "Apple 1080p60 Surround"}',
+        "depends_on_name": "DVD Extract",
+        "enabled": True,
+        "display_order": 3,
+    },
+    {
+        "name": "CD FLAC",
+        "media_type": "cd",
+        "output_folder": "cd_store/flac",
+        "tool": "flac",
+        "tool_params": '{"compression": 8}',
+        "depends_on_name": None,
+        "enabled": True,
+        "display_order": 4,
+    },
+    {
+        "name": "CD MP3 320",
+        "media_type": "cd",
+        "output_folder": "cd_store/mp3_320",
+        "tool": "ffmpeg",
+        "tool_params": '{"bitrate": "320k", "codec": "libmp3lame"}',
+        "depends_on_name": None,
+        "enabled": True,
+        "display_order": 5,
     },
 ]
 
@@ -46,6 +84,10 @@ DEFAULT_SETTINGS = [
     {"key": "service_status", "value": "stopped"},
     {"key": "service_command", "value": ""},
     {"key": "service_heartbeat", "value": ""},
+    {"key": "dvd_encoding_enabled", "value": "false"},
+    {"key": "cd_encoding_enabled", "value": "false"},
+    {"key": "max_dvd_encoders", "value": "1"},
+    {"key": "max_cd_encoders", "value": "2"},
 ]
 
 
@@ -55,16 +97,27 @@ def seed(env: str):
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    # Encode profiles
-    for profile_data in DEFAULT_ENCODE_PROFILES:
+    # Encode profiles — flush after each insert so depends_on_profile_id
+    # can reference IDs that were just created in this run.
+    name_to_id: dict[str, int] = {}
+    for profile_data in ENCODE_PROFILES:
         existing = session.scalar(
             select(EncodeProfile).where(EncodeProfile.name == profile_data["name"])
         )
         if existing:
+            name_to_id[existing.name] = existing.id
             print(f"Encode profile '{profile_data['name']}' already exists, skipping")
             continue
-        session.add(EncodeProfile(**profile_data))
-        print(f"Added encode profile '{profile_data['name']}'")
+
+        depends_on_name = profile_data.get("depends_on_name")
+        data = {k: v for k, v in profile_data.items() if k != "depends_on_name"}
+        data["depends_on_profile_id"] = name_to_id.get(depends_on_name) if depends_on_name else None
+
+        profile = EncodeProfile(**data)
+        session.add(profile)
+        session.flush()
+        name_to_id[profile.name] = profile.id
+        print(f"Added encode profile '{profile.name}' (id={profile.id})")
 
     # Settings
     for setting_data in DEFAULT_SETTINGS:
