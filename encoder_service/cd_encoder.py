@@ -283,7 +283,10 @@ def encode_cd_track(job_id: int, session_factory) -> None:
     cfg = load_config(os.environ.get("DISCRIPPER_ENV"))
     datastore_root = cfg["storage"]["datastore_root"]
 
-    # Load job, profile, track and disc in one session.
+    # Load job, profile, track and disc in one session, then extract every
+    # needed attribute as a plain Python value before session.close().
+    # Accessing ORM relationship attributes after the session closes raises
+    # DetachedInstanceError.
     session = session_factory()
     try:
         job = session.get(EncodeJob, job_id)
@@ -291,9 +294,7 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             logger.error("EncodeJob %s not found", job_id)
             return
 
-        profile = job.profile
         track = job.track
-
         if track is None:
             _set_job_error(job_id, "No CDTrack linked to this encode job", session_factory)
             return
@@ -306,14 +307,27 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             _set_job_error(job_id, "No Disc linked to this track", session_factory)
             return
 
+        # Snapshot all ORM attributes as plain Python values.
+        tool         = job.profile.tool
+        profile_name = job.profile.name
+        tool_params  = json.loads(job.profile.tool_params or '{}')
+        output_folder = job.profile.output_folder
+        wav_filename  = track.wav_filename
+        track_number  = track.track_number
+        disc_id       = job.disc_id        # scalar FK, safe but snapshot anyway
+        disc_raw_path = disc.raw_path
+        duration      = track.duration_seconds
+
         # Resolve paths.
-        input_wav = str(Path(datastore_root) / disc.raw_path / track.wav_filename)
-        ext = "flac" if profile.tool == "flac" else "mp3"
-        track_stem = f"track{track.track_number:02d}"
-        output_dir = Path(datastore_root) / profile.output_folder / str(disc.id)
+        input_wav  = str(Path(datastore_root) / disc_raw_path / wav_filename)
+        ext        = "flac" if tool == "flac" else "mp3"
+        track_stem = f"track{track_number:02d}"
+        output_dir = Path(datastore_root) / output_folder / str(disc_id)
         output_path = str(output_dir / f"{track_stem}.{ext}")
-        tool_params = json.loads(profile.tool_params) if profile.tool_params else {}
-        duration = track.duration_seconds
+
+        # Create output directory (and all intermediate dirs such as
+        # cd_store/flac/) before the subprocess runs.
+        os.makedirs(output_dir, exist_ok=True)
 
         # Mark running.
         job.status = JobStatus.running
@@ -326,19 +340,19 @@ def encode_cd_track(job_id: int, session_factory) -> None:
 
     logger.info(
         "Starting CD encode job %s: %s -> %s (tool=%s)",
-        job_id, input_wav, output_path, profile.tool,
+        job_id, input_wav, output_path, tool,
     )
 
-    # Dispatch to the appropriate encoder.
-    if profile.tool == "flac":
+    # Dispatch to the appropriate encoder using only plain Python values.
+    if tool == "flac":
         success = encode_flac(input_wav, output_path, tool_params, job_id, session_factory)
-    elif profile.tool == "ffmpeg":
+    elif tool == "ffmpeg":
         success = encode_mp3(
             input_wav, output_path, tool_params, job_id, session_factory,
             duration_seconds=duration,
         )
     else:
-        _set_job_error(job_id, f"Unknown tool '{profile.tool}' in profile '{profile.name}'", session_factory)
+        _set_job_error(job_id, f"Unknown tool '{tool}' in profile '{profile_name}'", session_factory)
         return
 
     if success:
