@@ -767,6 +767,22 @@ button:disabled {
   background: var(--bg);
 }
 
+.catalogue-delete-btn {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.catalogue-delete-btn:hover {
+  opacity: 1;
+}
+
 .catalogue-meta {
   font-size: 11px;
   color: var(--text-dim);

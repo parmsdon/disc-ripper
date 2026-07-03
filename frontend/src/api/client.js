@@ -98,6 +98,7 @@ export const api = {
   },
   getCdCatalogue: (filter, search) =>
     request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  deleteDisc: (discId) => request(`/discs/${discId}`, { method: "DELETE" }),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
   getOldIsos: () => request("/discs/old-isos"),

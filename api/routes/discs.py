@@ -547,6 +547,31 @@ def cancel_rip(disc_id):
     return jsonify({"status": "ok"})
 
 
+@discs_bp.route("/<int:disc_id>", methods=["DELETE"])
+def delete_disc(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    if disc.temp_name:
+        return jsonify({"error": "Cannot delete a named disc record"}), 400
+
+    for obj in (
+        list(disc.rip_jobs)
+        + list(disc.lookup_candidates)
+        + list(disc.tracks)
+        + list(disc.encode_jobs)
+    ):
+        session.delete(obj)
+    session.flush()
+    session.delete(disc)
+    session.commit()
+    return jsonify({"status": "ok"})
+
+
 @discs_bp.route("/<int:disc_id>/eject", methods=["POST"])
 def eject_disc(disc_id):
     Session = current_app.config["DB_SESSION"]

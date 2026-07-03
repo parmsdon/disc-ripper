@@ -25,6 +25,7 @@ export default function DvdCatalogue() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped"
   const [idStatus, setIdStatus] = useState(null);     // null | "identified" | "unidentified"
   const [mmStatus, setMmStatus] = useState(null);     // null | "matched" | "unmatched"
@@ -58,6 +59,17 @@ export default function DvdCatalogue() {
     }, POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
   }, [syncStatus?.running, fetchRows, ripStatus, idStatus, mmStatus, search]);
+
+  async function handleDelete(discId) {
+    if (!window.confirm("Delete this unnamed disc record?")) return;
+    setDeleteError(null);
+    try {
+      await api.deleteDisc(discId);
+      fetchRows(ripStatus, idStatus, mmStatus, search);
+    } catch (e) {
+      setDeleteError(e.message);
+    }
+  }
 
   async function handleSyncNow() {
     setTriggering(true);
@@ -170,6 +182,7 @@ export default function DvdCatalogue() {
         </div>
 
         {loadError && <div className="catalogue-empty">Error: {loadError}</div>}
+        {deleteError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Delete failed: {deleteError}</div>}
         {!loadError && !loading && rows.length === 0 && (
           <div className="catalogue-empty">No entries found.</div>
         )}
@@ -182,6 +195,7 @@ export default function DvdCatalogue() {
                 <th>DVD</th>
                 <th>Ripped</th>
                 <th>Quality</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -226,6 +240,17 @@ export default function DvdCatalogue() {
                     {row.disc_rip_quality === "dirty"
                       ? <span className="dirty-rip-badge">⚠ dirty</span>
                       : <span className="catalogue-dim">—</span>}
+                  </td>
+                  <td>
+                    {row.row_type === "unmatched_rip" && !row.disc_temp_name && (
+                      <button
+                        className="catalogue-delete-btn"
+                        onClick={() => handleDelete(row.disc_id)}
+                        title="Delete this unnamed disc record"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
