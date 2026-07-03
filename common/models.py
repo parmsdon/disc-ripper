@@ -85,10 +85,6 @@ class MediaType(str, enum.Enum):
     series = "series"
 
 
-class EncodeTarget(str, enum.Enum):
-    audio = "audio"
-    video = "video"
-
 
 # ---------------------------------------------------------------------------
 # Models
@@ -252,6 +248,7 @@ class CDTrack(Base):
     rip_log = Column(Text, nullable=True)
 
     disc = relationship("Disc", back_populates="tracks")
+    encode_jobs = relationship("EncodeJob", back_populates="track")
 
 
 class LookupCandidate(Base):
@@ -273,12 +270,26 @@ class EncodeProfile(Base):
     __tablename__ = "encode_profiles"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False, unique=True)
-    target = Column(Enum(EncodeTarget), nullable=False)
-    format = Column(String, nullable=False)       # mp3, flac, mp4, mkv, etc.
-    params = Column(JSON, nullable=True)          # bitrate, codec settings, etc.
-    output_subfolder = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    media_type = Column(String, nullable=False)      # "dvd" or "cd"
+    output_folder = Column(String, nullable=False)   # relative path under datastore_root, e.g. "dvd_store/extract"
+    tool = Column(String, nullable=False)            # "handbrake", "ffmpeg", "flac"
+    tool_params = Column(Text, nullable=True)        # JSON string of tool arguments/options
+    depends_on_profile_id = Column(Integer, ForeignKey("encode_profiles.id"), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    display_order = Column(Integer, nullable=False, default=0)
 
+    depends_on = relationship(
+        "EncodeProfile",
+        foreign_keys=[depends_on_profile_id],
+        back_populates="dependents",
+        remote_side=[id],
+    )
+    dependents = relationship(
+        "EncodeProfile",
+        foreign_keys=[depends_on_profile_id],
+        back_populates="depends_on",
+    )
     encode_jobs = relationship("EncodeJob", back_populates="profile")
 
 
@@ -314,16 +325,22 @@ class EncodeJob(Base):
     id = Column(Integer, primary_key=True)
     disc_id = Column(Integer, ForeignKey("discs.id"), nullable=False)
     profile_id = Column(Integer, ForeignKey("encode_profiles.id"), nullable=False)
+    track_id = Column(Integer, ForeignKey("cd_tracks.id"), nullable=True)
 
     status = Column(Enum(JobStatus), default=JobStatus.queued, nullable=False)
     source_file = Column(String, nullable=True)
     output_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=naive_utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+    progress_percent = Column(Integer, nullable=True)
+    progress_stage = Column(String, nullable=True)
+    log = Column(Text, nullable=True)
 
     disc = relationship("Disc", back_populates="encode_jobs")
     profile = relationship("EncodeProfile", back_populates="encode_jobs")
+    track = relationship("CDTrack", back_populates="encode_jobs")
 
 
 class RipLogEvent(Base):
