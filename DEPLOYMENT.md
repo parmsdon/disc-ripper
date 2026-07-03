@@ -196,6 +196,76 @@ pip install -r requirements-ripper.txt
 pip install discid musicbrainzngs
 ```
 
+### Stable optical drive device names (udev)
+
+Linux assigns `/dev/sr0`, `/dev/sr1`, … non-deterministically at boot: the
+order depends on which drive the kernel initialises first and can change
+after a reboot or kernel update. udev rules create persistent symlinks
+(`/dev/sr_drv01` etc.) tied to physical port (`ID_PATH`) so each drive
+always gets the same name regardless of boot order.
+
+**Discover your drive paths:**
+
+```bash
+for dev in /dev/sr*; do
+  echo "=== $dev ==="
+  udevadm info --query=all --name=$dev | grep -E "ID_PATH=|ID_MODEL=|ID_SERIAL="
+done
+```
+
+Note the `ID_PATH` value for each drive. Assign numbers top-to-bottom (or
+left-to-right) to match the physical layout of your enclosure.
+
+**Create the rules file:**
+
+```bash
+sudo nano /etc/udev/rules.d/99-optical-drives.rules
+```
+
+One line per drive — substitute the `ID_PATH` value for that physical
+position:
+
+```
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="<path>", SYMLINK+="sr_drv01"
+```
+
+**Example — this installation (9-drive enclosure):**
+
+```
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:01:00.0-ata-2.3.0", SYMLINK+="sr_drv01"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:01:00.0-ata-2.1.0", SYMLINK+="sr_drv02"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:01:00.0-ata-2.4.0", SYMLINK+="sr_drv03"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:01:00.0-ata-2.0",   SYMLINK+="sr_drv04"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:01:00.0-ata-2.2.0", SYMLINK+="sr_drv05"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:02:00.0-ata-2.1.0", SYMLINK+="sr_drv06"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:02:00.0-ata-2.2.0", SYMLINK+="sr_drv07"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:02:00.0-ata-2.0",   SYMLINK+="sr_drv08"
+SUBSYSTEM=="block", ENV{ID_CDROM}=="1", ENV{ID_PATH}=="pci-0000:02:00.0-ata-2.3.0", SYMLINK+="sr_drv09"
+```
+
+**Reload and verify:**
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+ls -la /dev/sr_drv*
+```
+
+You should see symlinks like `/dev/sr_drv01 -> sr2` (the `srN` target will
+vary; that's fine — the symlink is what matters).
+
+**Update config** to use the stable names in the `drives:` list:
+
+```yaml
+drives:
+  - device_path: /dev/sr_drv01
+  - device_path: /dev/sr_drv02
+  # … through sr_drv09
+```
+
+> **Note:** rules are tied to physical port layout and must be recreated
+> if drives are moved to different SATA ports or a different HBA.
+
 ### Config
 
 ```bash
@@ -205,8 +275,7 @@ cp config/dev.yaml.example config/dev.yaml
 #   - database.user/password: discripper / changeme (same as created above)
 #   - storage.datastore_root: /mnt/datastoredev (NFS mount, must exist)
 #   - storage.scratch_dir: /tmp/discripper_scratch (local disk)
-#   - drives: list the actual /dev/srX devices for this machine, marked
-#     for this environment only
+#   - drives: list /dev/sr_drv01 … /dev/sr_drv09 (stable symlinks, see above)
 ```
 
 ### Verify NFS mount
