@@ -66,68 +66,6 @@ function RippingToggle({ rippingEnabled, saving, onToggle, disabled }) {
   );
 }
 
-const HEARTBEAT_STALE_THRESHOLD_MS = 60000;
-
-function ServiceStatusIndicator({ serviceStatus, serviceHeartbeat, saving, onStop }) {
-  const [now, setNow] = useState(Date.now());
-  const [stopRequested, setStopRequested] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const heartbeatMs = serviceHeartbeat ? new Date(serviceHeartbeat).getTime() : null;
-  const isStale = heartbeatMs === null || now - heartbeatMs > HEARTBEAT_STALE_THRESHOLD_MS;
-
-  // The request has been resolved one way or another once the service is
-  // confirmed stopped, or it died mid-shutdown without completing cleanly
-  // (still "running" but no longer responding) - clear the local flag so
-  // the button's disabled state goes back to being driven purely by
-  // serviceStatus, in case the service is restarted later and needs to
-  // be stoppable again.
-  useEffect(() => {
-    if (serviceStatus === "stopped" || (serviceStatus === "running" && isStale)) {
-      setStopRequested(false);
-    }
-  }, [serviceStatus, isStale]);
-
-  let pillClass = "idle";
-  let pillText = "Ripper service: stopped";
-  let detailText = null;
-
-  if (serviceStatus === "running" && !isStale) {
-    pillClass = "good";
-    pillText = "Ripper service: running";
-  } else if (serviceStatus === "running" && isStale) {
-    pillClass = "error";
-    pillText = "Ripper service: not responding";
-  } else if (serviceStatus === "stopped" && heartbeatMs !== null) {
-    detailText = `stopped at ${new Date(heartbeatMs).toLocaleTimeString()}`;
-  }
-
-  function handleStopClick() {
-    setStopRequested(true);
-    onStop();
-  }
-
-  const buttonLabel = stopRequested && serviceStatus === "running" ? "Stopping…" : "Stop Service";
-
-  return (
-    <div className="control-bar-group">
-      <span className={`status-pill ${pillClass}`}>{pillText}</span>
-      {detailText && <span className="text-dim">{detailText}</span>}
-      <button
-        onClick={handleStopClick}
-        disabled={saving || stopRequested || serviceStatus === "stopped"}
-        title="Request a clean shutdown of the ripper service"
-      >
-        {buttonLabel}
-      </button>
-    </div>
-  );
-}
-
 function formatRegionDisplay(region) {
   return region ? region.replace(/\s+/g, "") : region;
 }
@@ -713,9 +651,6 @@ export default function DriveStatus() {
   const [maxRippers, setMaxRippers] = useState(null);
   const [rippingEnabled, setRippingEnabled] = useState(false);
   const [savingRippingEnabled, setSavingRippingEnabled] = useState(false);
-  const [serviceStatus, setServiceStatus] = useState("stopped");
-  const [serviceHeartbeat, setServiceHeartbeat] = useState(null);
-  const [stoppingService, setStoppingService] = useState(false);
   const [error, setError] = useState(null);
   const [reconcileMode, setReconcileMode] = useState(false);
   const [oldIsos, setOldIsos] = useState([]);
@@ -755,27 +690,6 @@ export default function DriveStatus() {
     }
   }
 
-  const fetchServiceStatus = useCallback(() => {
-    api.getServiceStatus()
-      .then((data) => setServiceStatus(data.service_status))
-      .catch((e) => setError(e.message));
-  }, []);
-
-  const fetchServiceHeartbeat = useCallback(() => {
-    api.getServiceHeartbeat()
-      .then((data) => setServiceHeartbeat(data.service_heartbeat))
-      .catch((e) => setError(e.message));
-  }, []);
-
-  async function handleStopService() {
-    setStoppingService(true);
-    try {
-      await api.setServiceCommand("exit");
-    } finally {
-      setStoppingService(false);
-    }
-  }
-
   async function handleReconcileSuccess() {
     fetchDrives();
     try {
@@ -789,21 +703,17 @@ export default function DriveStatus() {
     fetchDrives();
     fetchMaxRippers();
     fetchRippingEnabled();
-    fetchServiceStatus();
-    fetchServiceHeartbeat();
     fetchOldIsos();
     const interval = setInterval(() => {
       fetchDrives();
       fetchRippingEnabled();
-      fetchServiceStatus();
-      fetchServiceHeartbeat();
     }, 1000);
     const isoInterval = setInterval(fetchOldIsos, 30000);
     return () => {
       clearInterval(interval);
       clearInterval(isoInterval);
     };
-  }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled, fetchServiceStatus, fetchServiceHeartbeat, fetchOldIsos]);
+  }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled, fetchOldIsos]);
 
   if (error) {
     return <div className="panel"><h2>Drive Status</h2><div className="empty-state">Error loading drives: {error}</div></div>;
@@ -851,12 +761,6 @@ export default function DriveStatus() {
             </button>
           </div>
         )}
-        <ServiceStatusIndicator
-          serviceStatus={serviceStatus}
-          serviceHeartbeat={serviceHeartbeat}
-          saving={stoppingService}
-          onStop={handleStopService}
-        />
       </div>
 
       <div className="drive-list">

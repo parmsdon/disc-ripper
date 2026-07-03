@@ -82,9 +82,16 @@ body {
 
 .tabs {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 4px;
   padding: 0 24px;
   border-bottom: 1px solid var(--panel-border);
+}
+
+.tabs-links {
+  display: flex;
+  gap: 4px;
 }
 
 .tab-link {
@@ -221,7 +228,8 @@ body {
 
 .status-pill.imperfect,
 .status-pill.queued,
-.status-pill.identifying {
+.status-pill.identifying,
+.status-pill.warn {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
 }
@@ -1900,4 +1908,37 @@ button:disabled {
   font-family: "Fira Mono", "Cascadia Code", monospace;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* ── Nav bar service status ───────────────────────────────────────────────── */
+
+.nav-service-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+
+.nav-service-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.nav-service-btn:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.nav-service-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

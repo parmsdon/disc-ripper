@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { api } from "./api/client";
 
@@ -25,10 +25,63 @@ const TABS = [
 ];
 
 const THEME_STORAGE_KEY = "discripper-theme";
+const HEARTBEAT_STALE_THRESHOLD_MS = 60000;
 
 function loadStoredTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   return stored === "dark" || stored === "light" ? stored : "dark";
+}
+
+function NavServiceStatus({ serviceStatus, serviceHeartbeat, onStop }) {
+  const [now, setNow] = useState(Date.now());
+  const [stopRequested, setStopRequested] = useState(false);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const heartbeatMs = serviceHeartbeat ? new Date(serviceHeartbeat).getTime() : null;
+  const isStale = heartbeatMs === null || now - heartbeatMs > HEARTBEAT_STALE_THRESHOLD_MS;
+
+  useEffect(() => {
+    if (serviceStatus === "stopped" || (serviceStatus === "running" && isStale)) {
+      setStopRequested(false);
+    }
+  }, [serviceStatus, isStale]);
+
+  let pillClass, pillText;
+  if (serviceStatus === "running" && !isStale) {
+    pillClass = "good";
+    pillText = "Running";
+  } else if (serviceStatus === "running" && isStale) {
+    pillClass = "warn";
+    pillText = "Not Responding";
+  } else {
+    pillClass = "error";
+    pillText = "Stopped";
+  }
+
+  const isStopped = serviceStatus === "stopped";
+
+  function handleStop() {
+    setStopRequested(true);
+    onStop();
+  }
+
+  return (
+    <div className="nav-service-control">
+      <span className={`status-pill ${pillClass}`}>{pillText}</span>
+      <button
+        className="nav-service-btn"
+        onClick={handleStop}
+        disabled={stopRequested || isStopped}
+        title={isStopped ? "Ripper service is stopped" : "Request a clean shutdown of the ripper service"}
+      >
+        {stopRequested && !isStopped ? "Stopping…" : "Stop Service"}
+      </button>
+    </div>
+  );
 }
 
 export default function App() {
@@ -38,6 +91,8 @@ export default function App() {
   const [savingFakeRipMode, setSavingFakeRipMode] = useState(false);
   const [fakeDirtyMode, setFakeDirtyMode] = useState(false);
   const [savingFakeDirtyMode, setSavingFakeDirtyMode] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState("stopped");
+  const [serviceHeartbeat, setServiceHeartbeat] = useState(null);
 
   useEffect(() => {
     api.ping()
@@ -59,6 +114,32 @@ export default function App() {
       .then((data) => setFakeDirtyMode(data.fake_dirty_mode))
       .catch(() => {});
   }, [env]);
+
+  const fetchServiceStatus = useCallback(() => {
+    api.getServiceStatus()
+      .then((data) => setServiceStatus(data.service_status))
+      .catch(() => {});
+  }, []);
+
+  const fetchServiceHeartbeat = useCallback(() => {
+    api.getServiceHeartbeat()
+      .then((data) => setServiceHeartbeat(data.service_heartbeat))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchServiceStatus();
+    fetchServiceHeartbeat();
+    const t = setInterval(() => {
+      fetchServiceStatus();
+      fetchServiceHeartbeat();
+    }, 1000);
+    return () => clearInterval(t);
+  }, [fetchServiceStatus, fetchServiceHeartbeat]);
+
+  async function handleStopService() {
+    await api.setServiceCommand("exit");
+  }
 
   async function toggleFakeRipMode() {
     setSavingFakeRipMode(true);
@@ -125,15 +206,22 @@ export default function App() {
         </header>
 
         <nav className="tabs">
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.path}
-              to={tab.path}
-              className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}
-            >
-              {tab.label}
-            </NavLink>
-          ))}
+          <div className="tabs-links">
+            {TABS.map((tab) => (
+              <NavLink
+                key={tab.path}
+                to={tab.path}
+                className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}
+              >
+                {tab.label}
+              </NavLink>
+            ))}
+          </div>
+          <NavServiceStatus
+            serviceStatus={serviceStatus}
+            serviceHeartbeat={serviceHeartbeat}
+            onStop={handleStopService}
+          />
         </nav>
 
         <main className="content">
