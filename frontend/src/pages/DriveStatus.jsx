@@ -655,12 +655,12 @@ function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
         ) && (
           <RetryRipButton disc={disc} onRefresh={onRefresh} />
         )}
-        {reconcileMode && disc && disc.type === "dvd" && disc.disc_fingerprint && (
+        {reconcileMode && disc && disc.type === "dvd" && disc.disc_fingerprint
+          && disc.temp_name && !["ripped", "identifying", "done"].includes(disc.status) && (
           <button
             className="match-iso-btn"
             onClick={() => onMatchIso(drive)}
-            disabled={!disc.temp_name}
-            title={!disc.temp_name ? "Set a working title before matching" : "Match an existing ISO to this disc"}
+            title="Match an existing ISO to this disc"
           >
             Match ISO
           </button>
