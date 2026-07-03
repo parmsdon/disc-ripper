@@ -106,7 +106,7 @@ body {
 
 .content {
   flex: 1;
-  padding: 24px;
+  padding: 12px 24px;
 }
 
 .panel {
@@ -413,7 +413,7 @@ button:disabled {
 .drive-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .drive-row {
@@ -424,11 +424,11 @@ button:disabled {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   /* Reserves room for the tallest region-cell state (status pill + Read
      region/Re-read row) up front, so the row doesn't grow/shift when a
      drive switches between region states. */
-  min-height: 76px;
+  min-height: 68px;
 }
 
 .drive-row-identity {
