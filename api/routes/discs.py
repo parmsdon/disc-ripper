@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 
 from flask import Blueprint, jsonify, current_app, request
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 
 from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, RipJob, LookupCandidate, naive_utcnow
 from ripper_service.region_patcher import patch_region_if_needed, MIN_ISO_SIZE
@@ -290,6 +290,11 @@ def reconcile_disc():
             started_at=now,
             completed_at=now,
         ))
+        session.execute(
+            update(Drive)
+            .where(Drive.id == drive_id)
+            .values(pending_action="eject", pending_action_requested_at=naive_utcnow())
+        )
         session.commit()
 
         session.refresh(disc)
