@@ -5,10 +5,15 @@ Phase 1: basic listing/detail/status. Rip/encode job creation and
 metadata editing endpoints will be expanded in later phases.
 """
 
+import os
+import shutil
+from pathlib import Path
+
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import and_, case, func, or_, select
 
 from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, RipJob, LookupCandidate, naive_utcnow
+from ripper_service.region_patcher import patch_region_if_needed, MIN_ISO_SIZE
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -192,6 +197,112 @@ def identify_cd(disc_id):
 
     session.commit()
     return jsonify({"status": "ok"})
+
+
+def _format_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+@discs_bp.route("/old-isos", methods=["GET"])
+def list_old_isos():
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    old_dir = Path(cfg["storage"]["datastore_root"]) / "dvd_store" / "old"
+    if not old_dir.exists():
+        return jsonify([])
+    isos = sorted(old_dir.glob("*.iso"), key=lambda p: p.name.lower())
+    result = []
+    for iso in isos:
+        size = iso.stat().st_size
+        result.append({
+            "filename": iso.name,
+            "size_bytes": size,
+            "size_display": _format_size(size),
+            "is_valid": size >= MIN_ISO_SIZE,
+        })
+    return jsonify(result)
+
+
+@discs_bp.route("/reconcile", methods=["POST"])
+def reconcile_disc():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    cfg = current_app.config["DISCRIPPER_CFG"]
+
+    body = request.get_json(silent=True) or {}
+    drive_id = body.get("drive_id")
+    disc_fingerprint = (body.get("disc_fingerprint") or "").strip()
+    old_iso_filename = (body.get("old_iso_filename") or "").strip()
+    temp_name = (body.get("temp_name") or "").strip() or None
+
+    if not drive_id:
+        return jsonify({"error": "Missing field: drive_id"}), 400
+    if not disc_fingerprint:
+        return jsonify({"error": "Missing field: disc_fingerprint"}), 400
+    if not old_iso_filename:
+        return jsonify({"error": "Missing field: old_iso_filename"}), 400
+
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        return jsonify({"error": "Drive not found"}), 404
+
+    datastore_root = Path(cfg["storage"]["datastore_root"])
+    src = datastore_root / "dvd_store" / "old" / old_iso_filename
+    if not src.exists():
+        return jsonify({"error": f"ISO not found: {old_iso_filename}"}), 404
+
+    now = naive_utcnow()
+    disc = Disc(
+        type=DiscType.dvd,
+        status=DiscStatus.ripped,
+        drive_id=drive_id,
+        disc_fingerprint=disc_fingerprint,
+        temp_name=temp_name,
+        ripped_at=now,
+    )
+    session.add(disc)
+    session.flush()
+
+    dst_dir = datastore_root / "dvd_store" / "raw" / str(disc.id)
+    dst = dst_dir / f"{disc_fingerprint}.iso"
+
+    try:
+        os.makedirs(str(dst_dir), exist_ok=True)
+        shutil.move(str(src), str(dst))
+
+        original_region = patch_region_if_needed(str(dst), disc.id)
+        if original_region is not None:
+            disc.ripped_in_region = f"0x{original_region:02X}"
+
+        disc.raw_path = str(dst_dir.relative_to(datastore_root))
+        session.commit()
+
+        session.add(RipJob(
+            disc_id=disc.id,
+            drive_id=drive_id,
+            status=JobStatus.done,
+            started_at=now,
+            completed_at=now,
+        ))
+        session.commit()
+
+        session.refresh(disc)
+        return jsonify(_disc_to_dict(disc))
+
+    except Exception as e:
+        disc.status = DiscStatus.error
+        disc.error_message = str(e)
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 @discs_bp.route("/", methods=["GET"])

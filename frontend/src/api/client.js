@@ -93,4 +93,6 @@ export const api = {
     request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
+  getOldIsos: () => request("/discs/old-isos"),
+  reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
 };
