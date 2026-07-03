@@ -166,6 +166,7 @@ python3 -m mymovies_sync.scheduler
 
 ```bash
 sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia cd-discid libdiscid regionset eject
+# genisoimage provides mkisofs (ISO build) and isoinfo (DVD region detection/patching)
 
 # libdvdcss via RPM Fusion (needed for dvdbackup to read commercial DVDs)
 sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm

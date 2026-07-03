@@ -24,6 +24,7 @@ from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob
 from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.log_writer import write_log_event
+from ripper_service.region_patcher import patch_region_if_needed
 from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs
 
 logger = logging.getLogger(__name__)
@@ -238,6 +239,12 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         disc.ripped_at = naive_utcnow()
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
+
+        disc_label = disc.disc_fingerprint or f"disc_{disc.id}"
+        iso_path = str(iso_dir / f"{disc_label}.iso")
+        original_region = patch_region_if_needed(iso_path, disc.id)
+        if original_region is not None:
+            disc.ripped_in_region = f"0x{original_region:02X}"
 
         # dirty -> flag for a re-rip next time this disc is reinserted
         # (main.py's detection dedup checks needs_rerip). clean -> clear
