@@ -132,7 +132,12 @@ def run_audit():
     # ── CD: missing WAV files ────────────────────────────────────────────────
     missing_wav_files = []
     for disc in session.scalars(
-        select(Disc).where(Disc.type == DiscType.cd, Disc.raw_path.isnot(None))
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.raw_path.isnot(None),
+            Disc.needs_rerip == False,
+            (Disc.rip_quality.is_(None) | (Disc.rip_quality != "dirty")),
+        )
     ).all():
         disc_dir = store_root / disc.raw_path
         for track in disc.tracks:
@@ -167,6 +172,8 @@ def run_audit():
         select(Disc).where(
             Disc.type == DiscType.cd,
             Disc.status.in_([DiscStatus.ripped, DiscStatus.done]),
+            Disc.needs_rerip == False,
+            (Disc.rip_quality.is_(None) | (Disc.rip_quality != "dirty")),
         )
     ).all():
         missing = [t for t in disc.tracks if t.wav_filename is None]
