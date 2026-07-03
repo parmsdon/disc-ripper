@@ -256,6 +256,12 @@ def run(cfg: dict) -> None:
 
                                 if existing_active_disc is not None:
                                     existing_active_disc.drive_id = drive_id
+                                    session.execute(
+                                        update(RipJob)
+                                        .where(RipJob.disc_id == existing_active_disc.id)
+                                        .where(RipJob.status == JobStatus.queued)
+                                        .values(drive_id=drive_id)
+                                    )
                                     logger.info(
                                         "Disc %s already tracked as disc #%s on Drive %s, "
                                         "resuming existing record",
@@ -331,6 +337,12 @@ def run(cfg: dict) -> None:
 
                                     if existing_active_disc is not None:
                                         existing_active_disc.drive_id = drive_id
+                                        session.execute(
+                                            update(RipJob)
+                                            .where(RipJob.disc_id == existing_active_disc.id)
+                                            .where(RipJob.status == JobStatus.queued)
+                                            .values(drive_id=drive_id)
+                                        )
                                         logger.info(
                                             "Disc %s already tracked as disc #%s on Drive %s, "
                                             "resuming existing record",
