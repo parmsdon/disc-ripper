@@ -23,9 +23,14 @@ sudo dnf install -y python3 python3-pip python3-psycopg2 postgresql postgresql-s
 sudo postgresql-setup --initdb
 sudo systemctl enable --now postgresql
 
-# Audio encoding tools (required by encoder_service for CD FLAC/MP3 output)
+# Audio/video encoding tools (required by encoder_service)
 sudo dnf install -y ffmpeg flac
-# HandBrakeCLI will be added in the DVD encoding phase
+
+# HandBrakeCLI — requires RPM Fusion (free + nonfree) for the HandBrake package
+sudo dnf install -y \
+  https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+  https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf install -y HandBrake
 ```
 
 ### Create the dev database/user

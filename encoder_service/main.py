@@ -10,7 +10,8 @@ and enforces dependency ordering (a job whose profile depends_on another
 profile is not started until that profile's job is done on the same disc).
 
 CD encoding (FLAC via flac, MP3 via ffmpeg/libmp3lame) is implemented.
-DVD encoding is stubbed and will be implemented in the DVD encoding phase.
+DVD encoding (ISO → MKV stream copy, then optional preset transcode) is
+implemented via HandBrakeCLI.
 
 Uses separate settings keys from ripper_service to avoid collisions:
     encoder_service_status:     "running" | "stopped"
@@ -31,6 +32,7 @@ from common.config import load_config, get_db_url
 from common.encode_queue import get_next_encode_jobs
 from common.models import EncodeJob, JobStatus, Setting
 from encoder_service.cd_encoder import encode_cd_track
+from encoder_service.dvd_encoder import encode_dvd_title
 from encoder_service.job_rollback import rollback_encode_job
 
 POLL_INTERVAL_SECONDS = 5
@@ -137,16 +139,21 @@ def run(cfg: dict) -> None:
 
     logger.info("Encoder service started (env=%s)", cfg["environment"])
 
-    # {job_id: Thread} for each dispatched CD encode job.
+    # {job_id: Thread} for each dispatched encode job, keyed by type.
     # Reaped each poll by checking thread.is_alive().
     running_cd_jobs: dict[int, threading.Thread] = {}
+    running_dvd_jobs: dict[int, threading.Thread] = {}
 
     while True:
         try:
             # Reap threads that finished since the last poll.
-            finished = [jid for jid, t in running_cd_jobs.items() if not t.is_alive()]
-            for jid in finished:
+            finished_cd = [jid for jid, t in running_cd_jobs.items() if not t.is_alive()]
+            for jid in finished_cd:
                 del running_cd_jobs[jid]
+
+            finished_dvd = [jid for jid, t in running_dvd_jobs.items() if not t.is_alive()]
+            for jid in finished_dvd:
+                del running_dvd_jobs[jid]
 
             with Session() as session:
                 dvd_enabled = _get_bool(session, _DVD_ENCODING_ENABLED_KEY, False)
@@ -174,14 +181,25 @@ def run(cfg: dict) -> None:
                                 job.id, job.disc_id, job.track_id, job.profile_id,
                             )
 
-                # --- DVD encoding (not yet implemented) ---
+                # --- DVD encoding ---
                 if dvd_enabled:
-                    dvd_jobs = get_next_encode_jobs(session, "dvd", max_dvd, [])
-                    for job in dvd_jobs:
-                        logger.info(
-                            "TODO: DVD encode job %s (disc #%s, profile_id=%s) - not yet implemented",
-                            job.id, job.disc_id, job.profile_id,
+                    slots_free = max_dvd - len(running_dvd_jobs)
+                    if slots_free > 0:
+                        dvd_jobs = get_next_encode_jobs(
+                            session, "dvd", slots_free, list(running_dvd_jobs.keys())
                         )
+                        for job in dvd_jobs:
+                            thread = threading.Thread(
+                                target=encode_dvd_title,
+                                args=(job.id, Session),
+                                daemon=True,
+                            )
+                            thread.start()
+                            running_dvd_jobs[job.id] = thread
+                            logger.info(
+                                "Started DVD encode job %s (disc #%s, profile_id=%s)",
+                                job.id, job.disc_id, job.profile_id,
+                            )
 
             with Session() as session:
                 _set_setting(session, _HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())
