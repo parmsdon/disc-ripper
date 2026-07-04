@@ -227,6 +227,12 @@ def run(cfg: dict) -> None:
                             session, "cd", slots_free, list(running_cd_jobs.keys())
                         )
                         for job in cd_jobs:
+                            if job.id in running_cd_jobs:
+                                logger.warning(
+                                    "CD encode job %s already tracked - skipping duplicate spawn",
+                                    job.id,
+                                )
+                                continue
                             thread = threading.Thread(
                                 target=encode_cd_track,
                                 args=(job.id, Session),

@@ -305,12 +305,21 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             logger.error("EncodeJob %s not found", job_id)
             return
 
+        # Mark running first so all subsequent _set_job_error() calls find
+        # status='running' and correctly write the error rather than silently
+        # returning (the shutdown-race guard added to _set_job_error checks this).
+        job.status = JobStatus.running
+        job.started_at = naive_utcnow()
+        session.commit()
+
         track = job.track
         if track is None:
             _set_job_error(job_id, "No CDTrack linked to this encode job", session_factory)
             return
-        if track.wav_filename is None:
-            _set_job_error(job_id, "CDTrack has no wav_filename - rip may be incomplete", session_factory)
+
+        wav_filename = track.wav_filename
+        if not wav_filename:
+            _set_job_error(job_id, "Track has no WAV file - rip may be incomplete", session_factory)
             return
 
         disc = track.disc
@@ -319,13 +328,12 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             return
 
         # Snapshot all ORM attributes as plain Python values.
-        tool         = job.profile.tool
-        profile_name = job.profile.name
-        tool_params  = json.loads(job.profile.tool_params or '{}')
+        tool          = job.profile.tool
+        profile_name  = job.profile.name
+        tool_params   = json.loads(job.profile.tool_params or '{}')
         output_folder = job.profile.output_folder
-        wav_filename  = track.wav_filename
         track_number  = track.track_number
-        disc_id       = job.disc_id        # scalar FK, safe but snapshot anyway
+        disc_id       = job.disc_id
         disc_raw_path = disc.raw_path
         duration      = track.duration_seconds
 
@@ -336,13 +344,9 @@ def encode_cd_track(job_id: int, session_factory) -> None:
         output_dir = Path(datastore_root) / output_folder / str(disc_id)
         output_path = str(output_dir / f"{track_stem}.{ext}")
 
-        # Create output directory (and all intermediate dirs such as
-        # cd_store/flac/) before the subprocess runs.
+        # Create output directory before the subprocess runs.
         os.makedirs(output_dir, exist_ok=True)
 
-        # Mark running.
-        job.status = JobStatus.running
-        job.started_at = naive_utcnow()
         job.source_file = input_wav
         job.output_path = output_path
         session.commit()
