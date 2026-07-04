@@ -1,22 +1,22 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 
-function IssueSection({ title, count, children, action }) {
+function IssueSection({ title, count, children, headerAction }) {
   const [open, setOpen] = useState(true);
   if (count === 0) return null;
   return (
     <div className="audit-section">
-      <button className="audit-section-header" onClick={() => setOpen((o) => !o)}>
-        <span className="audit-section-title">{title}</span>
-        <span className="audit-issue-count">{count}</span>
-        <span className="audit-chevron">{open ? "▾" : "▸"}</span>
-      </button>
-      {open && (
-        <div className="audit-section-body">
-          {children}
-          {action}
-        </div>
-      )}
+      <div className="audit-section-header">
+        <button className="audit-section-toggle" onClick={() => setOpen((o) => !o)}>
+          <span className="audit-section-title">{title}</span>
+          <span className="audit-issue-count">{count}</span>
+          <span className="audit-chevron">{open ? "▾" : "▸"}</span>
+        </button>
+        {headerAction && (
+          <div className="audit-section-header-action">{headerAction}</div>
+        )}
+      </div>
+      {open && <div className="audit-section-body">{children}</div>}
     </div>
   );
 }
@@ -146,45 +146,23 @@ export default function Audit() {
         {!data && !error && <div className="empty-state">Loading…</div>}
 
         {summary && (
-          <>
-            <div className="audit-summary">
-              <span
-                className={`audit-summary-item${summary.dvd_issues > 0 ? " has-issues" : " clean"}`}
-              >
-                DVD: {summary.dvd_issues} issue{summary.dvd_issues !== 1 ? "s" : ""}
-              </span>
-              <span
-                className={`audit-summary-item${summary.cd_issues > 0 ? " has-issues" : " clean"}`}
-              >
-                CD: {summary.cd_issues} issue{summary.cd_issues !== 1 ? "s" : ""}
-              </span>
-              <span
-                className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}
-              >
-                Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
-              </span>
-            </div>
-            {dvd?.missing_encode_jobs?.length > 0 && (
-              <ActionRow
-                loading={dvdJobs.loading}
-                loadingLabel="Creating…"
-                onClick={handleDvdJobs}
-                label={`Create Missing DVD Encode Jobs (${dvd.missing_encode_jobs.length} disc${dvd.missing_encode_jobs.length !== 1 ? "s" : ""})`}
-                result={dvdJobs.result}
-                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
-              />
-            )}
-            {cd?.missing_encode_jobs?.length > 0 && (
-              <ActionRow
-                loading={cdJobs.loading}
-                loadingLabel="Creating…"
-                onClick={handleCdJobs}
-                label={`Create Missing CD Encode Jobs (${cd.missing_encode_jobs.length} disc${cd.missing_encode_jobs.length !== 1 ? "s" : ""})`}
-                result={cdJobs.result}
-                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
-              />
-            )}
-          </>
+          <div className="audit-summary">
+            <span
+              className={`audit-summary-item${summary.dvd_issues > 0 ? " has-issues" : " clean"}`}
+            >
+              DVD: {summary.dvd_issues} issue{summary.dvd_issues !== 1 ? "s" : ""}
+            </span>
+            <span
+              className={`audit-summary-item${summary.cd_issues > 0 ? " has-issues" : " clean"}`}
+            >
+              CD: {summary.cd_issues} issue{summary.cd_issues !== 1 ? "s" : ""}
+            </span>
+            <span
+              className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}
+            >
+              Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
+            </span>
+          </div>
         )}
       </div>
 
@@ -253,7 +231,7 @@ export default function Audit() {
           <IssueSection
             title="DVD: Stale drive associations"
             count={dvd.stale_drive_associations.length}
-            action={
+            headerAction={
               <ActionRow
                 loading={fixAssociations.loading}
                 loadingLabel="Fixing…"
@@ -279,6 +257,16 @@ export default function Audit() {
           <IssueSection
             title="DVD: Missing encode jobs"
             count={dvd.missing_encode_jobs.length}
+            headerAction={
+              <ActionRow
+                loading={dvdJobs.loading}
+                loadingLabel="Creating…"
+                onClick={handleDvdJobs}
+                label="Create Missing DVD Encode Jobs"
+                result={dvdJobs.result}
+                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
+              />
+            }
           >
             <IssueTable
               columns={["Disc ID", "Title", "Missing Profiles"]}
@@ -328,7 +316,7 @@ export default function Audit() {
           <IssueSection
             title="CD: Orphaned WAV directories"
             count={cd.orphaned_wav_dirs.length}
-            action={
+            headerAction={
               <ActionRow
                 loading={cleanWavDirs.loading}
                 loadingLabel="Deleting…"
@@ -371,6 +359,16 @@ export default function Audit() {
           <IssueSection
             title="CD: Missing encode jobs"
             count={cd.missing_encode_jobs.length}
+            headerAction={
+              <ActionRow
+                loading={cdJobs.loading}
+                loadingLabel="Creating…"
+                onClick={handleCdJobs}
+                label="Create Missing CD Encode Jobs"
+                result={cdJobs.result}
+                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
+              />
+            }
           >
             <IssueTable
               columns={["Disc ID", "Title", "Missing Profiles", "Tracks Affected"]}

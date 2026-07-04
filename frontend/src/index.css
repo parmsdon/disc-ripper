@@ -1893,8 +1893,13 @@ button:disabled {
 .audit-section-header {
   display: flex;
   align-items: center;
+}
+
+.audit-section-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
   gap: 10px;
-  width: 100%;
   background: transparent;
   border: none;
   color: var(--text);
@@ -1905,14 +1910,34 @@ button:disabled {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-family: inherit;
 }
 
-.audit-section-header:hover {
+.audit-section-toggle:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
 .audit-section-title {
   flex: 1;
+}
+
+.audit-section-header-action {
+  padding-right: 16px;
+  flex-shrink: 0;
+}
+
+.audit-section-header-action .audit-action-row {
+  margin: 0;
+}
+
+.audit-section-header-action .audit-action-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.audit-section-header-action .audit-action-result {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .audit-issue-count {
@@ -1938,10 +1963,6 @@ button:disabled {
   overflow-x: auto;
 }
 
-.audit-section-body .audit-action-row {
-  padding: 10px 16px;
-  border-top: 1px solid var(--panel-border);
-}
 
 .audit-table {
   width: 100%;
