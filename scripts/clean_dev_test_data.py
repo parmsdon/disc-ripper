@@ -96,25 +96,22 @@ def main() -> None:
         ]
 
         # ----------------------------------------------------------------
-        # Collect: failed DVD Extract jobs on discs with a valid ISO
+        # Collect: cancelled DVD encode jobs (any profile) on valid ISOs
         # ----------------------------------------------------------------
-        extract_profile = session.scalar(
-            select(EncodeProfile).where(EncodeProfile.name == "DVD Extract")
-        )
-
-        failed_extract_jobs: list[EncodeJob] = []
-        if extract_profile:
-            candidates = session.scalars(
-                select(EncodeJob).where(
-                    EncodeJob.profile_id == extract_profile.id,
-                    EncodeJob.status == JobStatus.error,
-                    EncodeJob.error_message.ilike("%non-zero%"),
-                )
-            ).all()
-            for job in candidates:
-                disc = job.disc
-                if disc and disc.raw_path and _iso_is_valid(datastore_root / disc.raw_path):
-                    failed_extract_jobs.append(job)
+        cancelled_dvd_jobs: list[EncodeJob] = []
+        candidates = session.scalars(
+            select(EncodeJob)
+            .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
+            .where(
+                EncodeProfile.media_type == "dvd",
+                EncodeJob.status == JobStatus.error,
+                EncodeJob.error_message.ilike("%non-zero%"),
+            )
+        ).all()
+        for job in candidates:
+            disc = job.disc
+            if disc and disc.raw_path and _iso_is_valid(datastore_root / disc.raw_path):
+                cancelled_dvd_jobs.append(job)
 
         # ----------------------------------------------------------------
         # Collect: fake CD discs (no track has a valid WAV file)
@@ -146,11 +143,11 @@ def main() -> None:
         print()
         print(f"Will delete:          {len(fake_dvd_discs)} fake DVD disc(s), "
               f"{len(fake_cd_discs)} fake CD disc(s)")
-        print(f"Will reset to queued: {len(failed_extract_jobs)} cancelled DVD encode job(s)")
+        print(f"Will reset to queued: {len(cancelled_dvd_jobs)} cancelled DVD encode job(s) (any profile)")
         print("Real ISOs and WAV files will NOT be touched")
         print()
 
-        if not fake_dvd_discs and not failed_extract_jobs and not fake_cd_discs:
+        if not fake_dvd_discs and not cancelled_dvd_jobs and not fake_cd_discs:
             print("Nothing to do.")
             return
 
@@ -176,27 +173,16 @@ def main() -> None:
         print(f"Deleted {deleted_dvd} fake DVD disc record(s).")
 
         # ----------------------------------------------------------------
-        # Action 2: reset failed DVD Extract jobs (and error dependents)
+        # Action 2: reset cancelled DVD encode jobs (any profile)
         # ----------------------------------------------------------------
         reset_jobs = 0
-        for extract_job in failed_extract_jobs:
-            disc = extract_job.disc
-            print(f"  Resetting Extract job #{extract_job.id} "
-                  f"(disc #{disc.id if disc else '?'}):")
-            _reset_job(extract_job)
-            print(f"    reset encode_job #{extract_job.id} (DVD Extract)")
+        for job in cancelled_dvd_jobs:
+            disc = job.disc
+            profile_name = job.profile.name if job.profile else "?"
+            print(f"  reset encode_job #{job.id} ({profile_name}, "
+                  f"disc #{disc.id if disc else '?'})")
+            _reset_job(job)
             reset_jobs += 1
-
-            if disc and extract_profile:
-                for dep_job in disc.encode_jobs:
-                    if (
-                        dep_job.id != extract_job.id
-                        and dep_job.status == JobStatus.error
-                        and dep_job.profile
-                        and dep_job.profile.depends_on_profile_id == extract_profile.id
-                    ):
-                        _reset_job(dep_job)
-                        print(f"    reset encode_job #{dep_job.id} ({dep_job.profile.name})")
 
         print(f"Reset {reset_jobs} cancelled DVD encode job(s) to queued.")
 
