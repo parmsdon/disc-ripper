@@ -216,14 +216,17 @@ def encode_extract(
         "HandBrakeCLI",
         "-i", iso_path,
         "--main-feature",
+        "--no-dvdnav",
         "-o", output_path,
         "-f", "av_mkv",
-        "--video-copy-mask", "H264,H265,MPEG2,MPEG4,VP8,VP9,AV1",
-        "--audio-copy-mask", "AAC,AC3,EAC3,DTS,MP3,FLAC",
+        "-e", tool_params.get("encoder", "x264"),
+        "-q", str(tool_params.get("quality", 18)),
+        "--all-audio",
         "--aencoder", "copy",
-        "--vencoder", "copy",
-        "--no-dvdnav",
-    ]
+        "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac",
+        "--audio-fallback", "ac3",
+        "--all-subtitles",
+    ] + tool_params.get("extra_args", [])
 
     result = _run_handbrake(command, job_id, "Extracting main feature", session_factory)
 

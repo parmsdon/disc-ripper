@@ -28,7 +28,7 @@ ENCODE_PROFILES = [
         "media_type": "dvd",
         "output_folder": "dvd_store/extract",
         "tool": "handbrake",
-        "tool_params": '{"extra_args": ["--main-feature", "--no-dvdnav", "-f", "av_mkv"]}',
+        "tool_params": '{"quality": 18, "encoder": "x264", "extra_args": ["--main-feature", "--no-dvdnav", "-f", "av_mkv", "--all-audio", "--aencoder", "copy", "--audio-copy-mask", "aac,ac3,eac3,truehd,dts,dtshd,mp3,flac", "--audio-fallback", "ac3", "--all-subtitles"]}',
         "depends_on_name": None,
         "enabled": True,
         "display_order": 1,
@@ -97,22 +97,32 @@ def seed(env: str):
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    # Encode profiles — flush after each insert so depends_on_profile_id
+    # Encode profiles — flush after each insert/update so depends_on_profile_id
     # can reference IDs that were just created in this run.
+    # Profiles are always updated (not skipped) so tool_params changes land.
     name_to_id: dict[str, int] = {}
     for profile_data in ENCODE_PROFILES:
+        depends_on_name = profile_data.get("depends_on_name")
+        depends_on_id = name_to_id.get(depends_on_name) if depends_on_name else None
+
         existing = session.scalar(
             select(EncodeProfile).where(EncodeProfile.name == profile_data["name"])
         )
         if existing:
+            existing.media_type           = profile_data["media_type"]
+            existing.output_folder        = profile_data["output_folder"]
+            existing.tool                 = profile_data["tool"]
+            existing.tool_params          = profile_data["tool_params"]
+            existing.depends_on_profile_id = depends_on_id
+            existing.enabled              = profile_data["enabled"]
+            existing.display_order        = profile_data["display_order"]
+            session.flush()
             name_to_id[existing.name] = existing.id
-            print(f"Encode profile '{profile_data['name']}' already exists, skipping")
+            print(f"Updated encode profile '{existing.name}' (id={existing.id})")
             continue
 
-        depends_on_name = profile_data.get("depends_on_name")
         data = {k: v for k, v in profile_data.items() if k != "depends_on_name"}
-        data["depends_on_profile_id"] = name_to_id.get(depends_on_name) if depends_on_name else None
-
+        data["depends_on_profile_id"] = depends_on_id
         profile = EncodeProfile(**data)
         session.add(profile)
         session.flush()
