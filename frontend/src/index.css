@@ -1952,6 +1952,24 @@ button:disabled {
   text-align: center;
 }
 
+.audit-issue-count.audit-count-pending {
+  color: var(--text-dim);
+  background: rgba(154, 163, 178, 0.1);
+  border-color: rgba(154, 163, 178, 0.25);
+}
+
+.audit-issue-count.audit-count-clean {
+  color: var(--good);
+  background: rgba(76, 175, 109, 0.1);
+  border-color: rgba(76, 175, 109, 0.3);
+}
+
+.audit-section-clear {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--good);
+}
+
 .audit-chevron {
   color: var(--text-dim);
   font-size: 12px;

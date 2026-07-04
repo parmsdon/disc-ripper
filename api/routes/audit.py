@@ -52,20 +52,54 @@ def create_missing_cd_encode_jobs():
     return jsonify({"jobs_created": created})
 
 
-@audit_bp.route("/fix-stale-drive-associations", methods=["POST"])
-def fix_stale_drive_associations():
-    Session = current_app.config["DB_SESSION"]
-    session = Session()
-    result = session.execute(
-        update(Disc)
-        .where(
-            Disc.status.in_([DiscStatus.ripped, DiscStatus.done, DiscStatus.error, DiscStatus.identifying]),
+_TERMINAL_STATUSES = [DiscStatus.ripped, DiscStatus.done, DiscStatus.error, DiscStatus.identifying]
+_ACTIVE_STATUSES = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building]
+
+
+def _stale_disc_ids(session, disc_type):
+    """Return IDs of discs with genuinely stale drive associations."""
+    active_drive_ids = set(
+        session.scalars(
+            select(Disc.drive_id).where(
+                Disc.status.in_(_ACTIVE_STATUSES),
+                Disc.drive_id.isnot(None),
+            )
+        ).all()
+    )
+    ids = []
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == disc_type,
+            Disc.status.in_(_TERMINAL_STATUSES),
             Disc.drive_id.isnot(None),
         )
-        .values(drive_id=None)
-    )
-    session.commit()
-    return jsonify({"fixed": result.rowcount})
+    ).all():
+        drive = disc.drive
+        if drive is None or drive.media_present is False or disc.drive_id in active_drive_ids:
+            ids.append(disc.id)
+    return ids
+
+
+@audit_bp.route("/fix-stale-dvd-drive-associations", methods=["POST"])
+def fix_stale_dvd_drive_associations():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    ids = _stale_disc_ids(session, DiscType.dvd)
+    if ids:
+        session.execute(update(Disc).where(Disc.id.in_(ids)).values(drive_id=None))
+        session.commit()
+    return jsonify({"fixed": len(ids)})
+
+
+@audit_bp.route("/fix-stale-cd-drive-associations", methods=["POST"])
+def fix_stale_cd_drive_associations():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    ids = _stale_disc_ids(session, DiscType.cd)
+    if ids:
+        session.execute(update(Disc).where(Disc.id.in_(ids)).values(drive_id=None))
+        session.commit()
+    return jsonify({"fixed": len(ids)})
 
 
 @audit_bp.route("/cleanup-orphaned-wav-dirs", methods=["POST"])
@@ -170,21 +204,31 @@ def run_audit():
     ]
 
     # ── DVD: stale drive associations ────────────────────────────────────────
+    _active_drive_ids = set(
+        session.scalars(
+            select(Disc.drive_id).where(
+                Disc.status.in_(_ACTIVE_STATUSES),
+                Disc.drive_id.isnot(None),
+            )
+        ).all()
+    )
     stale_dvd_associations = []
     for disc in session.scalars(
         select(Disc).where(
             Disc.type == DiscType.dvd,
-            Disc.status.in_([DiscStatus.ripped, DiscStatus.done, DiscStatus.error]),
+            Disc.status.in_(_TERMINAL_STATUSES),
             Disc.drive_id.isnot(None),
         )
     ).all():
-        stale_dvd_associations.append({
-            "disc_id": disc.id,
-            "title": _disc_title(disc),
-            "status": disc.status,
-            "drive_id": disc.drive_id,
-            "drive_label": disc.drive.label if disc.drive else None,
-        })
+        drive = disc.drive
+        if drive is None or drive.media_present is False or disc.drive_id in _active_drive_ids:
+            stale_dvd_associations.append({
+                "disc_id": disc.id,
+                "title": _disc_title(disc),
+                "status": disc.status,
+                "drive_id": disc.drive_id,
+                "drive_label": drive.label if drive else None,
+            })
 
     # ── CD: duplicate fingerprints ───────────────────────────────────────────
     dup_cd_rows = session.execute(
@@ -263,6 +307,25 @@ def run_audit():
                 "status": disc.status,
                 "track_count": len(disc.tracks),
                 "missing_count": len(missing),
+            })
+
+    # ── CD: stale drive associations ─────────────────────────────────────────
+    stale_cd_associations = []
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.status.in_(_TERMINAL_STATUSES),
+            Disc.drive_id.isnot(None),
+        )
+    ).all():
+        drive = disc.drive
+        if drive is None or drive.media_present is False or disc.drive_id in _active_drive_ids:
+            stale_cd_associations.append({
+                "disc_id": disc.id,
+                "title": _disc_title(disc),
+                "status": disc.status,
+                "drive_id": disc.drive_id,
+                "drive_label": drive.label if drive else None,
             })
 
     # ── DVD: missing encode jobs ─────────────────────────────────────────────
@@ -373,7 +436,8 @@ def run_audit():
     )
     cd_issues = (
         len(duplicate_cd_discs) + len(missing_wav_files) + len(orphaned_wav_dirs)
-        + len(tracks_missing_wav_filename) + len(missing_cd_encode_jobs)
+        + len(stale_cd_associations) + len(tracks_missing_wav_filename)
+        + len(missing_cd_encode_jobs)
     )
     job_issues = len(stuck_running_jobs)
     missing_encode_jobs = len(missing_dvd_encode_jobs) + len(missing_cd_encode_jobs)
@@ -391,6 +455,7 @@ def run_audit():
             "duplicate_discs": duplicate_cd_discs,
             "missing_wav_files": missing_wav_files,
             "orphaned_wav_dirs": orphaned_wav_dirs,
+            "stale_drive_associations": stale_cd_associations,
             "tracks_missing_wav_filename": tracks_missing_wav_filename,
             "missing_encode_jobs": missing_cd_encode_jobs,
         },

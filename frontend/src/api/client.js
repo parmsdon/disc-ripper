@@ -106,7 +106,8 @@ export const api = {
   getAudit: () => request("/audit/"),
   createMissingDvdEncodeJobs: () => request("/audit/create-missing-dvd-encode-jobs", { method: "POST" }),
   createMissingCdEncodeJobs: () => request("/audit/create-missing-cd-encode-jobs", { method: "POST" }),
-  fixStaleDriveAssociations: () => request("/audit/fix-stale-drive-associations", { method: "POST" }),
+  fixStaleDvdDriveAssociations: () => request("/audit/fix-stale-dvd-drive-associations", { method: "POST" }),
+  fixStaleCdDriveAssociations: () => request("/audit/fix-stale-cd-drive-associations", { method: "POST" }),
   cleanupOrphanedWavDirs: () => request("/audit/cleanup-orphaned-wav-dirs", { method: "POST" }),
 
   // Encode jobs
