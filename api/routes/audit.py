@@ -7,7 +7,9 @@ from pathlib import Path
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import select, func
 
-from common.models import Disc, DiscType, DiscStatus, Drive, RipJob, JobStatus
+from common.models import (
+    Disc, DiscType, DiscStatus, Drive, RipJob, EncodeJob, EncodeProfile, JobStatus,
+)
 
 audit_bp = Blueprint("audit", __name__)
 
@@ -186,6 +188,93 @@ def run_audit():
                 "missing_count": len(missing),
             })
 
+    # ── DVD: missing encode jobs ─────────────────────────────────────────────
+    dvd_profiles = session.scalars(
+        select(EncodeProfile).where(
+            EncodeProfile.media_type == "dvd",
+            EncodeProfile.enabled == True,
+        )
+    ).all()
+
+    missing_dvd_encode_jobs = []
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.dvd,
+            Disc.status.in_([DiscStatus.ripped, DiscStatus.done]),
+            Disc.raw_path.isnot(None),
+        )
+    ).all():
+        existing_profile_ids = {
+            job.profile_id
+            for job in session.scalars(
+                select(EncodeJob).where(
+                    EncodeJob.disc_id == disc.id,
+                    EncodeJob.status != JobStatus.error,
+                )
+            ).all()
+        }
+        missing = [
+            {"id": p.id, "name": p.name}
+            for p in dvd_profiles
+            if p.id not in existing_profile_ids
+        ]
+        if missing:
+            missing_dvd_encode_jobs.append({
+                "disc_id": disc.id,
+                "temp_name": _disc_title(disc),
+                "missing_profiles": missing,
+            })
+
+    # ── CD: missing encode jobs ──────────────────────────────────────────────
+    cd_profiles = session.scalars(
+        select(EncodeProfile).where(
+            EncodeProfile.media_type == "cd",
+            EncodeProfile.enabled == True,
+        )
+    ).all()
+
+    missing_cd_encode_jobs = []
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.status.in_([DiscStatus.ripped, DiscStatus.done]),
+            Disc.raw_path.isnot(None),
+        )
+    ).all():
+        trackable = [t for t in disc.tracks if t.wav_filename is not None]
+        if not trackable:
+            continue
+
+        existing_combos = {
+            (job.track_id, job.profile_id)
+            for job in session.scalars(
+                select(EncodeJob).where(
+                    EncodeJob.disc_id == disc.id,
+                    EncodeJob.status != JobStatus.error,
+                )
+            ).all()
+        }
+
+        missing_profile_ids = set()
+        affected_track_ids = set()
+        for track in trackable:
+            for profile in cd_profiles:
+                if (track.id, profile.id) not in existing_combos:
+                    missing_profile_ids.add(profile.id)
+                    affected_track_ids.add(track.id)
+
+        if missing_profile_ids:
+            missing_cd_encode_jobs.append({
+                "disc_id": disc.id,
+                "temp_name": _disc_title(disc),
+                "missing_profiles": [
+                    {"id": p.id, "name": p.name}
+                    for p in cd_profiles
+                    if p.id in missing_profile_ids
+                ],
+                "affected_tracks": len(affected_track_ids),
+            })
+
     # ── Jobs: stuck in running state ─────────────────────────────────────────
     stuck_running_jobs = []
     for job in session.scalars(
@@ -203,12 +292,14 @@ def run_audit():
     dvd_issues = (
         len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
         + len(null_raw_path) + len(stale_dvd_associations)
+        + len(missing_dvd_encode_jobs)
     )
     cd_issues = (
         len(duplicate_cd_discs) + len(missing_wav_files) + len(orphaned_wav_dirs)
-        + len(tracks_missing_wav_filename)
+        + len(tracks_missing_wav_filename) + len(missing_cd_encode_jobs)
     )
     job_issues = len(stuck_running_jobs)
+    missing_encode_jobs = len(missing_dvd_encode_jobs) + len(missing_cd_encode_jobs)
 
     return jsonify({
         "dvd": {
@@ -217,12 +308,14 @@ def run_audit():
             "orphaned_iso_dirs": orphaned_iso_dirs,
             "null_raw_path": null_raw_path,
             "stale_drive_associations": stale_dvd_associations,
+            "missing_encode_jobs": missing_dvd_encode_jobs,
         },
         "cd": {
             "duplicate_discs": duplicate_cd_discs,
             "missing_wav_files": missing_wav_files,
             "orphaned_wav_dirs": orphaned_wav_dirs,
             "tracks_missing_wav_filename": tracks_missing_wav_filename,
+            "missing_encode_jobs": missing_cd_encode_jobs,
         },
         "jobs": {
             "stuck_running_jobs": stuck_running_jobs,
@@ -232,5 +325,6 @@ def run_audit():
             "dvd_issues": dvd_issues,
             "cd_issues": cd_issues,
             "job_issues": job_issues,
+            "missing_encode_jobs": missing_encode_jobs,
         },
     })

@@ -175,6 +175,20 @@ export default function Audit() {
               ])}
             />
           </IssueSection>
+
+          <IssueSection
+            title="DVD: Missing encode jobs"
+            count={dvd.missing_encode_jobs.length}
+          >
+            <IssueTable
+              columns={["Disc ID", "Title", "Missing Profiles"]}
+              rows={dvd.missing_encode_jobs.map((r) => [
+                r.disc_id,
+                r.temp_name,
+                r.missing_profiles.map((p) => p.name).join(", "),
+              ])}
+            />
+          </IssueSection>
         </>
       )}
 
@@ -236,6 +250,21 @@ export default function Audit() {
                 r.status,
                 r.track_count,
                 r.missing_count,
+              ])}
+            />
+          </IssueSection>
+
+          <IssueSection
+            title="CD: Missing encode jobs"
+            count={cd.missing_encode_jobs.length}
+          >
+            <IssueTable
+              columns={["Disc ID", "Title", "Missing Profiles", "Tracks Affected"]}
+              rows={cd.missing_encode_jobs.map((r) => [
+                r.disc_id,
+                r.temp_name,
+                r.missing_profiles.map((p) => p.name).join(", "),
+                r.affected_tracks,
               ])}
             />
           </IssueSection>
