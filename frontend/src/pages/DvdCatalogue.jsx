@@ -29,19 +29,20 @@ export default function DvdCatalogue() {
   const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped"
   const [idStatus, setIdStatus] = useState(null);     // null | "identified" | "unidentified"
   const [mmStatus, setMmStatus] = useState(null);     // null | "matched" | "unmatched"
+  const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchRows = useCallback((rs, is, ms, s) => {
-    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, mmStatus: ms, search: s })
+  const fetchRows = useCallback((rs, is, ms, d, s) => {
+    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, mmStatus: ms, dirty: d, search: s })
       .then((data) => { setRows(data); setLoadError(null); })
       .catch((e) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, mmStatus, search), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, mmStatus, dirty, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [ripStatus, idStatus, mmStatus, search, fetchRows]);
+  }, [ripStatus, idStatus, mmStatus, dirty, search, fetchRows]);
 
   const refreshSyncStatus = useCallback(() => {
     api.getSyncStatus().then(setSyncStatus).catch(() => {});
@@ -54,18 +55,18 @@ export default function DvdCatalogue() {
     pollRef.current = setInterval(() => {
       api.getSyncStatus().then((data) => {
         setSyncStatus(data);
-        if (!data.running) fetchRows(ripStatus, idStatus, mmStatus, search);
+        if (!data.running) fetchRows(ripStatus, idStatus, mmStatus, dirty, search);
       }).catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
-  }, [syncStatus?.running, fetchRows, ripStatus, idStatus, mmStatus, search]);
+  }, [syncStatus?.running, fetchRows, ripStatus, idStatus, mmStatus, dirty, search]);
 
   async function handleDelete(discId) {
     if (!window.confirm("Delete this unnamed disc record?")) return;
     setDeleteError(null);
     try {
       await api.deleteDisc(discId);
-      fetchRows(ripStatus, idStatus, mmStatus, search);
+      fetchRows(ripStatus, idStatus, mmStatus, dirty, search);
     } catch (e) {
       setDeleteError(e.message);
     }
@@ -166,6 +167,12 @@ export default function DvdCatalogue() {
               </div>
             </div>
           </div>
+          <button
+            className={`catalogue-filter-btn catalogue-filter-btn--warn${dirty ? " active" : ""}`}
+            onClick={() => { setDirty((v) => !v); setLoading(true); }}
+          >
+            Dirty
+          </button>
           <input
             type="text"
             className="catalog-search-input"

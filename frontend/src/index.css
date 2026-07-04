@@ -180,6 +180,57 @@ body {
 .stat-error { border-left: 3px solid var(--error); }
 .stat-info  { border-left: 3px solid var(--accent); }
 
+.stat-clickable {
+  cursor: pointer;
+}
+
+.stat-clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .stat-clickable:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.health-modal {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  width: 700px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.health-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.health-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.health-modal-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.health-modal-error-msg {
+  max-width: 300px;
+  font-size: 12px;
+  color: var(--error);
+  word-break: break-word;
+}
+
 .empty-state {
   color: var(--text-dim);
   font-size: 13px;
@@ -724,6 +775,12 @@ button:disabled {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.catalogue-filter-btn--warn.active {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+  border-color: var(--warn);
 }
 
 .catalogue-toolbar .catalog-search-input {

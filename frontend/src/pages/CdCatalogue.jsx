@@ -41,19 +41,20 @@ export default function CdCatalogue() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchRows = useCallback((f, s) => {
-    api.getCdCatalogue(f, s)
+  const fetchRows = useCallback((f, d, s) => {
+    api.getCdCatalogue(f, s, d)
       .then((data) => { setRows(data); setLoadError(null); })
       .catch((e) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    const handle = setTimeout(() => fetchRows(filter, search), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => fetchRows(filter, dirty, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [filter, search, fetchRows]);
+  }, [filter, dirty, search, fetchRows]);
 
   return (
     <div>
@@ -71,6 +72,12 @@ export default function CdCatalogue() {
               </button>
             ))}
           </div>
+          <button
+            className={`catalogue-filter-btn catalogue-filter-btn--warn${dirty ? " active" : ""}`}
+            onClick={() => { setDirty((v) => !v); setLoading(true); }}
+          >
+            Dirty
+          </button>
           <input
             type="text"
             className="catalog-search-input"
