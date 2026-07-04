@@ -104,4 +104,38 @@ export const api = {
   getOldIsos: () => request("/discs/old-isos"),
   reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
   getAudit: () => request("/audit/"),
+
+  // Encode jobs
+  getEncodeJobs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/encode/jobs${qs ? `?${qs}` : ""}`);
+  },
+  getEncodeStats: () => request("/encode/stats"),
+  getEncodeProfiles: () => request("/encode/profiles"),
+
+  // Encoder settings
+  getDvdEncodingEnabled: () => request("/settings/dvd-encoding-enabled"),
+  setDvdEncodingEnabled: (enabled) =>
+    request("/settings/dvd-encoding-enabled", {
+      method: "PUT",
+      body: JSON.stringify({ dvd_encoding_enabled: enabled }),
+    }),
+  getCdEncodingEnabled: () => request("/settings/cd-encoding-enabled"),
+  setCdEncodingEnabled: (enabled) =>
+    request("/settings/cd-encoding-enabled", {
+      method: "PUT",
+      body: JSON.stringify({ cd_encoding_enabled: enabled }),
+    }),
+  getMaxDvdEncoders: () => request("/settings/max-dvd-encoders"),
+  setMaxDvdEncoders: (n) =>
+    request("/settings/max-dvd-encoders", {
+      method: "PUT",
+      body: JSON.stringify({ max_dvd_encoders: n }),
+    }),
+  getMaxCdEncoders: () => request("/settings/max-cd-encoders"),
+  setMaxCdEncoders: (n) =>
+    request("/settings/max-cd-encoders", {
+      method: "PUT",
+      body: JSON.stringify({ max_cd_encoders: n }),
+    }),
 };

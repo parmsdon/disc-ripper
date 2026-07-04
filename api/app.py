@@ -28,6 +28,7 @@ from api.routes.settings import settings_bp
 from api.routes.catalog import catalog_bp
 from api.routes.log import log_bp
 from api.routes.audit import audit_bp
+from api.routes.encode import encode_bp
 
 
 def create_app(env: str | None = None) -> Flask:
@@ -57,6 +58,7 @@ def create_app(env: str | None = None) -> Flask:
     app.register_blueprint(catalog_bp, url_prefix="/api/catalog")
     app.register_blueprint(log_bp, url_prefix="/api/log")
     app.register_blueprint(audit_bp, url_prefix="/api/audit")
+    app.register_blueprint(encode_bp, url_prefix="/api/encode")
 
     @app.route("/api/ping")
     def ping():

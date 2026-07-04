@@ -1941,6 +1941,112 @@ button:disabled {
   color: var(--text-dim);
 }
 
+/* ── Encoder tabs (DVD Encoders / CD Encoders) ────────────────────────────── */
+
+.encoder-header {
+  /* Reuses .control-bar layout — flex, bordered, padded */
+}
+
+.encoder-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.encoder-stat-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.encoder-stat-pill.running {
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.encoder-stat-pill.queued {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
+.encoder-stat-pill.done {
+  background: rgba(76, 175, 109, 0.15);
+  color: var(--good);
+}
+
+.encoder-stat-pill.error {
+  background: rgba(224, 92, 92, 0.15);
+  color: var(--error);
+}
+
+.encoder-stat-pill.idle {
+  background: rgba(154, 163, 178, 0.1);
+  color: var(--text-dim);
+}
+
+.encoder-filter-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.encoder-jobs-table {
+  /* Inherits .catalogue-table base styles */
+}
+
+.encoder-job-row {
+  /* Inherits .catalogue-row hover */
+}
+
+.encoder-disc-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.encoder-profile-name {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.encoder-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.encoder-progress .progress-bar-track {
+  width: 80px;
+  flex: none;
+}
+
+.encoder-done-pct {
+  font-size: 12px;
+  color: var(--good);
+  font-weight: 500;
+}
+
+.encoder-time {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.encoder-duration {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.text-dim {
+  color: var(--text-dim);
+}
+
 /* ── Nav bar service status ───────────────────────────────────────────────── */
 
 .nav-service-control {

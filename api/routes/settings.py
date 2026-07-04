@@ -30,6 +30,13 @@ _DEFAULT_SERVICE_STATUS = "stopped"
 _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
 
+_DVD_ENCODING_ENABLED_KEY = "dvd_encoding_enabled"
+_CD_ENCODING_ENABLED_KEY = "cd_encoding_enabled"
+_MAX_DVD_ENCODERS_KEY = "max_dvd_encoders"
+_MAX_CD_ENCODERS_KEY = "max_cd_encoders"
+_DEFAULT_MAX_DVD_ENCODERS = 1
+_DEFAULT_MAX_CD_ENCODERS = 2
+
 
 @settings_bp.route("/max-rippers", methods=["GET"])
 def get_max_rippers():
@@ -194,6 +201,110 @@ def get_service_heartbeat():
     setting = session.get(Setting, _SERVICE_HEARTBEAT_KEY)
     value = setting.value if setting and setting.value else None
     return jsonify({"service_heartbeat": value})
+
+
+@settings_bp.route("/dvd-encoding-enabled", methods=["GET"])
+def get_dvd_encoding_enabled():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _DVD_ENCODING_ENABLED_KEY)
+    return jsonify({"dvd_encoding_enabled": setting.value == "true" if setting else False})
+
+
+@settings_bp.route("/dvd-encoding-enabled", methods=["PUT"])
+def set_dvd_encoding_enabled():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("dvd_encoding_enabled")
+    if not isinstance(raw, bool):
+        return jsonify({"error": "dvd_encoding_enabled must be a boolean"}), 400
+    value_str = "true" if raw else "false"
+    setting = session.get(Setting, _DVD_ENCODING_ENABLED_KEY)
+    if setting:
+        setting.value = value_str
+    else:
+        session.add(Setting(key=_DVD_ENCODING_ENABLED_KEY, value=value_str))
+    session.commit()
+    return jsonify({"dvd_encoding_enabled": raw})
+
+
+@settings_bp.route("/cd-encoding-enabled", methods=["GET"])
+def get_cd_encoding_enabled():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _CD_ENCODING_ENABLED_KEY)
+    return jsonify({"cd_encoding_enabled": setting.value == "true" if setting else False})
+
+
+@settings_bp.route("/cd-encoding-enabled", methods=["PUT"])
+def set_cd_encoding_enabled():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("cd_encoding_enabled")
+    if not isinstance(raw, bool):
+        return jsonify({"error": "cd_encoding_enabled must be a boolean"}), 400
+    value_str = "true" if raw else "false"
+    setting = session.get(Setting, _CD_ENCODING_ENABLED_KEY)
+    if setting:
+        setting.value = value_str
+    else:
+        session.add(Setting(key=_CD_ENCODING_ENABLED_KEY, value=value_str))
+    session.commit()
+    return jsonify({"cd_encoding_enabled": raw})
+
+
+@settings_bp.route("/max-dvd-encoders", methods=["GET"])
+def get_max_dvd_encoders():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _MAX_DVD_ENCODERS_KEY)
+    value = int(setting.value) if setting else _DEFAULT_MAX_DVD_ENCODERS
+    return jsonify({"max_dvd_encoders": value})
+
+
+@settings_bp.route("/max-dvd-encoders", methods=["PUT"])
+def set_max_dvd_encoders():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("max_dvd_encoders")
+    if not isinstance(raw, int) or isinstance(raw, bool) or raw < 1:
+        return jsonify({"error": "max_dvd_encoders must be a positive integer >= 1"}), 400
+    setting = session.get(Setting, _MAX_DVD_ENCODERS_KEY)
+    if setting:
+        setting.value = str(raw)
+    else:
+        session.add(Setting(key=_MAX_DVD_ENCODERS_KEY, value=str(raw)))
+    session.commit()
+    return jsonify({"max_dvd_encoders": raw})
+
+
+@settings_bp.route("/max-cd-encoders", methods=["GET"])
+def get_max_cd_encoders():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _MAX_CD_ENCODERS_KEY)
+    value = int(setting.value) if setting else _DEFAULT_MAX_CD_ENCODERS
+    return jsonify({"max_cd_encoders": value})
+
+
+@settings_bp.route("/max-cd-encoders", methods=["PUT"])
+def set_max_cd_encoders():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("max_cd_encoders")
+    if not isinstance(raw, int) or isinstance(raw, bool) or raw < 1:
+        return jsonify({"error": "max_cd_encoders must be a positive integer >= 1"}), 400
+    setting = session.get(Setting, _MAX_CD_ENCODERS_KEY)
+    if setting:
+        setting.value = str(raw)
+    else:
+        session.add(Setting(key=_MAX_CD_ENCODERS_KEY, value=str(raw)))
+    session.commit()
+    return jsonify({"max_cd_encoders": raw})
 
 
 @settings_bp.route("/service-command", methods=["PUT"])
