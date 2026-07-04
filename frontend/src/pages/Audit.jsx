@@ -123,7 +123,6 @@ export default function Audit() {
   }
 
   async function handleCleanWavDirs() {
-    if (!window.confirm("Delete all orphaned WAV directories? This cannot be undone.")) return;
     await cleanWavDirs.run();
     runAudit();
   }
