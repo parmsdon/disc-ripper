@@ -63,13 +63,19 @@ def get_jobs():
         except ValueError:
             return jsonify({"error": "disc_id must be an integer"}), 400
 
-    # Order: running first, then queued, then done/error by completed_at desc.
-    sort_key = case(
-        (EncodeJob.status == JobStatus.running, 0),
-        (EncodeJob.status == JobStatus.queued, 1),
-        else_=2,
+    # running (started_at ASC) → queued (created_at ASC) → done/error (completed_at DESC)
+    stmt = stmt.order_by(
+        case(
+            (EncodeJob.status == JobStatus.running, 1),
+            (EncodeJob.status == JobStatus.queued, 2),
+            else_=3,
+        ),
+        case((EncodeJob.status == JobStatus.running, EncodeJob.started_at)).asc(),
+        case((EncodeJob.status == JobStatus.queued, EncodeJob.created_at)).asc(),
+        case(
+            (EncodeJob.status.notin_([JobStatus.running, JobStatus.queued]), EncodeJob.completed_at)
+        ).desc().nullslast(),
     )
-    stmt = stmt.order_by(sort_key, EncodeJob.completed_at.desc().nullslast(), EncodeJob.created_at.desc())
 
     jobs = session.scalars(stmt).all()
     return jsonify([_job_to_dict(j) for j in jobs])
