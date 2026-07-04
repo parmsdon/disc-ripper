@@ -58,11 +58,13 @@ def _set_job_error(job_id: int, message: str, session_factory) -> None:
     session = session_factory()
     try:
         job = session.get(EncodeJob, job_id)
-        if job is not None:
-            job.status = JobStatus.error
-            job.error_message = message[:1000]
-            job.completed_at = naive_utcnow()
-            session.commit()
+        if job is None or job.status != JobStatus.running:
+            # Job was rolled back to queued by the shutdown handler; don't overwrite it.
+            return
+        job.status = JobStatus.error
+        job.error_message = message[:1000]
+        job.completed_at = naive_utcnow()
+        session.commit()
     except Exception:
         logger.exception("Failed to set error state on EncodeJob %s", job_id)
     finally:
