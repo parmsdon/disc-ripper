@@ -34,6 +34,7 @@ from common.models import EncodeJob, JobStatus, Setting
 from encoder_service.cd_encoder import encode_cd_track
 from encoder_service.dvd_encoder import encode_dvd_title
 from encoder_service.job_rollback import rollback_encode_job
+from encoder_service import process_registry
 
 POLL_INTERVAL_SECONDS = 5
 
@@ -88,13 +89,25 @@ def _get_command(session) -> str:
     return setting.value if setting else ""
 
 
-def shutdown(Session: sessionmaker) -> None:
+def shutdown(Session: sessionmaker, threads: list | None = None) -> None:
     """
-    Roll back all running encode jobs (DB query is the source of truth —
-    we don't rely on in-memory thread state so this is safe on KeyboardInterrupt
-    too), mark service stopped, write final heartbeat.
+    Kill all running encode subprocesses, wait for worker threads to exit,
+    roll back any jobs still marked running in the DB, then mark the service
+    stopped.  threads should be the combined list of active CD and DVD
+    encoder threads; may be omitted (e.g. on KeyboardInterrupt) in which
+    case we rely on daemon-thread cleanup.
     """
-    # Find running jobs via DB, then reset each via the canonical rollback path.
+    # 1. Kill every registered subprocess immediately.
+    process_registry.terminate_all()
+
+    # 2. Wait for worker threads so they finish their DB cleanup before we
+    #    do the final rollback scan (avoids a race between the thread's
+    #    error-handling write and our status reset).
+    if threads:
+        for t in threads:
+            t.join(timeout=30)
+
+    # 3. Roll back any jobs still marked running (handles crashes / races).
     with Session() as session:
         running_ids = [
             job.id for job in session.scalars(
@@ -208,7 +221,8 @@ def run(cfg: dict) -> None:
 
             if command == "exit":
                 logger.info("Received exit command - shutting down")
-                shutdown(Session)
+                all_threads = list(running_cd_jobs.values()) + list(running_dvd_jobs.values())
+                shutdown(Session, all_threads)
                 return
 
         except Exception:

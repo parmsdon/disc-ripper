@@ -114,6 +114,14 @@ function JobsTable({ jobs }) {
   }
   return (
     <table className="catalogue-table encoder-jobs-table">
+      <colgroup>
+        <col />
+        <col style={{ width: "130px" }} />
+        <col style={{ width: "90px" }} />
+        <col style={{ width: "160px" }} />
+        <col style={{ width: "65px" }} />
+        <col style={{ width: "80px" }} />
+      </colgroup>
       <thead>
         <tr>
           <th>Disc / Track</th>

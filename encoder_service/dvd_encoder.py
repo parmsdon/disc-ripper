@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from common.config import load_config
 from common.models import EncodeJob, JobStatus, naive_utcnow
+from encoder_service import process_registry
 
 logger = logging.getLogger(__name__)
 
@@ -155,19 +156,23 @@ def _run_handbrake(
             text=True,
             bufsize=1,
         )
+        process_registry.register(job_id, proc)
+        try:
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                log_lines.append(line)
+                now = time.time()
+                if now - last_update >= _DVD_PROGRESS_THROTTLE_SECONDS:
+                    m = _HB_PROGRESS_RE.search(line)
+                    if m:
+                        pct = min(99, int(float(m.group(1))))
+                        _update_job_progress(job_id, pct, stage, session_factory)
+                        last_update = now
 
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            log_lines.append(line)
-            now = time.time()
-            if now - last_update >= _DVD_PROGRESS_THROTTLE_SECONDS:
-                m = _HB_PROGRESS_RE.search(line)
-                if m:
-                    pct = min(99, int(float(m.group(1))))
-                    _update_job_progress(job_id, pct, stage, session_factory)
-                    last_update = now
+            proc.wait()
+        finally:
+            process_registry.deregister(job_id)
 
-        proc.wait()
         full_log = "\n".join(log_lines)
 
         session = session_factory()

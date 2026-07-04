@@ -16,6 +16,7 @@ from pathlib import Path
 
 from common.config import load_config, get_db_url
 from common.models import EncodeJob, JobStatus, naive_utcnow
+from encoder_service import process_registry
 
 logger = logging.getLogger(__name__)
 
@@ -125,18 +126,22 @@ def encode_flac(
             text=True,
             bufsize=1,
         )
+        process_registry.register(job_id, proc)
+        try:
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                log_lines.append(line)
+                now = time.time()
+                if now - last_update >= _PROGRESS_THROTTLE_SECONDS:
+                    m = _FLAC_PROGRESS_RE.search(line)
+                    if m:
+                        _update_job_progress(job_id, int(m.group(1)), "Encoding FLAC", session_factory)
+                        last_update = now
 
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            log_lines.append(line)
-            now = time.time()
-            if now - last_update >= _PROGRESS_THROTTLE_SECONDS:
-                m = _FLAC_PROGRESS_RE.search(line)
-                if m:
-                    _update_job_progress(job_id, int(m.group(1)), "Encoding FLAC", session_factory)
-                    last_update = now
+            proc.wait()
+        finally:
+            process_registry.deregister(job_id)
 
-        proc.wait()
         full_log = "\n".join(log_lines)
 
         session = session_factory()
@@ -218,25 +223,29 @@ def encode_mp3(
             text=True,
             bufsize=1,
         )
+        process_registry.register(job_id, proc)
+        try:
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                log_lines.append(line)
+                if duration_seconds and duration_seconds > 0:
+                    now = time.time()
+                    if now - last_update >= _PROGRESS_THROTTLE_SECONDS:
+                        m = _FFMPEG_TIME_RE.search(line)
+                        if m:
+                            elapsed = (
+                                int(m.group(1)) * 3600
+                                + int(m.group(2)) * 60
+                                + float(m.group(3))
+                            )
+                            pct = min(99, int(elapsed / duration_seconds * 100))
+                            _update_job_progress(job_id, pct, "Encoding MP3", session_factory)
+                            last_update = now
 
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            log_lines.append(line)
-            if duration_seconds and duration_seconds > 0:
-                now = time.time()
-                if now - last_update >= _PROGRESS_THROTTLE_SECONDS:
-                    m = _FFMPEG_TIME_RE.search(line)
-                    if m:
-                        elapsed = (
-                            int(m.group(1)) * 3600
-                            + int(m.group(2)) * 60
-                            + float(m.group(3))
-                        )
-                        pct = min(99, int(elapsed / duration_seconds * 100))
-                        _update_job_progress(job_id, pct, "Encoding MP3", session_factory)
-                        last_update = now
+            proc.wait()
+        finally:
+            process_registry.deregister(job_id)
 
-        proc.wait()
         full_log = "\n".join(log_lines)
 
         session = session_factory()

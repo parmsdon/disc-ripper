@@ -2137,7 +2137,8 @@ button:disabled {
 }
 
 .encoder-jobs-table {
-  /* Inherits .catalogue-table base styles */
+  table-layout: fixed;
+  width: 100%;
 }
 
 .encoder-job-row {
@@ -2147,6 +2148,10 @@ button:disabled {
 .encoder-disc-name {
   font-size: 13px;
   font-weight: 500;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .encoder-profile-name {
