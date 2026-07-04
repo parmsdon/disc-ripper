@@ -642,6 +642,10 @@ button:disabled {
   color: var(--warn);
 }
 
+.temp-name-conflict {
+  color: var(--error);
+}
+
 .identifying-hint,
 .rerip-hint {
   margin: 0;

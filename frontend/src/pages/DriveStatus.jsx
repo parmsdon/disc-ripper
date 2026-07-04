@@ -186,6 +186,33 @@ const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying"]
 // that lives in the same button row as Copy Label and Copy Current.
 function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasResults, onOpenMbPopover }) {
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [conflict, setConflict] = useState(null);
+
+  useEffect(() => {
+    if (disc.type !== "dvd") return;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === disc.temp_name) {
+      setChecking(false);
+      setConflict(null);
+      return;
+    }
+    setChecking(true);
+    setConflict(null);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.checkTempName(trimmed, disc.id, "dvd");
+        if (!cancelled) {
+          setConflict(result.available ? null : result);
+          setChecking(false);
+        }
+      } catch {
+        if (!cancelled) { setConflict(null); setChecking(false); }
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [value, disc.id, disc.type, disc.temp_name]);
 
   // Naming is offered for the whole active lifetime of a disc (queued
   // through identifying), so the user can type a title in as soon as it's
@@ -262,12 +289,15 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasRe
       )}
       <button
         onClick={handleSave}
-        disabled={saving || !value.trim() || value.trim() === disc.temp_name}
+        disabled={saving || checking || !!conflict || !value.trim() || value.trim() === disc.temp_name}
       >
         {saving ? "Saving…" : "Save"}
       </button>
       {disc.status === "identifying" && (
         <span className="warning-hint">This can't be changed once saved</span>
+      )}
+      {conflict && (
+        <span className="warning-hint temp-name-conflict">Already in use by another DVD</span>
       )}
     </div>
   );

@@ -368,6 +368,35 @@ def get_disc(disc_id):
     return jsonify(data)
 
 
+@discs_bp.route("/check-temp-name", methods=["GET"])
+def check_temp_name():
+    name = request.args.get("name", "").strip()
+    disc_id = request.args.get("disc_id", type=int)
+    disc_type = request.args.get("type", "")
+
+    if disc_type != "dvd" or not name:
+        return jsonify({"available": True})
+
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    q = select(Disc).where(
+        Disc.type == DiscType.dvd,
+        func.lower(Disc.temp_name) == func.lower(name),
+    )
+    if disc_id:
+        q = q.where(Disc.id != disc_id)
+
+    conflict = session.scalar(q)
+    if conflict:
+        return jsonify({
+            "available": False,
+            "conflict_disc_id": conflict.id,
+            "conflict_temp_name": conflict.temp_name,
+        })
+    return jsonify({"available": True})
+
+
 @discs_bp.route("/<int:disc_id>/temp-name", methods=["PATCH"])
 def update_temp_name(disc_id):
     Session = current_app.config["DB_SESSION"]
@@ -381,7 +410,20 @@ def update_temp_name(disc_id):
     if "temp_name" not in body:
         return jsonify({"error": "Missing field: temp_name"}), 400
 
-    disc.temp_name = body["temp_name"] or None
+    new_name = body["temp_name"] or None
+
+    if disc.type == DiscType.dvd and new_name:
+        conflict = session.scalar(
+            select(Disc).where(
+                Disc.type == DiscType.dvd,
+                Disc.id != disc_id,
+                func.lower(Disc.temp_name) == func.lower(new_name),
+            )
+        )
+        if conflict:
+            return jsonify({"error": "This working title is already used by another DVD - please choose a unique name"}), 409
+
+    disc.temp_name = new_name
     if disc.temp_name and disc.status == DiscStatus.identifying:
         disc.status = DiscStatus.ripped
     session.commit()

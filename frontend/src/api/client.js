@@ -114,6 +114,8 @@ export const api = {
   fixStaleDvdDriveAssociations: () => request("/audit/fix-stale-dvd-drive-associations", { method: "POST" }),
   fixStaleCdDriveAssociations: () => request("/audit/fix-stale-cd-drive-associations", { method: "POST" }),
   cleanupOrphanedWavDirs: () => request("/audit/cleanup-orphaned-wav-dirs", { method: "POST" }),
+  checkTempName: (name, discId, type) =>
+    request(`/discs/check-temp-name?name=${encodeURIComponent(name)}&disc_id=${discId}&type=${type}`),
 
   // Encode jobs
   getEncodeJobs: (params = {}) => {

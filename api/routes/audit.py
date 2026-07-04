@@ -230,6 +230,28 @@ def run_audit():
                 "drive_label": drive.label if drive else None,
             })
 
+    # ── DVD: duplicate working titles ────────────────────────────────────────
+    dup_tn_rows = session.execute(
+        select(func.lower(Disc.temp_name).label("name_lower"), func.count(Disc.id).label("cnt"))
+        .where(Disc.type == DiscType.dvd, Disc.temp_name.isnot(None))
+        .group_by(func.lower(Disc.temp_name))
+        .having(func.count(Disc.id) > 1)
+    ).all()
+    duplicate_temp_names = []
+    for row in dup_tn_rows:
+        discs = session.scalars(
+            select(Disc).where(
+                Disc.type == DiscType.dvd,
+                func.lower(Disc.temp_name) == row.name_lower,
+            )
+        ).all()
+        duplicate_temp_names.append({
+            "temp_name": discs[0].temp_name if discs else row.name_lower,
+            "count": row.cnt,
+            "disc_ids": [d.id for d in discs],
+            "titles": [_disc_title(d) for d in discs],
+        })
+
     # ── CD: duplicate fingerprints ───────────────────────────────────────────
     dup_cd_rows = session.execute(
         select(Disc.disc_fingerprint, func.count(Disc.id).label("cnt"))
@@ -432,7 +454,7 @@ def run_audit():
     dvd_issues = (
         len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
         + len(null_raw_path) + len(stale_dvd_associations)
-        + len(missing_dvd_encode_jobs)
+        + len(missing_dvd_encode_jobs) + len(duplicate_temp_names)
     )
     cd_issues = (
         len(duplicate_cd_discs) + len(missing_wav_files) + len(orphaned_wav_dirs)
@@ -450,6 +472,7 @@ def run_audit():
             "null_raw_path": null_raw_path,
             "stale_drive_associations": stale_dvd_associations,
             "missing_encode_jobs": missing_dvd_encode_jobs,
+            "duplicate_temp_names": duplicate_temp_names,
         },
         "cd": {
             "duplicate_discs": duplicate_cd_discs,

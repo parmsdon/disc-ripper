@@ -271,6 +271,20 @@ export default function Audit() {
         />
       </IssueSection>
 
+      <IssueSection
+        title="DVD: Duplicate working titles"
+        count={dvd?.duplicate_temp_names?.length}
+      >
+        <IssueTable
+          columns={["Working Title", "Count", "Disc IDs"]}
+          rows={(dvd?.duplicate_temp_names ?? []).map((r) => [
+            r.temp_name,
+            r.count,
+            r.disc_ids.join(", "),
+          ])}
+        />
+      </IssueSection>
+
       {/* CD sections */}
       <IssueSection
         title="CD: Duplicate disc fingerprints"
