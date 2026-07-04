@@ -32,7 +32,7 @@ function loadStoredTheme() {
   return stored === "dark" || stored === "light" ? stored : "dark";
 }
 
-function NavServiceStatus({ serviceStatus, serviceHeartbeat, onStop }) {
+function NavServiceStatus({ label, serviceStatus, serviceHeartbeat, onStop }) {
   const [now, setNow] = useState(Date.now());
   const [stopRequested, setStopRequested] = useState(false);
 
@@ -71,14 +71,15 @@ function NavServiceStatus({ serviceStatus, serviceHeartbeat, onStop }) {
 
   return (
     <div className="nav-service-control">
+      <span className="nav-service-label">{label}</span>
       <span className={`status-pill ${pillClass}`}>{pillText}</span>
       <button
         className="nav-service-btn"
         onClick={handleStop}
         disabled={stopRequested || isStopped}
-        title={isStopped ? "Ripper service is stopped" : "Request a clean shutdown of the ripper service"}
+        title={isStopped ? `${label} service is stopped` : `Request a clean shutdown of the ${label.toLowerCase()} service`}
       >
-        {stopRequested && !isStopped ? "Stopping…" : "Stop Service"}
+        {stopRequested && !isStopped ? "Stopping…" : "Stop"}
       </button>
     </div>
   );
@@ -93,6 +94,8 @@ export default function App() {
   const [savingFakeDirtyMode, setSavingFakeDirtyMode] = useState(false);
   const [serviceStatus, setServiceStatus] = useState("stopped");
   const [serviceHeartbeat, setServiceHeartbeat] = useState(null);
+  const [encoderServiceStatus, setEncoderServiceStatus] = useState("stopped");
+  const [encoderServiceHeartbeat, setEncoderServiceHeartbeat] = useState(null);
 
   useEffect(() => {
     api.ping()
@@ -127,18 +130,38 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  const fetchEncoderServiceStatus = useCallback(() => {
+    api.getEncoderServiceStatus()
+      .then((data) => setEncoderServiceStatus(data.encoder_service_status))
+      .catch(() => {});
+  }, []);
+
+  const fetchEncoderServiceHeartbeat = useCallback(() => {
+    api.getEncoderServiceHeartbeat()
+      .then((data) => setEncoderServiceHeartbeat(data.encoder_service_heartbeat))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetchServiceStatus();
     fetchServiceHeartbeat();
+    fetchEncoderServiceStatus();
+    fetchEncoderServiceHeartbeat();
     const t = setInterval(() => {
       fetchServiceStatus();
       fetchServiceHeartbeat();
+      fetchEncoderServiceStatus();
+      fetchEncoderServiceHeartbeat();
     }, 1000);
     return () => clearInterval(t);
-  }, [fetchServiceStatus, fetchServiceHeartbeat]);
+  }, [fetchServiceStatus, fetchServiceHeartbeat, fetchEncoderServiceStatus, fetchEncoderServiceHeartbeat]);
 
   async function handleStopService() {
     await api.setServiceCommand("exit");
+  }
+
+  async function handleStopEncoderService() {
+    await api.setEncoderServiceCommand("exit");
   }
 
   async function toggleFakeRipMode() {
@@ -217,11 +240,20 @@ export default function App() {
               </NavLink>
             ))}
           </div>
-          <NavServiceStatus
-            serviceStatus={serviceStatus}
-            serviceHeartbeat={serviceHeartbeat}
-            onStop={handleStopService}
-          />
+          <div className="nav-services">
+            <NavServiceStatus
+              label="Ripper"
+              serviceStatus={serviceStatus}
+              serviceHeartbeat={serviceHeartbeat}
+              onStop={handleStopService}
+            />
+            <NavServiceStatus
+              label="Encoder"
+              serviceStatus={encoderServiceStatus}
+              serviceHeartbeat={encoderServiceHeartbeat}
+              onStop={handleStopEncoderService}
+            />
+          </div>
         </nav>
 
         <main className="content">

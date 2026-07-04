@@ -2049,12 +2049,29 @@ button:disabled {
 
 /* ── Nav bar service status ───────────────────────────────────────────────── */
 
+.nav-services {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  padding: 6px 0;
+}
+
 .nav-service-control {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 6px;
   flex-shrink: 0;
+  border-left: 1px solid var(--panel-border);
+  padding-left: 14px;
+}
+
+.nav-service-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .nav-service-btn {

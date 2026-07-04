@@ -88,6 +88,9 @@ DEFAULT_SETTINGS = [
     {"key": "cd_encoding_enabled", "value": "false"},
     {"key": "max_dvd_encoders", "value": "1"},
     {"key": "max_cd_encoders", "value": "2"},
+    {"key": "encoder_service_status", "value": "stopped"},
+    {"key": "encoder_service_command", "value": ""},
+    {"key": "encoder_service_heartbeat", "value": ""},
 ]
 
 

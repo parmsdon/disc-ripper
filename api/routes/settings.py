@@ -30,6 +30,11 @@ _DEFAULT_SERVICE_STATUS = "stopped"
 _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
 
+_ENCODER_SERVICE_STATUS_KEY = "encoder_service_status"
+_ENCODER_SERVICE_HEARTBEAT_KEY = "encoder_service_heartbeat"
+_ENCODER_SERVICE_COMMAND_KEY = "encoder_service_command"
+_DEFAULT_ENCODER_SERVICE_STATUS = "stopped"
+
 _DVD_ENCODING_ENABLED_KEY = "dvd_encoding_enabled"
 _CD_ENCODING_ENABLED_KEY = "cd_encoding_enabled"
 _MAX_DVD_ENCODERS_KEY = "max_dvd_encoders"
@@ -305,6 +310,41 @@ def set_max_cd_encoders():
         session.add(Setting(key=_MAX_CD_ENCODERS_KEY, value=str(raw)))
     session.commit()
     return jsonify({"max_cd_encoders": raw})
+
+
+@settings_bp.route("/encoder-service-status", methods=["GET"])
+def get_encoder_service_status():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _ENCODER_SERVICE_STATUS_KEY)
+    value = setting.value if setting and setting.value else _DEFAULT_ENCODER_SERVICE_STATUS
+    return jsonify({"encoder_service_status": value})
+
+
+@settings_bp.route("/encoder-service-heartbeat", methods=["GET"])
+def get_encoder_service_heartbeat():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    setting = session.get(Setting, _ENCODER_SERVICE_HEARTBEAT_KEY)
+    value = setting.value if setting and setting.value else None
+    return jsonify({"encoder_service_heartbeat": value})
+
+
+@settings_bp.route("/encoder-service-command", methods=["PUT"])
+def set_encoder_service_command():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("encoder_service_command")
+    if raw not in ("exit", ""):
+        return jsonify({"error": "encoder_service_command must be 'exit' or ''"}), 400
+    setting = session.get(Setting, _ENCODER_SERVICE_COMMAND_KEY)
+    if setting:
+        setting.value = raw
+    else:
+        session.add(Setting(key=_ENCODER_SERVICE_COMMAND_KEY, value=raw))
+    session.commit()
+    return jsonify({"encoder_service_command": raw})
 
 
 @settings_bp.route("/service-command", methods=["PUT"])

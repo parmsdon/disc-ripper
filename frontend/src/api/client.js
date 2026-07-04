@@ -138,4 +138,13 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ max_cd_encoders: n }),
     }),
+
+  // Encoder service status (written by encoder_service, read-only here except command)
+  getEncoderServiceStatus: () => request("/settings/encoder-service-status"),
+  getEncoderServiceHeartbeat: () => request("/settings/encoder-service-heartbeat"),
+  setEncoderServiceCommand: (command) =>
+    request("/settings/encoder-service-command", {
+      method: "PUT",
+      body: JSON.stringify({ encoder_service_command: command }),
+    }),
 };
