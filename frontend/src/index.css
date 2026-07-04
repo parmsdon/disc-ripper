@@ -1938,6 +1938,11 @@ button:disabled {
   overflow-x: auto;
 }
 
+.audit-section-body .audit-action-row {
+  padding: 10px 16px;
+  border-top: 1px solid var(--panel-border);
+}
+
 .audit-table {
   width: 100%;
   border-collapse: collapse;

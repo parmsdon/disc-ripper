@@ -104,7 +104,10 @@ export const api = {
   getOldIsos: () => request("/discs/old-isos"),
   reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
   getAudit: () => request("/audit/"),
-  createMissingEncodeJobs: () => request("/audit/create-missing-encode-jobs", { method: "POST" }),
+  createMissingDvdEncodeJobs: () => request("/audit/create-missing-dvd-encode-jobs", { method: "POST" }),
+  createMissingCdEncodeJobs: () => request("/audit/create-missing-cd-encode-jobs", { method: "POST" }),
+  fixStaleDriveAssociations: () => request("/audit/fix-stale-drive-associations", { method: "POST" }),
+  cleanupOrphanedWavDirs: () => request("/audit/cleanup-orphaned-wav-dirs", { method: "POST" }),
 
   // Encode jobs
   getEncodeJobs: (params = {}) => {

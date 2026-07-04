@@ -2,10 +2,11 @@
 Audit API — DB/filesystem consistency checks.
 """
 
+import shutil
 from pathlib import Path
 
 from flask import Blueprint, jsonify, current_app
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 
 from common.encode_queue import create_encode_jobs
 from common.models import (
@@ -19,12 +20,11 @@ def _disc_title(disc):
     return disc.temp_name or disc.album_title or f"Disc #{disc.id}"
 
 
-@audit_bp.route("/create-missing-encode-jobs", methods=["POST"])
-def create_missing_encode_jobs():
+@audit_bp.route("/create-missing-dvd-encode-jobs", methods=["POST"])
+def create_missing_dvd_encode_jobs():
     Session = current_app.config["DB_SESSION"]
     session = Session()
-
-    dvd_created = 0
+    created = 0
     for disc in session.scalars(
         select(Disc).where(
             Disc.type == DiscType.dvd,
@@ -32,9 +32,15 @@ def create_missing_encode_jobs():
             Disc.raw_path.isnot(None),
         )
     ).all():
-        dvd_created += create_encode_jobs(session, disc.id, "dvd")
+        created += create_encode_jobs(session, disc.id, "dvd")
+    return jsonify({"jobs_created": created})
 
-    cd_created = 0
+
+@audit_bp.route("/create-missing-cd-encode-jobs", methods=["POST"])
+def create_missing_cd_encode_jobs():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    created = 0
     for disc in session.scalars(
         select(Disc).where(
             Disc.type == DiscType.cd,
@@ -42,9 +48,51 @@ def create_missing_encode_jobs():
             Disc.raw_path.isnot(None),
         )
     ).all():
-        cd_created += create_encode_jobs(session, disc.id, "cd")
+        created += create_encode_jobs(session, disc.id, "cd")
+    return jsonify({"jobs_created": created})
 
-    return jsonify({"dvd_jobs_created": dvd_created, "cd_jobs_created": cd_created})
+
+@audit_bp.route("/fix-stale-drive-associations", methods=["POST"])
+def fix_stale_drive_associations():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    result = session.execute(
+        update(Disc)
+        .where(
+            Disc.status.in_([DiscStatus.ripped, DiscStatus.done, DiscStatus.error, DiscStatus.identifying]),
+            Disc.drive_id.isnot(None),
+        )
+        .values(drive_id=None)
+    )
+    session.commit()
+    return jsonify({"fixed": result.rowcount})
+
+
+@audit_bp.route("/cleanup-orphaned-wav-dirs", methods=["POST"])
+def cleanup_orphaned_wav_dirs():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    store_root = Path(cfg["storage"]["datastore_root"])
+    cd_raw = store_root / "cd_store" / "raw"
+
+    all_cd_ids = set(
+        session.scalars(select(Disc.id).where(Disc.type == DiscType.cd)).all()
+    )
+
+    deleted = 0
+    errors = 0
+    if cd_raw.exists():
+        for entry in sorted(cd_raw.iterdir()):
+            if entry.is_dir() and entry.name.isdigit():
+                if int(entry.name) not in all_cd_ids:
+                    try:
+                        shutil.rmtree(entry)
+                        deleted += 1
+                    except Exception:
+                        errors += 1
+
+    return jsonify({"deleted": deleted, "errors": errors})
 
 
 @audit_bp.route("/", methods=["GET"])

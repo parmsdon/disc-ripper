@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 
-function IssueSection({ title, count, children }) {
+function IssueSection({ title, count, children, action }) {
   const [open, setOpen] = useState(true);
   if (count === 0) return null;
   return (
@@ -11,7 +11,12 @@ function IssueSection({ title, count, children }) {
         <span className="audit-issue-count">{count}</span>
         <span className="audit-chevron">{open ? "▾" : "▸"}</span>
       </button>
-      {open && <div className="audit-section-body">{children}</div>}
+      {open && (
+        <div className="audit-section-body">
+          {children}
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -39,12 +44,52 @@ function IssueTable({ columns, rows }) {
   );
 }
 
+function ActionRow({ loading, loadingLabel, onClick, label, result, formatResult }) {
+  return (
+    <div className="audit-action-row">
+      <button className="audit-action-btn" onClick={onClick} disabled={loading}>
+        {loading ? loadingLabel : label}
+      </button>
+      {result && !result.error && (
+        <span className="audit-action-result">{formatResult(result)}</span>
+      )}
+      {result?.error && (
+        <span className="audit-action-result audit-action-error">Error: {result.error}</span>
+      )}
+    </div>
+  );
+}
+
+function useAction(apiFn) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function run(...args) {
+    setLoading(true);
+    setResult(null);
+    try {
+      const r = await apiFn(...args);
+      setResult(r);
+      return r;
+    } catch (e) {
+      setResult({ error: e.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { loading, result, run };
+}
+
 export default function Audit() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const [createResult, setCreateResult] = useState(null);
+
+  const dvdJobs = useAction(api.createMissingDvdEncodeJobs);
+  const cdJobs = useAction(api.createMissingCdEncodeJobs);
+  const fixAssociations = useAction(api.fixStaleDriveAssociations);
+  const cleanWavDirs = useAction(api.cleanupOrphanedWavDirs);
 
   const runAudit = useCallback(() => {
     setLoading(true);
@@ -56,25 +101,32 @@ export default function Audit() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleCreateMissingJobs() {
-    setCreating(true);
-    setCreateResult(null);
-    try {
-      const result = await api.createMissingEncodeJobs();
-      setCreateResult(result);
-      runAudit();
-    } catch (e) {
-      setCreateResult({ error: e.message });
-    } finally {
-      setCreating(false);
-    }
-  }
-
   useEffect(() => {
     runAudit();
   }, [runAudit]);
 
   const { summary, dvd, cd, jobs } = data ?? {};
+
+  async function handleDvdJobs() {
+    await dvdJobs.run();
+    runAudit();
+  }
+
+  async function handleCdJobs() {
+    await cdJobs.run();
+    runAudit();
+  }
+
+  async function handleFixAssociations() {
+    await fixAssociations.run();
+    runAudit();
+  }
+
+  async function handleCleanWavDirs() {
+    if (!window.confirm("Delete all orphaned WAV directories? This cannot be undone.")) return;
+    await cleanWavDirs.run();
+    runAudit();
+  }
 
   return (
     <div>
@@ -112,26 +164,25 @@ export default function Audit() {
                 Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
               </span>
             </div>
-            {summary.missing_encode_jobs > 0 && (
-              <div className="audit-action-row">
-                <button
-                  className="audit-action-btn"
-                  onClick={handleCreateMissingJobs}
-                  disabled={creating}
-                >
-                  {creating ? "Creating…" : `Create Missing Jobs (${summary.missing_encode_jobs} disc${summary.missing_encode_jobs !== 1 ? "s" : ""})`}
-                </button>
-                {createResult && !createResult.error && (
-                  <span className="audit-action-result">
-                    Created {createResult.dvd_jobs_created} DVD job{createResult.dvd_jobs_created !== 1 ? "s" : ""}, {createResult.cd_jobs_created} CD job{createResult.cd_jobs_created !== 1 ? "s" : ""}
-                  </span>
-                )}
-                {createResult?.error && (
-                  <span className="audit-action-result audit-action-error">
-                    Error: {createResult.error}
-                  </span>
-                )}
-              </div>
+            {dvd?.missing_encode_jobs?.length > 0 && (
+              <ActionRow
+                loading={dvdJobs.loading}
+                loadingLabel="Creating…"
+                onClick={handleDvdJobs}
+                label={`Create Missing DVD Encode Jobs (${dvd.missing_encode_jobs.length} disc${dvd.missing_encode_jobs.length !== 1 ? "s" : ""})`}
+                result={dvdJobs.result}
+                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
+              />
+            )}
+            {cd?.missing_encode_jobs?.length > 0 && (
+              <ActionRow
+                loading={cdJobs.loading}
+                loadingLabel="Creating…"
+                onClick={handleCdJobs}
+                label={`Create Missing CD Encode Jobs (${cd.missing_encode_jobs.length} disc${cd.missing_encode_jobs.length !== 1 ? "s" : ""})`}
+                result={cdJobs.result}
+                formatResult={(r) => `Created ${r.jobs_created} job${r.jobs_created !== 1 ? "s" : ""}`}
+              />
             )}
           </>
         )}
@@ -202,6 +253,16 @@ export default function Audit() {
           <IssueSection
             title="DVD: Stale drive associations"
             count={dvd.stale_drive_associations.length}
+            action={
+              <ActionRow
+                loading={fixAssociations.loading}
+                loadingLabel="Fixing…"
+                onClick={handleFixAssociations}
+                label="Fix Stale Associations"
+                result={fixAssociations.result}
+                formatResult={(r) => `Fixed ${r.fixed} association${r.fixed !== 1 ? "s" : ""}`}
+              />
+            }
           >
             <IssueTable
               columns={["Disc ID", "Title", "Status", "Drive ID", "Drive Label"]}
@@ -267,6 +328,20 @@ export default function Audit() {
           <IssueSection
             title="CD: Orphaned WAV directories"
             count={cd.orphaned_wav_dirs.length}
+            action={
+              <ActionRow
+                loading={cleanWavDirs.loading}
+                loadingLabel="Deleting…"
+                onClick={handleCleanWavDirs}
+                label="Delete Orphaned Directories"
+                result={cleanWavDirs.result}
+                formatResult={(r) =>
+                  r.errors > 0
+                    ? `Deleted ${r.deleted}, ${r.errors} error${r.errors !== 1 ? "s" : ""}`
+                    : `Deleted ${r.deleted} director${r.deleted !== 1 ? "ies" : "y"}`
+                }
+              />
+            }
           >
             <IssueTable
               columns={["Directory", "Path"]}
