@@ -104,6 +104,7 @@ export const api = {
   getOldIsos: () => request("/discs/old-isos"),
   reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
   getAudit: () => request("/audit/"),
+  createMissingEncodeJobs: () => request("/audit/create-missing-encode-jobs", { method: "POST" }),
 
   // Encode jobs
   getEncodeJobs: (params = {}) => {

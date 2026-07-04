@@ -1832,6 +1832,42 @@ button:disabled {
   border: 1px solid rgba(224, 92, 92, 0.3);
 }
 
+.audit-action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.audit-action-btn {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.audit-action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.audit-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.audit-action-result {
+  font-size: 13px;
+  color: var(--good);
+}
+
+.audit-action-result.audit-action-error {
+  color: var(--error);
+}
+
 .audit-all-clear {
   font-size: 15px;
   color: var(--good);

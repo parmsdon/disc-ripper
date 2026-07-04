@@ -7,6 +7,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import select, func
 
+from common.encode_queue import create_encode_jobs
 from common.models import (
     Disc, DiscType, DiscStatus, Drive, RipJob, EncodeJob, EncodeProfile, JobStatus,
 )
@@ -16,6 +17,34 @@ audit_bp = Blueprint("audit", __name__)
 
 def _disc_title(disc):
     return disc.temp_name or disc.album_title or f"Disc #{disc.id}"
+
+
+@audit_bp.route("/create-missing-encode-jobs", methods=["POST"])
+def create_missing_encode_jobs():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    dvd_created = 0
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.dvd,
+            Disc.status.in_([DiscStatus.ripped, DiscStatus.done]),
+            Disc.raw_path.isnot(None),
+        )
+    ).all():
+        dvd_created += create_encode_jobs(session, disc.id, "dvd")
+
+    cd_created = 0
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.status.in_([DiscStatus.ripped, DiscStatus.done]),
+            Disc.raw_path.isnot(None),
+        )
+    ).all():
+        cd_created += create_encode_jobs(session, disc.id, "cd")
+
+    return jsonify({"dvd_jobs_created": dvd_created, "cd_jobs_created": cd_created})
 
 
 @audit_bp.route("/", methods=["GET"])

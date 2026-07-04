@@ -43,6 +43,8 @@ export default function Audit() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [createResult, setCreateResult] = useState(null);
 
   const runAudit = useCallback(() => {
     setLoading(true);
@@ -53,6 +55,20 @@ export default function Audit() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleCreateMissingJobs() {
+    setCreating(true);
+    setCreateResult(null);
+    try {
+      const result = await api.createMissingEncodeJobs();
+      setCreateResult(result);
+      runAudit();
+    } catch (e) {
+      setCreateResult({ error: e.message });
+    } finally {
+      setCreating(false);
+    }
+  }
 
   useEffect(() => {
     runAudit();
@@ -78,23 +94,46 @@ export default function Audit() {
         {!data && !error && <div className="empty-state">Loading…</div>}
 
         {summary && (
-          <div className="audit-summary">
-            <span
-              className={`audit-summary-item${summary.dvd_issues > 0 ? " has-issues" : " clean"}`}
-            >
-              DVD: {summary.dvd_issues} issue{summary.dvd_issues !== 1 ? "s" : ""}
-            </span>
-            <span
-              className={`audit-summary-item${summary.cd_issues > 0 ? " has-issues" : " clean"}`}
-            >
-              CD: {summary.cd_issues} issue{summary.cd_issues !== 1 ? "s" : ""}
-            </span>
-            <span
-              className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}
-            >
-              Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
-            </span>
-          </div>
+          <>
+            <div className="audit-summary">
+              <span
+                className={`audit-summary-item${summary.dvd_issues > 0 ? " has-issues" : " clean"}`}
+              >
+                DVD: {summary.dvd_issues} issue{summary.dvd_issues !== 1 ? "s" : ""}
+              </span>
+              <span
+                className={`audit-summary-item${summary.cd_issues > 0 ? " has-issues" : " clean"}`}
+              >
+                CD: {summary.cd_issues} issue{summary.cd_issues !== 1 ? "s" : ""}
+              </span>
+              <span
+                className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}
+              >
+                Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
+              </span>
+            </div>
+            {summary.missing_encode_jobs > 0 && (
+              <div className="audit-action-row">
+                <button
+                  className="audit-action-btn"
+                  onClick={handleCreateMissingJobs}
+                  disabled={creating}
+                >
+                  {creating ? "Creating…" : `Create Missing Jobs (${summary.missing_encode_jobs} disc${summary.missing_encode_jobs !== 1 ? "s" : ""})`}
+                </button>
+                {createResult && !createResult.error && (
+                  <span className="audit-action-result">
+                    Created {createResult.dvd_jobs_created} DVD job{createResult.dvd_jobs_created !== 1 ? "s" : ""}, {createResult.cd_jobs_created} CD job{createResult.cd_jobs_created !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {createResult?.error && (
+                  <span className="audit-action-result audit-action-error">
+                    Error: {createResult.error}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
