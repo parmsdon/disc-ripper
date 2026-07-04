@@ -1,24 +1,15 @@
 """
-One-off DEV-ONLY cleanup for leftover fake_rip_mode test duplicates.
+Dev-only: remove fake/test disc data created during development testing.
 
-While verifying the ripper_service scheduling fix, ~18 duplicate queued
-Discs (created by the now-fixed restart-dedup bug, see
-scripts/dedupe_stuck_jobs.py) were driven through to completion with
-fake_rip_mode on, turning them into duplicate status="ripped" Discs
-with fake ISO files under dvd_store/raw/<id>/ instead. None of that is
-real rip output - it's test noise from interactive debugging, not
-production data.
+Hard-blocked if DISCRIPPER_ENV != 'dev'.
 
-This is NOT the general dedup tool (that's dedupe_stuck_jobs.py, which
-stays scoped to status="queued" only and is safe to run anywhere). This
-script targets completed/failed test duplicates specifically and is
-hard-blocked outside dev, since deleting "ripped"/"done"/"error" discs
-would destroy genuine completed rips in a real environment.
+Actions (in order):
+  1. Delete DVD discs whose raw_path points to a missing or undersized ISO.
+  2. Reset failed DVD Extract encode jobs (non-zero exit) to queued,
+     where the disc's ISO is genuinely valid.
+  3. Delete CD discs where no track has a valid (>= MIN_WAV_SIZE) WAV file.
 
-For each (drive_id, disc_fingerprint) group of status IN ('ripped',
-'done', 'error') discs with more than one row, keeps the oldest (lowest
-id) and deletes the rest - their rip_jobs (cascade) and their raw_path
-directory on disk, if any.
+Real ISOs and WAV files are never touched.
 
 Usage:
     DISCRIPPER_ENV=dev python3 scripts/clean_dev_test_data.py
@@ -27,87 +18,208 @@ Usage:
 import os
 import shutil
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+_env = os.environ.get("DISCRIPPER_ENV", "dev")
+if _env != "dev":
+    print(f"ERROR: DISCRIPPER_ENV='{_env}'. This script is dev-only.", file=sys.stderr)
+    sys.exit(1)
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
-from common.models import Disc, DiscStatus
+from common.models import Disc, DiscType, EncodeJob, EncodeProfile, JobStatus
 
-_COMPLETED_STATUSES = (DiscStatus.ripped, DiscStatus.done, DiscStatus.error)
-
-
-def find_duplicate_groups(session):
-    discs = session.scalars(
-        select(Disc).where(Disc.status.in_(_COMPLETED_STATUSES)).order_by(Disc.id)
-    ).all()
-
-    groups = defaultdict(list)
-    for disc in discs:
-        if disc.disc_fingerprint is None:
-            continue
-        groups[(disc.drive_id, disc.disc_fingerprint)].append(disc)
-
-    return {key: discs for key, discs in groups.items() if len(discs) > 1}
+MIN_ISO_SIZE = 100 * 1024 * 1024  # 100 MB
+MIN_WAV_SIZE = 1 * 1024 * 1024    # 1 MB
 
 
-def main(env: str) -> None:
-    if env != "dev":
-        print(f"Refusing to run against env={env!r} - this script is dev-only.")
-        sys.exit(1)
+def _iso_is_valid(disc_dir: Path) -> bool:
+    """True if disc_dir contains a *.iso file >= MIN_ISO_SIZE."""
+    if not disc_dir.exists():
+        return False
+    for iso in disc_dir.glob("*.iso"):
+        try:
+            if iso.stat().st_size >= MIN_ISO_SIZE:
+                return True
+        except OSError:
+            pass
+    return False
 
-    cfg = load_config(env)
+
+def _wav_is_valid(wav_path: Path) -> bool:
+    """True if the WAV file exists and is >= MIN_WAV_SIZE."""
+    try:
+        return wav_path.exists() and wav_path.stat().st_size >= MIN_WAV_SIZE
+    except OSError:
+        return False
+
+
+def _reset_job(job: EncodeJob) -> None:
+    job.status = JobStatus.queued
+    job.error_message = None
+    job.started_at = None
+    job.completed_at = None
+    job.progress_percent = None
+    job.progress_stage = None
+    job.log = None
+
+
+def _rmdir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+        print(f"    deleted {path}")
+
+
+def main() -> None:
+    cfg = load_config(_env)
+    datastore_root = Path(cfg["storage"]["datastore_root"])
+
     engine = create_engine(get_db_url(cfg))
     Session = sessionmaker(bind=engine)
-    session = Session()
 
-    duplicate_groups = find_duplicate_groups(session)
+    with Session() as session:
+        # ----------------------------------------------------------------
+        # Collect: fake DVD discs (raw_path set but ISO missing/undersized)
+        # ----------------------------------------------------------------
+        dvd_discs = session.scalars(
+            select(Disc).where(Disc.type == DiscType.dvd, Disc.raw_path.isnot(None))
+        ).all()
 
-    if not duplicate_groups:
-        print("No duplicate completed/failed discs found - nothing to do.")
-        return
+        fake_dvd_discs = [
+            d for d in dvd_discs
+            if not _iso_is_valid(datastore_root / d.raw_path)
+        ]
 
-    to_delete = []
-    print("Duplicate groups found:\n")
-    for (drive_id, fingerprint), discs in duplicate_groups.items():
-        discs_sorted = sorted(discs, key=lambda d: d.id)
-        keeper, dupes = discs_sorted[0], discs_sorted[1:]
+        # ----------------------------------------------------------------
+        # Collect: failed DVD Extract jobs on discs with a valid ISO
+        # ----------------------------------------------------------------
+        extract_profile = session.scalar(
+            select(EncodeProfile).where(EncodeProfile.name == "DVD Extract")
+        )
 
-        print(f"  drive_id={drive_id} fingerprint={fingerprint!r}")
-        print(f"    keep:   disc #{keeper.id} (status={keeper.status.value}, created {keeper.created_at})")
-        for dupe in dupes:
-            dupe_job_ids = [job.id for job in dupe.rip_jobs]
-            print(
-                f"    delete: disc #{dupe.id} (status={dupe.status.value}, created {dupe.created_at}), "
-                f"rip_job(s) {dupe_job_ids}, raw_path={dupe.raw_path!r}"
+        failed_extract_jobs: list[EncodeJob] = []
+        if extract_profile:
+            candidates = session.scalars(
+                select(EncodeJob).where(
+                    EncodeJob.profile_id == extract_profile.id,
+                    EncodeJob.status == JobStatus.error,
+                    EncodeJob.error_message.ilike("%non-zero%"),
+                )
+            ).all()
+            for job in candidates:
+                disc = job.disc
+                if disc and disc.raw_path and _iso_is_valid(datastore_root / disc.raw_path):
+                    failed_extract_jobs.append(job)
+
+        # ----------------------------------------------------------------
+        # Collect: fake CD discs (no track has a valid WAV file)
+        # ----------------------------------------------------------------
+        cd_discs = session.scalars(select(Disc).where(Disc.type == DiscType.cd)).all()
+
+        # CD encode profile output folders for filesystem cleanup
+        cd_profiles = session.scalars(
+            select(EncodeProfile).where(EncodeProfile.media_type == "cd")
+        ).all()
+        cd_output_folders = [p.output_folder for p in cd_profiles]
+
+        fake_cd_discs = []
+        for disc in cd_discs:
+            if not disc.tracks:
+                fake_cd_discs.append(disc)
+                continue
+            has_valid = any(
+                track.wav_filename and disc.raw_path
+                and _wav_is_valid(datastore_root / disc.raw_path / track.wav_filename)
+                for track in disc.tracks
             )
+            if not has_valid:
+                fake_cd_discs.append(disc)
+
+        # ----------------------------------------------------------------
+        # Summary and confirmation
+        # ----------------------------------------------------------------
+        print()
+        print(f"Will delete:          {len(fake_dvd_discs)} fake DVD disc(s), "
+              f"{len(fake_cd_discs)} fake CD disc(s)")
+        print(f"Will reset to queued: {len(failed_extract_jobs)} cancelled DVD encode job(s)")
+        print("Real ISOs and WAV files will NOT be touched")
         print()
 
-        to_delete.extend(dupes)
+        if not fake_dvd_discs and not failed_extract_jobs and not fake_cd_discs:
+            print("Nothing to do.")
+            return
 
-    print(f"{len(to_delete)} duplicate disc(s), their rip_jobs, and any raw_path files will be permanently deleted.")
-    confirmation = input("Type 'yes' to proceed: ").strip()
-    if confirmation != "yes":
-        print("Aborted - no changes made.")
-        return
+        answer = input('Type "yes" to proceed: ').strip()
+        if answer != "yes":
+            print("Aborted.")
+            return
 
-    datastore_root = Path(cfg["storage"]["datastore_root"])
-    for disc in to_delete:
-        if disc.raw_path:
-            disc_dir = datastore_root / disc.raw_path
-            if disc_dir.is_dir():
-                shutil.rmtree(disc_dir)
-                print(f"Removed {disc_dir}")
-        session.delete(disc)
+        print()
 
-    session.commit()
-    print(f"Deleted {len(to_delete)} duplicate disc(s).")
+        # ----------------------------------------------------------------
+        # Action 1: delete fake DVD discs
+        # ----------------------------------------------------------------
+        deleted_dvd = 0
+        for disc in fake_dvd_discs:
+            print(f"  DVD disc #{disc.id} ({disc.temp_name or 'no title'}):")
+            _rmdir(datastore_root / disc.raw_path)
+            session.delete(disc)
+            deleted_dvd += 1
+
+        if deleted_dvd:
+            session.flush()
+        print(f"Deleted {deleted_dvd} fake DVD disc record(s).")
+
+        # ----------------------------------------------------------------
+        # Action 2: reset failed DVD Extract jobs (and error dependents)
+        # ----------------------------------------------------------------
+        reset_jobs = 0
+        for extract_job in failed_extract_jobs:
+            disc = extract_job.disc
+            print(f"  Resetting Extract job #{extract_job.id} "
+                  f"(disc #{disc.id if disc else '?'}):")
+            _reset_job(extract_job)
+            print(f"    reset encode_job #{extract_job.id} (DVD Extract)")
+            reset_jobs += 1
+
+            if disc and extract_profile:
+                for dep_job in disc.encode_jobs:
+                    if (
+                        dep_job.id != extract_job.id
+                        and dep_job.status == JobStatus.error
+                        and dep_job.profile
+                        and dep_job.profile.depends_on_profile_id == extract_profile.id
+                    ):
+                        _reset_job(dep_job)
+                        print(f"    reset encode_job #{dep_job.id} ({dep_job.profile.name})")
+
+        print(f"Reset {reset_jobs} cancelled DVD encode job(s) to queued.")
+
+        # ----------------------------------------------------------------
+        # Action 3: delete fake CD discs
+        # ----------------------------------------------------------------
+        deleted_cd = 0
+        for disc in fake_cd_discs:
+            print(f"  CD disc #{disc.id} ({disc.album_title or disc.temp_name or 'no title'}):")
+            if disc.raw_path:
+                _rmdir(datastore_root / disc.raw_path)
+            for folder in cd_output_folders:
+                _rmdir(datastore_root / folder / str(disc.id))
+            session.delete(disc)
+            deleted_cd += 1
+
+        if deleted_cd:
+            session.flush()
+        print(f"Deleted {deleted_cd} fake CD disc record(s).")
+
+        session.commit()
+        print("\nDone.")
 
 
 if __name__ == "__main__":
-    main(os.environ.get("DISCRIPPER_ENV", "dev"))
+    main()
