@@ -40,6 +40,7 @@ export default function CdCatalogue() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const [filter, setFilter] = useState("all");
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
@@ -55,6 +56,16 @@ export default function CdCatalogue() {
     const handle = setTimeout(() => fetchRows(filter, dirty, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [filter, dirty, search, fetchRows]);
+
+  async function handleDelete(discId) {
+    setDeleteError(null);
+    try {
+      await api.deleteDisc(discId);
+      fetchRows(filter, dirty, search);
+    } catch (e) {
+      setDeleteError(e.message);
+    }
+  }
 
   return (
     <div>
@@ -94,6 +105,7 @@ export default function CdCatalogue() {
         </div>
 
         {loadError && <div className="catalogue-empty">Error: {loadError}</div>}
+        {deleteError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Delete failed: {deleteError}</div>}
         {!loadError && !loading && rows.length === 0 && (
           <div className="catalogue-empty">No discs found.</div>
         )}
@@ -108,6 +120,7 @@ export default function CdCatalogue() {
                 <th>MusicBrainz</th>
                 <th>Ripped</th>
                 <th>Quality</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -154,6 +167,17 @@ export default function CdCatalogue() {
                       {row.disc_rip_quality === "dirty"
                         ? <span className="dirty-rip-badge">⚠ dirty</span>
                         : <span className="catalogue-dim">—</span>}
+                    </td>
+                    <td>
+                      {row.disc_id && !row.disc_temp_name && !row.album_title && (
+                        <button
+                          className="catalogue-delete-btn"
+                          onClick={() => handleDelete(row.disc_id)}
+                          title="Delete this unidentified disc record"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

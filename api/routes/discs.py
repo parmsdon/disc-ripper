@@ -573,6 +573,19 @@ def delete_disc(disc_id):
     session.flush()
     session.delete(disc)
     session.commit()
+
+    if disc.type == DiscType.cd:
+        cfg = current_app.config.get("DISCRIPPER_CFG")
+        if cfg:
+            store_root = Path(cfg["storage"]["datastore_root"])
+            cd_store = store_root / "cd_store"
+            if cd_store.exists():
+                for store_subdir in cd_store.iterdir():
+                    if store_subdir.is_dir():
+                        disc_dir = store_subdir / str(disc_id)
+                        if disc_dir.is_dir():
+                            shutil.rmtree(disc_dir, ignore_errors=True)
+
     return jsonify({"status": "ok"})
 
 
