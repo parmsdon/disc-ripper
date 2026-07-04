@@ -144,6 +144,7 @@ def dvd_catalogue():
     id_status  = request.args.get("id_status",  "").strip() or None   # "identified" | "unidentified"
     mm_status  = request.args.get("mm_status",  "").strip() or None   # "matched" | "unmatched"
     search     = request.args.get("search", "").strip()
+    dirty      = request.args.get("dirty", "").strip().lower() == "true"
 
     # Legacy single ?filter= shim so old bookmarks / callers still work.
     _legacy = request.args.get("filter", "").strip()
@@ -200,6 +201,8 @@ def dvd_catalogue():
             q = q.where(Disc.temp_name.isnot(None))
         elif id_status == "unidentified":
             q = q.where(Disc.temp_name.is_(None))
+        if dirty:
+            q = q.where(Disc.rip_quality == "dirty")
         if search:
             q = q.where(
                 Catalog.title.ilike(f"%{search}%")
@@ -213,6 +216,7 @@ def dvd_catalogue():
     # These are My Movies entries (mm="matched") that are unripped and unidentified.
     # Exclude when any filter requires a disc, or when mm_status="unmatched".
     include_unripped = (
+        not dirty and
         rip_status in (None, "unripped") and
         id_status in (None, "unidentified") and
         mm_status in (None, "matched")
@@ -245,6 +249,8 @@ def dvd_catalogue():
             q = q.where(Disc.temp_name.isnot(None))
         elif id_status == "unidentified":
             q = q.where(Disc.temp_name.is_(None))
+        if dirty:
+            q = q.where(Disc.rip_quality == "dirty")
         for disc in session.scalars(_search_matches_disc(q).order_by(Disc.temp_name)):
             rows.append({
                 "row_type": "unmatched_rip",

@@ -87,22 +87,27 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/log/${qs ? `?${qs}` : ""}`);
   },
-  getDvdCatalogue: ({ ripStatus, idStatus, mmStatus, search } = {}) => {
+  getDvdCatalogue: ({ ripStatus, idStatus, mmStatus, search, dirty } = {}) => {
     const p = new URLSearchParams();
     if (ripStatus) p.set("rip_status", ripStatus);
     if (idStatus) p.set("id_status", idStatus);
     if (mmStatus) p.set("mm_status", mmStatus);
     if (search) p.set("search", search);
+    if (dirty) p.set("dirty", "true");
     const qs = p.toString();
     return request(`/catalog/dvd-catalogue${qs ? `?${qs}` : ""}`);
   },
-  getCdCatalogue: (filter, search) =>
-    request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  getCdCatalogue: (filter, search, dirty) =>
+    request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}${dirty ? "&dirty=true" : ""}`),
   deleteDisc: (discId) => request(`/discs/${discId}`, { method: "DELETE" }),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
   getOldIsos: () => request("/discs/old-isos"),
   reconcileDisc: (data) => request("/discs/reconcile", { method: "POST", body: JSON.stringify(data) }),
+  getMbNotFound: () => request("/health/mb-not-found"),
+  getMbError: () => request("/health/mb-error"),
+  getPipelineIdentifying: () => request("/health/pipeline-identifying"),
+  getPipelineErrors: () => request("/health/pipeline-errors"),
   getAudit: () => request("/audit/"),
   createMissingDvdEncodeJobs: () => request("/audit/create-missing-dvd-encode-jobs", { method: "POST" }),
   createMissingCdEncodeJobs: () => request("/audit/create-missing-cd-encode-jobs", { method: "POST" }),

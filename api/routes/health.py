@@ -5,7 +5,10 @@ Health endpoints — library statistics dashboard.
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import exists, select, func
 
-from common.models import Catalog, CDTrack, Disc, DiscStatus, DiscType, RipQuality
+from common.models import (
+    Catalog, CDTrack, Disc, DiscStatus, DiscType, EncodeJob, EncodeProfile,
+    JobStatus, RipQuality,
+)
 
 health_bp = Blueprint("health", __name__)
 
@@ -30,6 +33,21 @@ def health():
     catalog_total = count(Catalog)
     last_sync_dt = session.scalar(select(func.max(Catalog.synced_at)))
     last_sync = last_sync_dt.isoformat() if last_sync_dt else None
+
+    def _encode_counts(media_type):
+        rows = session.execute(
+            select(EncodeJob.status, func.count().label("cnt"))
+            .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
+            .where(EncodeProfile.media_type == media_type)
+            .group_by(EncodeJob.status)
+        ).all()
+        counts = {"queued": 0, "running": 0, "complete": 0, "error": 0}
+        for row in rows:
+            sv = row.status.value if hasattr(row.status, "value") else str(row.status)
+            key = "complete" if sv == "done" else sv
+            if key in counts:
+                counts[key] += row.cnt
+        return counts
 
     return jsonify({
         "status": "ok",
@@ -82,4 +100,66 @@ def health():
             "currently_identifying": count(Disc, Disc.status == DiscStatus.identifying),
             "error_discs": count(Disc, Disc.status == DiscStatus.error),
         },
+        "dvd_encodes": _encode_counts("dvd"),
+        "cd_encodes": _encode_counts("cd"),
     })
+
+
+def _disc_row(disc):
+    return {
+        "disc_id": disc.id,
+        "type": disc.type.value if hasattr(disc.type, "value") else str(disc.type),
+        "temp_name": disc.temp_name or f"Disc #{disc.id}",
+        "disc_fingerprint": disc.disc_fingerprint,
+        "ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
+        "error_message": disc.error_message,
+        "created_at": disc.created_at.isoformat() if disc.created_at else None,
+    }
+
+
+@health_bp.route("/mb-not-found", methods=["GET"])
+def mb_not_found():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    discs = session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.mb_lookup_status == "not_found",
+        ).order_by(Disc.ripped_at.desc())
+    ).all()
+    return jsonify([_disc_row(d) for d in discs])
+
+
+@health_bp.route("/mb-error", methods=["GET"])
+def mb_error():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    discs = session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.mb_lookup_status == "error",
+        ).order_by(Disc.ripped_at.desc())
+    ).all()
+    return jsonify([_disc_row(d) for d in discs])
+
+
+@health_bp.route("/pipeline-identifying", methods=["GET"])
+def pipeline_identifying():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    discs = session.scalars(
+        select(Disc).where(Disc.status == DiscStatus.identifying)
+        .order_by(Disc.ripped_at.desc())
+    ).all()
+    return jsonify([_disc_row(d) for d in discs])
+
+
+@health_bp.route("/pipeline-errors", methods=["GET"])
+def pipeline_errors():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    discs = session.scalars(
+        select(Disc).where(Disc.status == DiscStatus.error)
+        .order_by(Disc.created_at.desc())
+    ).all()
+    return jsonify([_disc_row(d) for d in discs])

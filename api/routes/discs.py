@@ -453,6 +453,10 @@ def cd_catalogue():
     elif filter_param == "mb_pending_error":
         q = q.where(Disc.mb_lookup_status.in_(["pending", "error"]))
 
+    dirty = request.args.get("dirty", "").strip().lower() == "true"
+    if dirty:
+        q = q.where(Disc.rip_quality == "dirty")
+
     if search:
         q = q.where(
             Disc.temp_name.ilike(f"%{search}%")
