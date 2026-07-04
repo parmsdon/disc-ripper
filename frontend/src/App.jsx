@@ -11,6 +11,7 @@ import CdCatalogue from "./pages/CdCatalogue.jsx";
 import DataEditing from "./pages/DataEditing.jsx";
 import Log from "./pages/Log.jsx";
 import Audit from "./pages/Audit.jsx";
+import Library from "./pages/Library.jsx";
 
 const TABS = [
   { path: "/drive-status", label: "Drive Status" },
@@ -19,6 +20,7 @@ const TABS = [
   { path: "/dvd-catalogue", label: "DVD Catalogue" },
   { path: "/cd-catalogue", label: "CD Catalogue" },
   { path: "/data-editing", label: "Identification" },
+  { path: "/library", label: "Library" },
   { path: "/db-health", label: "Health" },
   { path: "/audit", label: "Audit" },
   { path: "/log", label: "Log" },
@@ -268,6 +270,7 @@ export default function App() {
             <Route path="/data-editing" element={<DataEditing />} />
             <Route path="/log" element={<Log />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/library" element={<Library />} />
           </Routes>
         </main>
       </div>

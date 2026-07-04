@@ -91,6 +91,8 @@ DEFAULT_SETTINGS = [
     {"key": "encoder_service_status", "value": "stopped"},
     {"key": "encoder_service_command", "value": ""},
     {"key": "encoder_service_heartbeat", "value": ""},
+    {"key": "library_last_generated", "value": ""},
+    {"key": "library_last_stats", "value": ""},
 ]
 
 
