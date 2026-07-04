@@ -5,9 +5,10 @@ Hard-blocked if DISCRIPPER_ENV != 'dev'.
 
 Actions (in order):
   1. Delete DVD discs whose raw_path points to a missing or undersized ISO.
-  2. Reset failed DVD Extract encode jobs (non-zero exit) to queued,
+  2. Reset cancelled DVD encode jobs (non-zero exit) to queued,
      where the disc's ISO is genuinely valid.
-  3. Delete CD discs where no track has a valid (>= MIN_WAV_SIZE) WAV file.
+  3. Reset cancelled CD encode jobs (non-zero/signal exit) to queued.
+  4. Delete CD discs where no track has a valid (>= MIN_WAV_SIZE) WAV file.
 
 Real ISOs and WAV files are never touched.
 
@@ -28,7 +29,7 @@ if _env != "dev":
     print(f"ERROR: DISCRIPPER_ENV='{_env}'. This script is dev-only.", file=sys.stderr)
     sys.exit(1)
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, or_, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
@@ -114,6 +115,23 @@ def main() -> None:
                 cancelled_dvd_jobs.append(job)
 
         # ----------------------------------------------------------------
+        # Collect: cancelled CD encode jobs
+        # ----------------------------------------------------------------
+        cancelled_cd_jobs: list[EncodeJob] = session.scalars(
+            select(EncodeJob)
+            .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
+            .where(
+                EncodeProfile.media_type == "cd",
+                EncodeJob.status == JobStatus.error,
+                or_(
+                    EncodeJob.error_message.ilike("%255%"),
+                    EncodeJob.error_message.ilike("%non-zero%"),
+                    EncodeJob.error_message.ilike("%signal%"),
+                ),
+            )
+        ).all()
+
+        # ----------------------------------------------------------------
         # Collect: fake CD discs (no track has a valid WAV file)
         # ----------------------------------------------------------------
         cd_discs = session.scalars(select(Disc).where(Disc.type == DiscType.cd)).all()
@@ -144,10 +162,11 @@ def main() -> None:
         print(f"Will delete:          {len(fake_dvd_discs)} fake DVD disc(s), "
               f"{len(fake_cd_discs)} fake CD disc(s)")
         print(f"Will reset to queued: {len(cancelled_dvd_jobs)} cancelled DVD encode job(s) (any profile)")
+        print(f"Will reset to queued: {len(cancelled_cd_jobs)} cancelled CD encode job(s)")
         print("Real ISOs and WAV files will NOT be touched")
         print()
 
-        if not fake_dvd_discs and not cancelled_dvd_jobs and not fake_cd_discs:
+        if not fake_dvd_discs and not cancelled_dvd_jobs and not cancelled_cd_jobs and not fake_cd_discs:
             print("Nothing to do.")
             return
 
@@ -187,7 +206,21 @@ def main() -> None:
         print(f"Reset {reset_jobs} cancelled DVD encode job(s) to queued.")
 
         # ----------------------------------------------------------------
-        # Action 3: delete fake CD discs
+        # Action 3: reset cancelled CD encode jobs
+        # ----------------------------------------------------------------
+        reset_cd = 0
+        for job in cancelled_cd_jobs:
+            disc = job.disc
+            profile_name = job.profile.name if job.profile else "?"
+            print(f"  reset encode_job #{job.id} ({profile_name}, "
+                  f"disc #{disc.id if disc else '?'})")
+            _reset_job(job)
+            reset_cd += 1
+
+        print(f"Reset {reset_cd} cancelled CD encode job(s) to queued.")
+
+        # ----------------------------------------------------------------
+        # Action 4: delete fake CD discs
         # ----------------------------------------------------------------
         deleted_cd = 0
         for disc in fake_cd_discs:
