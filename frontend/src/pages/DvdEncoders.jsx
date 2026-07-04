@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 
 const STATUS_FILTERS = ["all", "running", "queued", "done", "error"];
+const STATUS_LABEL = { all: "All", running: "Running", queued: "Queued", done: "Complete", error: "Error" };
 
 function EncoderToggle({ enabled, saving, onToggle }) {
   return (
@@ -49,7 +50,7 @@ function StatsPills({ stats }) {
     <div className="encoder-stats">
       {s.running > 0 && <span className="encoder-stat-pill running">{s.running} running</span>}
       {s.queued > 0  && <span className="encoder-stat-pill queued">{s.queued} queued</span>}
-      {s.done > 0    && <span className="encoder-stat-pill done">{s.done} done</span>}
+      {s.done > 0    && <span className="encoder-stat-pill done">{s.done} complete</span>}
       {s.error > 0   && <span className="encoder-stat-pill error">{s.error} error{s.error !== 1 ? "s" : ""}</span>}
       {s.running === 0 && s.queued === 0 && s.done === 0 && s.error === 0 && (
         <span className="encoder-stat-pill idle">No jobs</span>
@@ -127,7 +128,7 @@ function JobsTable({ jobs, mediaType }) {
               <span className="encoder-profile-name">{job.profile_name}</span>
             </td>
             <td>
-              <span className={`status-pill ${job.status}`}>{job.status}</span>
+              <span className={`status-pill ${job.status}`}>{STATUS_LABEL[job.status] ?? job.status}</span>
             </td>
             <td>
               <EncodeProgressCell job={job} />
@@ -217,7 +218,7 @@ export default function DvdEncoders() {
               className={`catalogue-filter-btn${statusFilter === f ? " active" : ""}`}
               onClick={() => setStatusFilter(f)}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+              {STATUS_LABEL[f] ?? f}
             </button>
           ))}
         </div>
