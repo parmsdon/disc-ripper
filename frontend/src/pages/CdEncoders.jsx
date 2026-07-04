@@ -163,6 +163,7 @@ export default function CdEncoders() {
   const [maxEncoders, setMaxEncoders] = useState(2);
   const [savingEnabled, setSavingEnabled] = useState(false);
   const [savingMax, setSavingMax] = useState(false);
+  const [maxCooldown, setMaxCooldown] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchJobs = useCallback(() => {
@@ -208,6 +209,8 @@ export default function CdEncoders() {
     try {
       const data = await api.setMaxCdEncoders(n);
       setMaxEncoders(data.max_cd_encoders);
+      setMaxCooldown(true);
+      setTimeout(() => setMaxCooldown(false), 5000);
     } finally {
       setSavingMax(false);
     }
@@ -220,7 +223,7 @@ export default function CdEncoders() {
           <span className="control-bar-label">CD Encoding</span>
           <EncoderToggle enabled={encodingEnabled} saving={savingEnabled} onToggle={toggleEnabled} />
         </div>
-        <MaxEncodersControl value={maxEncoders} saving={savingMax} onChange={changeMax} />
+        <MaxEncodersControl value={maxEncoders} saving={savingMax || maxCooldown} onChange={changeMax} />
         <StatsPills stats={stats} />
       </div>
 

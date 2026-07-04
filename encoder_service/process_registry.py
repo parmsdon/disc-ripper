@@ -26,13 +26,29 @@ def deregister(job_id: int) -> None:
         _procs.pop(job_id, None)
 
 
+def _terminate(job_id: int) -> None:
+    with _lock:
+        proc = _procs.get(job_id)
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        logger.info("Terminated subprocess for encode job %s", job_id)
+    except Exception:
+        logger.exception("Failed to terminate subprocess for encode job %s", job_id)
+
+
+def kill_dvd(job_id: int) -> None:
+    _terminate(job_id)
+
+
+def kill_cd(job_id: int) -> None:
+    _terminate(job_id)
+
+
 def terminate_all() -> None:
     """Send SIGTERM to every registered subprocess."""
     with _lock:
         items = list(_procs.items())
-    for job_id, proc in items:
-        try:
-            proc.terminate()
-            logger.info("Terminated subprocess for encode job %s", job_id)
-        except Exception:
-            logger.exception("Failed to terminate subprocess for encode job %s", job_id)
+    for job_id, _ in items:
+        _terminate(job_id)

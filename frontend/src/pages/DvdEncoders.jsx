@@ -157,6 +157,7 @@ export default function DvdEncoders() {
   const [maxEncoders, setMaxEncoders] = useState(1);
   const [savingEnabled, setSavingEnabled] = useState(false);
   const [savingMax, setSavingMax] = useState(false);
+  const [maxCooldown, setMaxCooldown] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchJobs = useCallback(() => {
@@ -202,6 +203,8 @@ export default function DvdEncoders() {
     try {
       const data = await api.setMaxDvdEncoders(n);
       setMaxEncoders(data.max_dvd_encoders);
+      setMaxCooldown(true);
+      setTimeout(() => setMaxCooldown(false), 5000);
     } finally {
       setSavingMax(false);
     }
@@ -214,7 +217,7 @@ export default function DvdEncoders() {
           <span className="control-bar-label">DVD Encoding</span>
           <EncoderToggle enabled={encodingEnabled} saving={savingEnabled} onToggle={toggleEnabled} />
         </div>
-        <MaxEncodersControl value={maxEncoders} saving={savingMax} onChange={changeMax} />
+        <MaxEncodersControl value={maxEncoders} saving={savingMax || maxCooldown} onChange={changeMax} />
         <StatsPills stats={stats} />
       </div>
 

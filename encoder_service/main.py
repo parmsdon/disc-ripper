@@ -25,12 +25,12 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, desc, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
 from common.encode_queue import get_next_encode_jobs
-from common.models import EncodeJob, JobStatus, Setting
+from common.models import EncodeJob, EncodeProfile, JobStatus, Setting
 from encoder_service.cd_encoder import encode_cd_track
 from encoder_service.dvd_encoder import encode_dvd_title
 from encoder_service.job_rollback import rollback_encode_job
@@ -87,6 +87,19 @@ def _get_int(session, key: str, default: int) -> int:
 def _get_command(session) -> str:
     setting = session.get(Setting, _COMMAND_KEY)
     return setting.value if setting else ""
+
+
+def _running_job_ids_by_type(session, media_type: str) -> list[int]:
+    """Running encode job IDs for media_type, most recently started first."""
+    return list(session.scalars(
+        select(EncodeJob.id)
+        .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
+        .where(
+            EncodeJob.status == JobStatus.running,
+            EncodeProfile.media_type == media_type,
+        )
+        .order_by(desc(EncodeJob.started_at))
+    ).all())
 
 
 def shutdown(Session: sessionmaker, threads: list | None = None) -> None:
@@ -168,12 +181,44 @@ def run(cfg: dict) -> None:
             for jid in finished_dvd:
                 del running_dvd_jobs[jid]
 
+            # Read settings and collect running job IDs for overflow detection.
             with Session() as session:
                 dvd_enabled = _get_bool(session, _DVD_ENCODING_ENABLED_KEY, False)
                 cd_enabled = _get_bool(session, _CD_ENCODING_ENABLED_KEY, False)
                 max_dvd = _get_int(session, _MAX_DVD_ENCODERS_KEY, _DEFAULT_MAX_DVD_ENCODERS)
                 max_cd = _get_int(session, _MAX_CD_ENCODERS_KEY, _DEFAULT_MAX_CD_ENCODERS)
+                dvd_running_ids = _running_job_ids_by_type(session, "dvd")
+                cd_running_ids = _running_job_ids_by_type(session, "cd")
 
+            # Determine which jobs to kill: all when disabled, excess when
+            # the limit was decreased below the current running count.
+            dvd_to_kill = (
+                dvd_running_ids
+                if not dvd_enabled
+                else dvd_running_ids[:max(0, len(dvd_running_ids) - max_dvd)]
+            )
+            cd_to_kill = (
+                cd_running_ids
+                if not cd_enabled
+                else cd_running_ids[:max(0, len(cd_running_ids) - max_cd)]
+            )
+
+            for job_id in dvd_to_kill:
+                reason = "encoding disabled" if not dvd_enabled else "max_dvd_encoders decreased"
+                logger.info("Killing DVD encode job %s (%s)", job_id, reason)
+                process_registry.kill_dvd(job_id)
+                running_dvd_jobs.pop(job_id, None)
+                rollback_encode_job(job_id, Session)
+
+            for job_id in cd_to_kill:
+                reason = "encoding disabled" if not cd_enabled else "max_cd_encoders decreased"
+                logger.info("Killing CD encode job %s (%s)", job_id, reason)
+                process_registry.kill_cd(job_id)
+                running_cd_jobs.pop(job_id, None)
+                rollback_encode_job(job_id, Session)
+
+            # Start new jobs up to the current limits.
+            with Session() as session:
                 # --- CD encoding ---
                 if cd_enabled:
                     slots_free = max_cd - len(running_cd_jobs)
