@@ -56,7 +56,11 @@ def _artist_credit_string(credit_list: list) -> str:
         return ""
     parts = []
     for item in credit_list:
-        if isinstance(item, dict):
+        if isinstance(item, str):
+            # musicbrainzngs sometimes returns join phrases as plain strings
+            # interspersed between artist dicts rather than embedded in them.
+            parts.append(item)
+        elif isinstance(item, dict):
             parts.append(item.get("name") or item.get("artist", {}).get("name", ""))
             if item.get("joinphrase"):
                 parts.append(item["joinphrase"])
