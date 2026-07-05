@@ -100,12 +100,10 @@ export default function Library() {
           <PrereqRow
             label="DVD encodes pending"
             count={prereqs?.dvd_encodes_pending}
-            warnNotError
           />
           <PrereqRow
             label="CD encodes pending"
             count={prereqs?.cd_encodes_pending}
-            warnNotError
           />
           <PrereqRow
             label="DVDs still ripping"
