@@ -96,12 +96,32 @@ def get_status():
         )
     ) or 0
 
+    _ripping_statuses = [
+        DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.identifying,
+    ]
+
+    dvds_not_ripped = session.scalar(
+        select(func.count(Disc.id)).where(
+            Disc.type == DiscType.dvd,
+            Disc.status.in_(_ripping_statuses),
+        )
+    ) or 0
+
+    cds_not_ripped = session.scalar(
+        select(func.count(Disc.id)).where(
+            Disc.type == DiscType.cd,
+            Disc.status.in_(_ripping_statuses),
+        )
+    ) or 0
+
     prerequisites = {
         "dvds_unmatched": dvds_unmatched,
         "cds_unidentified": cds_unidentified,
         "cd_tracks_untitled": cd_tracks_untitled,
         "dvd_encodes_pending": dvd_encodes_pending,
         "cd_encodes_pending": cd_encodes_pending,
+        "dvds_not_ripped": dvds_not_ripped,
+        "cds_not_ripped": cds_not_ripped,
     }
     ready = all(v == 0 for v in prerequisites.values())
 

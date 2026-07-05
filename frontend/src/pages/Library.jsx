@@ -107,6 +107,14 @@ export default function Library() {
             count={prereqs?.cd_encodes_pending}
             warnNotError
           />
+          <PrereqRow
+            label="DVDs still ripping"
+            count={prereqs?.dvds_not_ripped}
+          />
+          <PrereqRow
+            label="CDs still ripping"
+            count={prereqs?.cds_not_ripped}
+          />
         </div>
 
         <div className="library-generate-zone">
