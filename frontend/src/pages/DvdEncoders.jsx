@@ -184,7 +184,7 @@ export default function DvdEncoders() {
   useEffect(() => {
     fetchJobs();
     fetchStats();
-    const iv = setInterval(() => { fetchJobs(); fetchStats(); }, 5000);
+    const iv = setInterval(() => { fetchJobs(); fetchStats(); }, 1000);
     return () => clearInterval(iv);
   }, [fetchJobs, fetchStats]);
 
