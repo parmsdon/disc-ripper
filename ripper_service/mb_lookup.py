@@ -169,6 +169,13 @@ def lookup_musicbrainz(
                         disc.mb_medium_count = data["medium_count"]
                         disc.mb_medium_title = data["medium_title"]
                         break
+        # For fuzzy TOC matches the disc-ID loop above finds no medium_position,
+        # leaving mb_medium_count unset. Pull it from the first candidate so the
+        # Discogs fallback condition (mb_medium_count > 1) can fire.
+        if disc and candidate_data_list:
+            first = candidate_data_list[0]
+            if disc.mb_medium_count is None and first.get("medium_count"):
+                disc.mb_medium_count = first["medium_count"]
         session.commit()
 
         logger.info(
