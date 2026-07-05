@@ -182,9 +182,9 @@ function DirectEjectButton({ drive, onRefresh }) {
 const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying"];
 
 // value/onChange are lifted to DrivePanel so the MB popover can pre-fill it.
-// mbLookupStatus/mbHasResults/onOpenMbPopover drive the small indicator button
+// mbLookupStatus/onOpenMbPopover drive the small indicator button
 // that lives in the same button row as Copy Label and Copy Current.
-function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasResults, onOpenMbPopover }) {
+function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenMbPopover }) {
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [conflict, setConflict] = useState(null);
@@ -282,7 +282,7 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, mbHasRe
           ···
         </button>
       )}
-      {disc.type === "cd" && mbLookupStatus === "found" && mbHasResults && (
+      {disc.type === "cd" && mbLookupStatus === "found" && (
         <button type="button" className="mb-status-btn" onClick={onOpenMbPopover} title="MusicBrainz matches available">
           ♫
         </button>
@@ -414,21 +414,6 @@ function DiscStatusZone({ disc }) {
   );
 }
 
-function useMbCandidates(disc) {
-  const [candidates, setCandidates] = useState(null);
-
-  useEffect(() => { setCandidates(null); }, [disc?.id]);
-
-  useEffect(() => {
-    if (disc?.mb_lookup_status === "found" && candidates === null) {
-      api.getDiscCandidates(disc.id)
-        .then(setCandidates)
-        .catch(() => setCandidates([]));
-    }
-  }, [disc?.mb_lookup_status, disc?.id, candidates]);
-
-  return candidates;
-}
 
 function MbPopover({ candidates, onSelect, onClose }) {
   useEffect(() => {
@@ -606,12 +591,19 @@ function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
 
   const [tempNameValue, setTempNameValue] = useState("");
   const [mbPopoverOpen, setMbPopoverOpen] = useState(false);
-  const candidates = useMbCandidates(disc);
+  const [candidates, setCandidates] = useState(null);
 
   useEffect(() => {
     setTempNameValue("");
     setMbPopoverOpen(false);
+    setCandidates(null);
   }, [disc?.id]);
+
+  async function handleOpenMbPopover() {
+    const results = await api.getDiscCandidates(disc.id).catch(() => []);
+    setCandidates(results);
+    setMbPopoverOpen(true);
+  }
 
   return (
     <div className="drive-row">
@@ -673,8 +665,7 @@ function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
             value={tempNameValue}
             onChange={setTempNameValue}
             mbLookupStatus={disc.mb_lookup_status}
-            mbHasResults={Boolean(candidates && candidates.length > 0)}
-            onOpenMbPopover={() => setMbPopoverOpen(true)}
+            onOpenMbPopover={handleOpenMbPopover}
           />
         )}
       </div>
