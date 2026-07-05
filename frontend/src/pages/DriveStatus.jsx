@@ -437,48 +437,66 @@ function MbPopover({ candidates, onSelect, onClose }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const hasUnknownDisc = candidates.some(
+    (c) => c.medium_count > 1 && c.medium_position == null
+  );
+
   return (
     <div className="mb-popover-backdrop" onClick={onClose}>
       <div className="mb-popover" onClick={(e) => e.stopPropagation()}>
         <div className="mb-popover-header">
-          <span>MusicBrainz matches</span>
+          <span>CD matches</span>
           <button className="mb-popover-close" onClick={onClose}>×</button>
         </div>
         <div className="mb-popover-list">
           {candidates.length === 0 ? (
             <div className="empty-state">No matches found</div>
           ) : (
-            candidates.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="mb-popover-item"
-                onClick={() => {
-                  let title = c.title;
-                  if (c.medium_count > 1) {
-                    const suffix = c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`;
-                    title = `${title} (${suffix})`;
-                  }
-                  onSelect(title);
-                  onClose();
-                }}
-              >
-                <span className="mb-popover-title">
-                  {c.title}
-                  {c.medium_count > 1 && (
-                    <span className="mb-popover-disc">
-                      {" "}({c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`})
-                    </span>
-                  )}
-                </span>
-                <span className="mb-popover-meta">
-                  {[c.artist, c.year, c.track_count != null ? `${c.track_count} tracks` : null]
-                    .filter(Boolean).join(" · ")}
-                </span>
-              </button>
-            ))
+            candidates.map((c) => {
+              const unknownDisc = c.medium_count > 1 && c.medium_position == null;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`mb-popover-item${unknownDisc ? " mb-popover-item--unknown-disc" : ""}`}
+                  onClick={() => {
+                    let title = c.title;
+                    if (c.medium_count > 1) {
+                      const suffix = c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`;
+                      title = `${title} (${suffix})`;
+                    }
+                    onSelect(title);
+                    onClose();
+                  }}
+                >
+                  <span className="mb-popover-title">
+                    {c.title}
+                    {c.medium_count > 1 && (
+                      <span className="mb-popover-disc">
+                        {" "}({c.medium_title || `Disc ${c.medium_position ?? "?"} of ${c.medium_count}`})
+                      </span>
+                    )}
+                    {c.source === "discogs" && (
+                      <span className="candidate-source-badge candidate-source-badge--discogs">Discogs</span>
+                    )}
+                    {c.source === "musicbrainz" && (
+                      <span className="candidate-source-badge candidate-source-badge--mb">MB</span>
+                    )}
+                  </span>
+                  <span className="mb-popover-meta">
+                    {[c.artist, c.year, c.track_count != null ? `${c.track_count} tracks` : null]
+                      .filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              );
+            })
           )}
         </div>
+        {hasUnknownDisc && (
+          <div className="mb-popover-unknown-disc-warning">
+            ⚠ Disc number unknown — please edit the ? in the working title before saving
+          </div>
+        )}
       </div>
     </div>
   );

@@ -44,3 +44,6 @@ mymovies:
   odbc_user: "myuser"
   odbc_password: "changeme"
   sync_interval_hours: 24
+
+discogs:
+  token: "your_discogs_token_here"

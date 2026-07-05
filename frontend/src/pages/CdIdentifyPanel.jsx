@@ -172,22 +172,31 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       const selectedCandidate = selectedCandidateId != null
         ? candidates.find((c) => c.id === selectedCandidateId)
         : null;
+      const isDiscogs = selectedCandidate?.source === "discogs";
       let albumTitleToSave = effectiveAlbumTitle;
       let tempNameToSave = disc.temp_name;
-      if (disc.mb_medium_count > 1) {
-        const discSuffix = disc.mb_medium_title
+      // For Discogs candidates, use the candidate's own medium_position/count;
+      // for MB, use what the disc record already has from the MB lookup.
+      const multiDiscCount = isDiscogs
+        ? selectedCandidate?.medium_count
+        : disc.mb_medium_count;
+      if (multiDiscCount > 1) {
+        const discSuffix = (!isDiscogs && disc.mb_medium_title)
           ? disc.mb_medium_title
-          : `Disc ${disc.mb_medium_position ?? "?"} of ${disc.mb_medium_count}`;
+          : `Disc ${(isDiscogs ? selectedCandidate?.medium_position : disc.mb_medium_position) ?? "?"} of ${multiDiscCount}`;
         const suffixTag = `(${discSuffix})`;
         const suffixTagLower = suffixTag.toLowerCase();
         if (!effectiveAlbumTitle.toLowerCase().includes(suffixTagLower)) {
           albumTitleToSave = `${effectiveAlbumTitle} ${suffixTag}`;
         }
-        const baseTempName = disc.temp_name ?? effectiveAlbumTitle;
-        if (!baseTempName.toLowerCase().includes(suffixTagLower)) {
-          tempNameToSave = `${baseTempName} ${suffixTag}`;
-        } else {
-          tempNameToSave = baseTempName;
+        // Discogs: temp_name was already set correctly by the user — leave it alone.
+        if (!isDiscogs) {
+          const baseTempName = disc.temp_name ?? effectiveAlbumTitle;
+          if (!baseTempName.toLowerCase().includes(suffixTagLower)) {
+            tempNameToSave = `${baseTempName} ${suffixTag}`;
+          } else {
+            tempNameToSave = baseTempName;
+          }
         }
       }
       await api.identifyCd(disc.id, {
@@ -267,6 +276,11 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     <span className="cd-nav-counter">
                       {candidateIndex + 1} of {candidates.length}
                     </span>
+                    {currentCandidate?.source === "discogs" ? (
+                      <span className="candidate-source-badge candidate-source-badge--discogs">Discogs</span>
+                    ) : currentCandidate?.source === "musicbrainz" ? (
+                      <span className="candidate-source-badge candidate-source-badge--mb">MB</span>
+                    ) : null}
                     <button
                       className="cd-nav-btn"
                       onClick={() =>

@@ -52,3 +52,6 @@ mymovies:
   username: "mymoviesapi"
   password: "changeme"
   sync_interval_hours: 24
+
+discogs:
+  token: "your_discogs_token_here"

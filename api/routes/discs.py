@@ -194,6 +194,15 @@ def identify_cd(disc_id):
     if selected_candidate_id is not None:
         for candidate in disc.lookup_candidates:
             candidate.selected = (candidate.id == selected_candidate_id)
+        # For Discogs candidates, sync medium_position/count onto the disc record
+        # so multi-disc suffix logic works correctly on re-open.
+        selected = next(
+            (c for c in disc.lookup_candidates if c.id == selected_candidate_id), None
+        )
+        if selected and selected.source == "discogs":
+            cdata = selected.candidate_data or {}
+            disc.mb_medium_position = cdata.get("medium_position")
+            disc.mb_medium_count = cdata.get("medium_count")
 
     session.commit()
     return jsonify({"status": "ok"})
@@ -447,6 +456,7 @@ def get_disc_candidates(disc_id):
             "source": candidate.source,
             "selected": candidate.selected,
             "mb_release_id": data.get("mb_release_id"),
+            "discogs_release_id": data.get("discogs_release_id"),
             "title": data.get("title"),
             "artist": data.get("artist"),
             "year": data.get("year"),

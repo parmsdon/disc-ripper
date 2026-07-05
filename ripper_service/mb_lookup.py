@@ -17,6 +17,7 @@ lookup_musicbrainz(disc_id, toc, disc_db_id, session_factory) -> None
 """
 
 import logging
+import threading
 
 logging.getLogger("musicbrainzngs").setLevel(logging.WARNING)
 
@@ -24,6 +25,7 @@ import discid
 import musicbrainzngs
 
 from common.models import Disc, LookupCandidate
+from ripper_service.discogs_lookup import lookup_discogs_for_disc
 
 logger = logging.getLogger(__name__)
 
@@ -124,10 +126,15 @@ def lookup_musicbrainz(
     toc: str,
     disc_db_id: int,
     session_factory,
+    discogs_token: str | None = None,
 ) -> None:
     """
     Background thread entry point. Queries MB, stores LookupCandidates, updates
     disc.mb_lookup_status. Opens its own DB session; caller must not pass one in.
+
+    If discogs_token is provided and the MB result is a fuzzy multi-disc match
+    with unknown disc position (medium_position=None, medium_count > 1), spawns
+    a Discogs fallback lookup thread automatically.
     """
     session = session_factory()
     try:
@@ -168,6 +175,29 @@ def lookup_musicbrainz(
             "MusicBrainz lookup complete for disc #%d: %d release(s) (%s)",
             disc_db_id, len(releases), status,
         )
+
+        # Trigger Discogs fallback if MB found results but couldn't pin the
+        # disc position (fuzzy TOC match on a multi-disc set).
+        if (
+            discogs_token
+            and status == "found"
+            and disc is not None
+            and disc.mb_medium_position is None
+            and disc.mb_medium_count is not None
+            and disc.mb_medium_count > 1
+        ):
+            mb_title = candidate_data_list[0].get("title", "") if candidate_data_list else ""
+            if mb_title:
+                logger.info(
+                    "Triggering Discogs fallback lookup for disc #%d "
+                    "(MB medium position unknown, %d-disc set)",
+                    disc_db_id, disc.mb_medium_count,
+                )
+                threading.Thread(
+                    target=lookup_discogs_for_disc,
+                    args=(mb_title, disc.mb_medium_count, disc_db_id, discogs_token, session_factory),
+                    daemon=True,
+                ).start()
 
     except Exception:
         logger.exception("MusicBrainz lookup failed for disc #%d", disc_db_id)

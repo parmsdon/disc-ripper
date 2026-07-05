@@ -362,6 +362,17 @@ Then repeat the steps above on each machine using:
 
 ## Notes
 
+- **Discogs API token**: A personal access token is required for Discogs
+  fallback lookups (used when MusicBrainz returns a fuzzy multi-disc match with
+  unknown disc position). Generate one at
+  https://www.discogs.com/settings/developers and add it to your config:
+  ```yaml
+  discogs:
+    token: "your_token_here"
+  ```
+  Without a token, Discogs lookup is silently skipped — MB-only identification
+  still works.
+
 - `config/*.yaml` (real configs) are gitignored — never commit credentials.
 - DB schema changes go through Alembic (`alembic revision --autogenerate -m "..."`,
   then `alembic upgrade head` on each environment).

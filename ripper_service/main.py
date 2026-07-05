@@ -511,10 +511,12 @@ def run(cfg: dict) -> None:
 
                 session.commit()
 
+            _discogs_token = cfg.get("discogs", {}).get("token")
             for mb_disc_id, mb_toc, db_disc_id in pending_mb_lookups:
                 t = threading.Thread(
                     target=lookup_musicbrainz,
                     args=(mb_disc_id, mb_toc, db_disc_id, Session),
+                    kwargs={"discogs_token": _discogs_token},
                     daemon=True,
                 )
                 t.start()

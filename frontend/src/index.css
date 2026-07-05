@@ -1430,6 +1430,58 @@ button:disabled {
   font-size: 0.9em;
 }
 
+.mb-popover-item--unknown-disc {
+  background: rgba(217, 161, 60, 0.10);
+  border-left: 3px solid var(--warn);
+}
+
+.mb-popover-item--unknown-disc:hover {
+  background: rgba(217, 161, 60, 0.18);
+}
+
+.mb-popover-unknown-disc-warning {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--warn);
+  border-top: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+/* Source badges for MB vs Discogs candidates */
+.candidate-source-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.candidate-source-badge--mb {
+  background: rgba(80, 140, 220, 0.18);
+  color: #508cdc;
+  border: 1px solid rgba(80, 140, 220, 0.35);
+}
+
+.candidate-source-badge--discogs {
+  background: rgba(60, 180, 120, 0.18);
+  color: #3cb478;
+  border: 1px solid rgba(60, 180, 120, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  .candidate-source-badge--mb { color: #7db4f0; background: rgba(80, 140, 220, 0.22); }
+  .candidate-source-badge--discogs { color: #5dd49a; background: rgba(60, 180, 120, 0.22); }
+}
+
+:root[data-theme="light"] .candidate-source-badge--mb { color: #2a6ab5; background: rgba(80, 140, 220, 0.14); }
+:root[data-theme="light"] .candidate-source-badge--discogs { color: #1e7d50; background: rgba(60, 180, 120, 0.14); }
+:root[data-theme="dark"] .candidate-source-badge--mb { color: #7db4f0; background: rgba(80, 140, 220, 0.22); }
+:root[data-theme="dark"] .candidate-source-badge--discogs { color: #5dd49a; background: rgba(60, 180, 120, 0.22); }
+
 .cd-album-row {
   display: flex;
   align-items: center;
