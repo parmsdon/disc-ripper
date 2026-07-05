@@ -510,6 +510,12 @@ def _record_track_result(disc_id, track_number, result, label, session_factory) 
         else:
             track.rip_quality = RipQuality.failed
 
+        if track.rip_quality in (RipQuality.imperfect, RipQuality.failed):
+            disc = session.get(Disc, disc_id)
+            if disc and disc.rip_quality != "dirty":
+                disc.rip_quality = "dirty"
+                disc.needs_rerip = True
+
         session.commit()
         logger.info(
             "Track %s for disc %s (%s) -> %s", track_number, disc_id, label, track.rip_quality.value,
