@@ -113,11 +113,11 @@ def main(env: str) -> None:
 
     # Explicit FK-ordered bulk DELETEs. The DB FK constraints are all NO
     # ACTION (not CASCADE), so children must be deleted before parents.
-    session.execute(delete(CDTrack))
     session.execute(delete(EncodeJob))
+    session.execute(delete(RipLogEvent))
     session.execute(delete(RipJob))
     session.execute(delete(LookupCandidate))
-    session.execute(delete(RipLogEvent))
+    session.execute(delete(CDTrack))
     session.execute(delete(Disc))
 
     for key, value in _SETTINGS_TO_RESET.items():
