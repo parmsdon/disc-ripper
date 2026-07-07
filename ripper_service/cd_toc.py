@@ -5,6 +5,7 @@ re-rip matching (not for display - see disc_fingerprint on Disc).
 """
 
 import logging
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,22 @@ _EMPTY_RESULT = {"track_count": 0, "tracks": [], "fingerprint": None}
 
 # CDDA frames ("sectors" in cd-discid's own terminology) per second.
 _FRAMES_PER_SECOND = 75
+
+
+def _get_audio_track_count(device: str) -> int | None:
+    """Run cdparanoia -Q and count audio tracks (excludes data tracks on Enhanced CDs)."""
+    try:
+        result = subprocess.run(
+            ["cdparanoia", "-Q", "-d", device],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        # cdparanoia -Q outputs the track table to stderr
+        count = len(re.findall(r"^\s+\d+\.", result.stderr, re.MULTILINE))
+        return count if count > 0 else None
+    except Exception:
+        return None
 
 
 def read_table_of_contents(device_path: str) -> dict:
@@ -59,6 +76,19 @@ def read_table_of_contents(device_path: str) -> dict:
     except (ValueError, IndexError) as exc:
         logger.warning("Failed to parse cd-discid output for %s (%r): %s", device_path, proc.stdout, exc)
         return dict(_EMPTY_RESULT)
+
+    # Enhanced CDs (CD-Extra) have audio tracks followed by a data track.
+    # cd-discid counts all tracks; cdparanoia -Q only lists the audio ones.
+    # If cdparanoia reports fewer tracks, trust it and drop the data tail.
+    audio_count = _get_audio_track_count(device_path)
+    if audio_count is not None and audio_count < track_count:
+        logger.warning(
+            "Enhanced CD detected on %s: cd-discid reports %d track(s), "
+            "cdparanoia reports %d audio track(s) - using %d",
+            device_path, track_count, audio_count, audio_count,
+        )
+        track_count = audio_count
+        offsets = offsets[:track_count]
 
     total_frames = total_seconds * _FRAMES_PER_SECOND
     tracks = []
