@@ -177,9 +177,15 @@ python3 -m mymovies_sync.scheduler
 sudo dnf install -y python3 python3-pip python3-psycopg2 dvdbackup genisoimage cdparanoia cd-discid libdiscid regionset eject
 # genisoimage provides mkisofs (ISO build) and isoinfo (DVD region detection/patching)
 
-# libdvdcss via RPM Fusion (needed for dvdbackup to read commercial DVDs)
-sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+# RPM Fusion (free + nonfree) — needed for libdvdcss and HandBrake
+sudo dnf install -y \
+  https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+  https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
 sudo dnf install -y libdvdcss
+
+# HandBrakeCLI — required for copy protection pre-scan (scan_for_copy_protection()
+# runs HandBrakeCLI --scan before dvdbackup to detect ARccOS and similar schemes)
+sudo dnf install -y HandBrake
 ```
 
 ### Get the code
