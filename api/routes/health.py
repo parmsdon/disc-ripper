@@ -99,6 +99,7 @@ def health():
             "currently_building": count(Disc, Disc.status == DiscStatus.building),
             "currently_identifying": count(Disc, Disc.status == DiscStatus.identifying),
             "error_discs": count(Disc, Disc.status == DiscStatus.error),
+            "dvds_protected": count(Disc, Disc.type == DiscType.dvd, Disc.status == DiscStatus.protected),
         },
         "dvd_encodes": _encode_counts("dvd"),
         "cd_encodes": _encode_counts("cd"),
@@ -161,5 +162,18 @@ def pipeline_errors():
     discs = session.scalars(
         select(Disc).where(Disc.status == DiscStatus.error)
         .order_by(Disc.created_at.desc())
+    ).all()
+    return jsonify([_disc_row(d) for d in discs])
+
+
+@health_bp.route("/dvds-protected", methods=["GET"])
+def dvds_protected():
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    discs = session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.dvd,
+            Disc.status == DiscStatus.protected,
+        ).order_by(Disc.created_at.desc())
     ).all()
     return jsonify([_disc_row(d) for d in discs])

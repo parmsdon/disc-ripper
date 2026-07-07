@@ -95,7 +95,8 @@ export default function DbHealth() {
     pipeline.currently_ripping > 0 ||
     pipeline.currently_building > 0 ||
     pipeline.currently_identifying > 0 ||
-    pipeline.error_discs > 0;
+    pipeline.error_discs > 0 ||
+    pipeline.dvds_protected > 0;
 
   return (
     <div>
@@ -109,28 +110,28 @@ export default function DbHealth() {
             <table className="audit-table">
               <thead>
                 <tr>
-                  {(modal.type === "pipeline-identifying" || modal.type === "pipeline-errors") && <th>Type</th>}
+                  {(modal.type === "pipeline-identifying" || modal.type === "pipeline-errors" || modal.type === "pipeline-protected") && <th>Type</th>}
                   <th>Disc</th>
-                  {modal.type === "pipeline-errors" ? <th>Error</th> : <th>Fingerprint</th>}
-                  {modal.type === "pipeline-errors" ? <th>Created</th> : <th>Ripped</th>}
+                  {(modal.type === "pipeline-errors" || modal.type === "pipeline-protected") ? <th>Error</th> : <th>Fingerprint</th>}
+                  {(modal.type === "pipeline-errors" || modal.type === "pipeline-protected") ? <th>Created</th> : <th>Ripped</th>}
                 </tr>
               </thead>
               <tbody>
                 {modalData.map((r) => (
                   <tr key={r.disc_id}>
-                    {(modal.type === "pipeline-identifying" || modal.type === "pipeline-errors") && (
+                    {(modal.type === "pipeline-identifying" || modal.type === "pipeline-errors" || modal.type === "pipeline-protected") && (
                       <td><TypeBadge type={r.type} /></td>
                     )}
                     <td>
                       <div>{r.temp_name}</div>
                     </td>
-                    {modal.type === "pipeline-errors" ? (
+                    {(modal.type === "pipeline-errors" || modal.type === "pipeline-protected") ? (
                       <td className="health-modal-error-msg">{r.error_message || "—"}</td>
                     ) : (
                       <td><code className="catalogue-mono">{r.disc_fingerprint || "—"}</code></td>
                     )}
                     <td>
-                      {modal.type === "pipeline-errors"
+                      {(modal.type === "pipeline-errors" || modal.type === "pipeline-protected")
                         ? formatDate(r.created_at)
                         : formatDate(r.ripped_at)}
                     </td>
@@ -225,6 +226,12 @@ export default function DbHealth() {
               label="Errors"
               tone={t(pipeline.error_discs, "error")}
               onClick={() => openModal("pipeline-errors", api.getPipelineErrors, "Pipeline — Errors")}
+            />
+            <Stat
+              value={pipeline.dvds_protected}
+              label="DVDs Protected"
+              tone={t(pipeline.dvds_protected, "error")}
+              onClick={() => openModal("pipeline-protected", api.getDvdsProtected, "Pipeline — Copy Protected DVDs")}
             />
           </div>
         </div>

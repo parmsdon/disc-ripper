@@ -14,6 +14,7 @@ import pty
 import re
 import select
 import subprocess
+import threading
 import time
 
 from common.models import RipJob
@@ -78,6 +79,78 @@ def _flag_dirty_rip_live(rip_job_id: int, line: str, session) -> bool:
     return True
 
 
+_TITLE_COUNT_RE = re.compile(r"scan:\s+(\d+)\s+title\(s\)\s+found", re.IGNORECASE)
+_VALID_TITLE_RE = re.compile(r"scan thread found\s+(\d+)\s+valid title\(s\)", re.IGNORECASE)
+_DURATION_RE = re.compile(r"\+\s+duration:\s+(\d+):(\d+):(\d+)")
+_DVD_RIP_TIMEOUT_SECONDS = 3600  # 60 minutes
+
+
+def scan_for_copy_protection(device_path: str, fake_mode: bool) -> dict:
+    """
+    Run HandBrakeCLI --scan --main-feature to detect copy protection before
+    dvdbackup. Returns {"protected": bool, "reason": str, "title_count": int}.
+    Never raises. In fake_mode always returns not-protected.
+    """
+    if fake_mode:
+        return {"protected": False, "reason": "", "title_count": 0}
+
+    try:
+        result = subprocess.run(
+            ["HandBrakeCLI", "-i", device_path, "--scan", "--main-feature"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        output = result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        logger.warning("HandBrakeCLI scan timed out for %s — skipping protection check", device_path)
+        return {"protected": False, "reason": "", "title_count": 0}
+    except FileNotFoundError:
+        logger.debug("HandBrakeCLI not found — skipping protection scan for %s", device_path)
+        return {"protected": False, "reason": "", "title_count": 0}
+    except Exception as exc:
+        logger.warning("HandBrakeCLI scan failed for %s: %s", device_path, exc)
+        return {"protected": False, "reason": "", "title_count": 0}
+
+    title_count = 0
+    m = _TITLE_COUNT_RE.search(output)
+    if m:
+        title_count = int(m.group(1))
+
+    m_valid = _VALID_TITLE_RE.search(output)
+    valid_count = int(m_valid.group(1)) if m_valid else None
+
+    if valid_count is not None and valid_count == 0:
+        reason = (
+            f"Disc appears copy protected (ARccOS or similar) — "
+            f"{title_count} title(s) found, 0 valid"
+        )
+        logger.info("Copy protection detected on %s: %s", device_path, reason)
+        return {"protected": True, "reason": reason, "title_count": title_count}
+
+    if title_count > 50:
+        reason = (
+            f"Disc appears copy protected (ARccOS or similar) — "
+            f"{title_count} title(s) found, 0 valid"
+        )
+        logger.info("Copy protection suspected on %s: >50 titles (%d)", device_path, title_count)
+        return {"protected": True, "reason": reason, "title_count": title_count}
+
+    m_dur = _DURATION_RE.search(output)
+    if m_dur:
+        hours, mins, secs = int(m_dur.group(1)), int(m_dur.group(2)), int(m_dur.group(3))
+        total_minutes = hours * 60 + mins + secs / 60
+        if total_minutes < 30:
+            reason = (
+                f"Disc appears copy protected (ARccOS or similar) — "
+                f"main feature duration {total_minutes:.0f} min is suspiciously short"
+            )
+            logger.info("Copy protection suspected on %s: main feature only %dm", device_path, total_minutes)
+            return {"protected": True, "reason": reason, "title_count": title_count}
+
+    return {"protected": False, "reason": "", "title_count": title_count}
+
+
 def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, session_factory, inject_dirty: bool = False) -> dict:
     """
     Run dvdbackup (real or fake) for one disc, updating rip_job progress
@@ -131,18 +204,38 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         )
         active_jobs.set_process(rip_job_id, proc)
 
+        timed_out = False
+
+        def _kill_on_timeout():
+            nonlocal timed_out
+            timed_out = True
+            logger.warning(
+                "dvdbackup timed out after 60 minutes for rip_job %s — killing process",
+                rip_job_id,
+            )
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        timeout_timer = threading.Timer(_DVD_RIP_TIMEOUT_SECONDS, _kill_on_timeout)
+        timeout_timer.start()
+
         dirty_detected_live = False
         last_progress_write = 0.0
         progress_sample_logged = False
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            log_lines.append(line)
-            if not progress_sample_logged and _PROGRESS_RE.search(line):
-                logger.info("dvdbackup progress line format (rip_job %s): %r", rip_job_id, line)
-                progress_sample_logged = True
-            last_progress_write = _maybe_update_progress(line, rip_job_id, session, last_write=last_progress_write)
-            if not dirty_detected_live and _is_dirty_rip_line(line):
-                dirty_detected_live = _flag_dirty_rip_live(rip_job_id, line, session)
+        try:
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                log_lines.append(line)
+                if not progress_sample_logged and _PROGRESS_RE.search(line):
+                    logger.info("dvdbackup progress line format (rip_job %s): %r", rip_job_id, line)
+                    progress_sample_logged = True
+                last_progress_write = _maybe_update_progress(line, rip_job_id, session, last_write=last_progress_write)
+                if not dirty_detected_live and _is_dirty_rip_line(line):
+                    dirty_detected_live = _flag_dirty_rip_live(rip_job_id, line, session)
+        finally:
+            timeout_timer.cancel()
 
         proc.wait()
 
@@ -154,6 +247,8 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
 
         success = proc.returncode == 0
         result = {"success": success, "log": full_log, "return_code": proc.returncode}
+        if timed_out:
+            result["timed_out"] = True
         if success:
             if dirty_detected_live:
                 dirty = True

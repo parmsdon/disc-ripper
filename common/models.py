@@ -65,6 +65,7 @@ class DiscStatus(str, enum.Enum):
     encoding = "encoding"
     done = "done"
     error = "error"
+    protected = "protected"
 
 
 class JobStatus(str, enum.Enum):

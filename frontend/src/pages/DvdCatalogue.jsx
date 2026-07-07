@@ -26,7 +26,7 @@ export default function DvdCatalogue() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
-  const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped"
+  const [ripStatus, setRipStatus] = useState(null);   // null | "ripped" | "unripped" | "protected"
   const [idStatus, setIdStatus] = useState(null);     // null | "identified" | "unidentified"
   const [mmStatus, setMmStatus] = useState(null);     // null | "matched" | "unmatched"
   const [dirty, setDirty] = useState(false);
@@ -131,10 +131,10 @@ export default function DvdCatalogue() {
         <div className="catalogue-toolbar">
           <div className="catalogue-filter-groups">
             <div className="catalogue-filters">
-              {[["ripped", "Ripped"], ["unripped", "Unripped"]].map(([key, label]) => (
+              {[["ripped", "Ripped"], ["unripped", "Unripped"], ["protected", "Protected"]].map(([key, label]) => (
                 <button
                   key={key}
-                  className={`catalogue-filter-btn${ripStatus === key ? " active" : ""}`}
+                  className={`catalogue-filter-btn${ripStatus === key ? " active" : ""}${key === "protected" ? " catalogue-filter-btn--protected" : ""}`}
                   onClick={() => { setRipStatus((v) => (v === key ? null : key)); setLoading(true); }}
                 >
                   {label}
@@ -244,7 +244,9 @@ export default function DvdCatalogue() {
                       : <span className="catalogue-dim">—</span>}
                   </td>
                   <td>
-                    {row.disc_rip_quality === "dirty"
+                    {row.disc_status === "protected"
+                      ? <span className="status-pill protected">Protected</span>
+                      : row.disc_rip_quality === "dirty"
                       ? <span className="dirty-rip-badge">⚠ dirty</span>
                       : <span className="catalogue-dim">—</span>}
                   </td>

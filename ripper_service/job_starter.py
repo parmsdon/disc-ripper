@@ -26,7 +26,7 @@ from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.log_writer import write_log_event
 from ripper_service.region_patcher import patch_region_if_needed
-from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs
+from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs, scan_for_copy_protection
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,38 @@ def _get_ripping_enabled(session) -> bool:
     return setting.value == "true" if setting else _DEFAULT_RIPPING_ENABLED
 
 
+def _mark_disc_protected(rip_job_id: int, reason: str, label: str, session_factory) -> None:
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        if rip_job is None:
+            logger.warning("RipJob %s vanished before protected handling", rip_job_id)
+            return
+        disc = rip_job.disc
+        drive = rip_job.drive
+        rip_job.status = JobStatus.error
+        rip_job.completed_at = naive_utcnow()
+        if disc is not None:
+            disc.status = DiscStatus.protected
+            disc.error_message = reason
+        if drive is not None:
+            drive.pending_action = "eject"
+            drive.pending_action_requested_at = naive_utcnow()
+        session.commit()
+        logger.warning("DVD disc #%s appears copy protected, ejecting: %s", disc.id if disc else "?", reason)
+    finally:
+        session.close()
+
+
 def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, session_factory, label, cfg, inject_dirty) -> None:
+    # Pre-rip protection scan: catches ARccOS and other schemes before dvdbackup
+    # wastes time or hangs trying to read fake/corrupted sector tables.
+    scan = scan_for_copy_protection(device_path, fake_rip_mode)
+    if scan["protected"]:
+        _mark_disc_protected(rip_job_id, scan["reason"], label, session_factory)
+        active_jobs.unregister(rip_job_id)
+        return
+
     try:
         result = run_dvdbackup(
             device_path, scratch_dir, disc_label, fake_rip_mode, rip_job_id, session_factory,
@@ -162,6 +193,16 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         # job_rollback.py already set the authoritative final state
         # (queued) and cleaned up - don't overwrite it with error/done.
         logger.info("Rip job %s was rolled back externally - skipping normal completion handling", rip_job_id)
+        active_jobs.unregister(rip_job_id)
+        return
+
+    if result.get("timed_out"):
+        _mark_disc_protected(
+            rip_job_id,
+            "Rip timed out after 60 minutes — possible copy protection",
+            label,
+            session_factory,
+        )
         active_jobs.unregister(rip_job_id)
         return
 

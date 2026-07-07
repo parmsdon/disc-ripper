@@ -177,6 +177,7 @@ def dvd_catalogue():
             "disc_temp_name": disc.temp_name,
             "disc_ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
             "disc_rip_quality": disc.rip_quality,
+            "disc_status": disc.status.value if disc.status else None,
         }
 
     def _catalog_fields(catalog):
@@ -197,6 +198,8 @@ def dvd_catalogue():
             q = q.where(Disc.status.in_(_RIPPED_STATUSES))
         elif rip_status == "unripped":
             q = q.where(Disc.status.in_(_IN_PROGRESS_STATUSES))
+        elif rip_status == "protected":
+            q = q.where(Disc.status == DiscStatus.protected)
         if id_status == "identified":
             q = q.where(Disc.temp_name.isnot(None))
         elif id_status == "unidentified":
@@ -219,7 +222,8 @@ def dvd_catalogue():
         not dirty and
         rip_status in (None, "unripped") and
         id_status in (None, "unidentified") and
-        mm_status in (None, "matched")
+        mm_status in (None, "matched") and
+        rip_status != "protected"
     )
     if include_unripped:
         has_disc = select(Disc.id).where(Disc.catalog_id == Catalog.id).exists()
@@ -245,6 +249,8 @@ def dvd_catalogue():
             q = q.where(Disc.status.in_(_RIPPED_STATUSES))
         elif rip_status == "unripped":
             q = q.where(Disc.status.in_(_IN_PROGRESS_STATUSES))
+        elif rip_status == "protected":
+            q = q.where(Disc.status == DiscStatus.protected)
         if id_status == "identified":
             q = q.where(Disc.temp_name.isnot(None))
         elif id_status == "unidentified":

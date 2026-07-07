@@ -108,6 +108,7 @@ export const api = {
   getMbError: () => request("/health/mb-error"),
   getPipelineIdentifying: () => request("/health/pipeline-identifying"),
   getPipelineErrors: () => request("/health/pipeline-errors"),
+  getDvdsProtected: () => request("/health/dvds-protected"),
   getLibraryStatus: () => request("/library/status"),
   generateLibrary: () => request("/library/generate", { method: "POST" }),
   getAudit: () => request("/audit/"),

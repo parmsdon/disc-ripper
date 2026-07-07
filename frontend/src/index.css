@@ -285,6 +285,16 @@ body {
   color: var(--warn);
 }
 
+.status-pill.protected {
+  background: rgba(147, 112, 219, 0.18);
+  color: #a07be0;
+}
+
+[data-theme="light"] .status-pill.protected {
+  background: rgba(130, 90, 200, 0.12);
+  color: #7040b8;
+}
+
 .region-cell {
   display: flex;
   flex-direction: column;
@@ -785,6 +795,12 @@ button:disabled {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
   border-color: var(--warn);
+}
+
+.catalogue-filter-btn--protected.active {
+  background: rgba(147, 112, 219, 0.18);
+  color: #a07be0;
+  border-color: #a07be0;
 }
 
 .catalogue-toolbar .catalog-search-input {
