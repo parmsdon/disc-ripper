@@ -162,11 +162,8 @@ def _mark_disc_protected(rip_job_id: int, reason: str, label: str, session_facto
         if disc is not None:
             disc.status = DiscStatus.protected
             disc.error_message = reason
-        if drive is not None:
-            drive.pending_action = "eject"
-            drive.pending_action_requested_at = naive_utcnow()
         session.commit()
-        logger.warning("DVD disc #%s appears copy protected, ejecting: %s", disc.id if disc else "?", reason)
+        logger.warning("DVD disc #%s appears copy protected: %s", disc.id if disc else "?", reason)
     finally:
         session.close()
 
