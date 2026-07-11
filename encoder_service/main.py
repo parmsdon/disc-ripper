@@ -267,6 +267,7 @@ def run(cfg: dict) -> None:
 
             with Session() as session:
                 _set_setting(session, _HEARTBEAT_KEY, datetime.now(timezone.utc).isoformat())
+                _set_setting(session, _STATUS_KEY, "running")
                 session.commit()
                 command = _get_command(session)
 
