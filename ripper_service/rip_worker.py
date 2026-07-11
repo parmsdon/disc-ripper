@@ -96,10 +96,10 @@ def scan_for_copy_protection(device_path: str, fake_mode: bool) -> dict:
 
     try:
         result = subprocess.run(
-            ["HandBrakeCLI", "-i", device_path, "--scan", "--main-feature"],
+            ["HandBrakeCLI", "-i", device_path, "--scan", "--title", "0"],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=30,
         )
         output = result.stdout + result.stderr
     except subprocess.TimeoutExpired:
