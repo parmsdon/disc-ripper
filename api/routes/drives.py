@@ -41,7 +41,7 @@ def list_drives():
     cfg = current_app.config["DISCRIPPER_CFG"]
 
     drives = session.scalars(
-        select(Drive).where(Drive.env == cfg["environment"]).order_by(Drive.id)
+        select(Drive).where(Drive.env == cfg["environment"], Drive.active == True).order_by(Drive.id)
     ).all()
 
     result = []

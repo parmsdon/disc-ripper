@@ -6,7 +6,7 @@ Safe to call repeatedly - the main loop re-syncs periodically so drives
 added/removed from config are picked up without restarting the service.
 """
 
-from sqlalchemy import select
+from sqlalchemy import select, not_
 
 from common.models import Drive, PhysicalDrive, DiscType, naive_utcnow
 from ripper_service.udev_helper import get_drive_info
@@ -66,6 +66,18 @@ def sync_physical_drives(session, cfg: dict) -> dict:
             "region": physical_drive.region,
             "region_known": physical_drive.region_known,
         }
+
+    # Deactivate any Drive rows in this env that are no longer in config.
+    configured_paths = [d["device"] for d in cfg.get("drives", []) if d.get("active", True)]
+    stale = session.scalars(
+        select(Drive).where(
+            Drive.env == env,
+            Drive.active == True,
+            not_(Drive.device_path.in_(configured_paths)),
+        )
+    ).all()
+    for drive in stale:
+        drive.active = False
 
     session.commit()
     return result
