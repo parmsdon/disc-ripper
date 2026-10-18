@@ -24,6 +24,7 @@ a genuine clean stop.
 import logging
 import os
 import shutil
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -45,6 +46,24 @@ from ripper_service.tray_status import get_tray_status, tray_open_from_status
 from ripper_service.udev_helper import get_drive_info
 
 POLL_INTERVAL_SECONDS = 3
+
+
+def _check_datastore_mount(datastore_root: str) -> None:
+    if not os.path.isdir(datastore_root):
+        logger.critical(
+            "FATAL: datastore path does not exist or is not a directory: %s — "
+            "check your NFS mount before starting",
+            datastore_root,
+        )
+        sys.exit(1)
+    if not os.path.ismount(datastore_root):
+        logger.critical(
+            "FATAL: datastore path is not a mount point: %s — "
+            "NFS may not be mounted",
+            datastore_root,
+        )
+        sys.exit(1)
+    logger.info("Datastore mount OK: %s", datastore_root)
 
 # Statuses with an outstanding RipJob that job_starter can still act on.
 _ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.building)
@@ -140,6 +159,8 @@ def run(cfg: dict) -> None:
     Session = get_session_factory(cfg)
     media_present_by_device = {}
     tray_open_by_device = {}
+
+    _check_datastore_mount(cfg["storage"]["datastore_root"])
 
     # /tmp-based scratch space may not survive a reboot - make sure it
     # exists before relying on it, rather than assuming manual setup.

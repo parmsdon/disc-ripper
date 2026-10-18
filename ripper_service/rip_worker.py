@@ -636,6 +636,13 @@ def run_cdparanoia(
         success = returncode == 0
         result = {"success": success, "log": full_log, "return_code": returncode}
         if success:
+            if not os.path.exists(output_wav_path) or os.path.getsize(output_wav_path) == 0:
+                msg = (
+                    f"WAV file missing or empty after rip — datastore may not be mounted "
+                    f"(expected: {output_wav_path})"
+                )
+                logger.error("Track %s rip_job %s: %s", track_number, rip_job_id, msg)
+                return {"success": False, "log": full_log + f"\n{msg}", "return_code": returncode}
             result["dirty"] = detect_dirty_track(full_log)
         return result
 

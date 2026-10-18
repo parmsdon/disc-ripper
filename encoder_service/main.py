@@ -21,6 +21,7 @@ Uses separate settings keys from ripper_service to avoid collisions:
 
 import logging
 import os
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -54,6 +55,24 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _check_datastore_mount(datastore_root: str) -> None:
+    if not os.path.isdir(datastore_root):
+        logger.critical(
+            "FATAL: datastore path does not exist or is not a directory: %s — "
+            "check your NFS mount before starting",
+            datastore_root,
+        )
+        sys.exit(1)
+    if not os.path.ismount(datastore_root):
+        logger.critical(
+            "FATAL: datastore path is not a mount point: %s — "
+            "NFS may not be mounted",
+            datastore_root,
+        )
+        sys.exit(1)
+    logger.info("Datastore mount OK: %s", datastore_root)
 
 
 def _get_session_factory(cfg: dict) -> sessionmaker:
@@ -141,6 +160,8 @@ def shutdown(Session: sessionmaker, threads: list | None = None) -> None:
 
 
 def run(cfg: dict) -> None:
+    _check_datastore_mount(cfg["storage"]["datastore_root"])
+
     Session = _get_session_factory(cfg)
 
     # Roll back any stale running jobs left by a previous crashed instance.
