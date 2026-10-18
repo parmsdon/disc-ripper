@@ -69,7 +69,7 @@ ENCODE_PROFILES = [
         "output_folder": "cd_store/mp3_320",
         "tool": "ffmpeg",
         "tool_params": '{"bitrate": "320k", "codec": "libmp3lame"}',
-        "depends_on_name": None,
+        "depends_on_name": "CD FLAC",
         "enabled": True,
         "display_order": 5,
     },
