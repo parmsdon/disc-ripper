@@ -380,28 +380,58 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             _set_job_error(job_id, "No CDTrack linked to this encode job", session_factory)
             return
 
-        wav_filename = track.wav_filename
-        if not wav_filename:
-            _set_job_error(job_id, "Track has no WAV file - rip may be incomplete", session_factory)
-            return
-
         disc = track.disc
         if disc is None:
             _set_job_error(job_id, "No Disc linked to this track", session_factory)
             return
 
         # Snapshot all ORM attributes as plain Python values.
-        tool          = job.profile.tool
-        profile_name  = job.profile.name
-        tool_params   = json.loads(job.profile.tool_params or '{}')
-        output_folder = job.profile.output_folder
-        track_number  = track.track_number
-        disc_id       = job.disc_id
-        disc_raw_path = disc.raw_path
-        duration      = track.duration_seconds
+        tool                  = job.profile.tool
+        profile_name          = job.profile.name
+        tool_params           = json.loads(job.profile.tool_params or '{}')
+        output_folder         = job.profile.output_folder
+        depends_on_profile_id = job.profile.depends_on_profile_id
+        track_number          = track.track_number
+        track_id              = track.id
+        disc_id               = job.disc_id
+        disc_raw_path         = disc.raw_path
+        duration              = track.duration_seconds
 
-        # Resolve paths.
-        input_wav  = str(Path(datastore_root) / disc_raw_path / wav_filename)
+        # FLAC encodes read from the raw WAV file.
+        # All other profiles (MP3, etc.) read from the output of their
+        # dependency profile (FLAC) rather than the WAV, so WAVs can be
+        # deleted once FLAC is done without blocking lossy encodes.
+        if tool == "flac":
+            wav_filename = track.wav_filename
+            if not wav_filename:
+                _set_job_error(job_id, "Track has no WAV file - rip may be incomplete", session_factory)
+                return
+            input_file = str(Path(datastore_root) / disc_raw_path / wav_filename)
+        else:
+            if depends_on_profile_id is None:
+                _set_job_error(
+                    job_id,
+                    f"Profile '{profile_name}' has no dependency profile — cannot determine source file",
+                    session_factory,
+                )
+                return
+            dep_job = session.scalars(
+                select(EncodeJob).where(
+                    EncodeJob.disc_id == disc_id,
+                    EncodeJob.track_id == track_id,
+                    EncodeJob.profile_id == depends_on_profile_id,
+                    EncodeJob.status == JobStatus.done,
+                )
+            ).first()
+            if dep_job is None or not dep_job.output_path:
+                _set_job_error(
+                    job_id,
+                    "Dependency encode job not found or has no output path — cannot determine source file",
+                    session_factory,
+                )
+                return
+            input_file = dep_job.output_path
+
         ext        = "flac" if tool == "flac" else "mp3"
         track_stem = f"track{track_number:02d}"
         output_dir = Path(datastore_root) / output_folder / str(disc_id)
@@ -410,7 +440,7 @@ def encode_cd_track(job_id: int, session_factory) -> None:
         # Create output directory before the subprocess runs.
         os.makedirs(output_dir, exist_ok=True)
 
-        job.source_file = input_wav
+        job.source_file = input_file
         job.output_path = output_path
         session.commit()
     finally:
@@ -418,15 +448,15 @@ def encode_cd_track(job_id: int, session_factory) -> None:
 
     logger.info(
         "Starting CD encode job %s: %s -> %s (tool=%s)",
-        job_id, input_wav, output_path, tool,
+        job_id, input_file, output_path, tool,
     )
 
     # Dispatch to the appropriate encoder using only plain Python values.
     if tool == "flac":
-        success = encode_flac(input_wav, output_path, tool_params, job_id, session_factory)
+        success = encode_flac(input_file, output_path, tool_params, job_id, session_factory)
     elif tool == "ffmpeg":
         success = encode_mp3(
-            input_wav, output_path, tool_params, job_id, session_factory,
+            input_file, output_path, tool_params, job_id, session_factory,
             duration_seconds=duration,
         )
     else:

@@ -110,6 +110,10 @@ def get_next_encode_jobs(
 
     dep_job = aliased(EncodeJob)
 
+    # For disc-level jobs (DVD, track_id IS NULL) the dependency is per-disc.
+    # For track-level jobs (CD, track_id IS NOT NULL) the dependency must be
+    # satisfied for that specific track, so an MP3 job for track 5 cannot
+    # start just because track 1's FLAC job finished.
     dep_satisfied = or_(
         EncodeProfile.depends_on_profile_id.is_(None),
         exists(
@@ -117,6 +121,10 @@ def get_next_encode_jobs(
                 dep_job.disc_id == EncodeJob.disc_id,
                 dep_job.profile_id == EncodeProfile.depends_on_profile_id,
                 dep_job.status == JobStatus.done,
+                or_(
+                    EncodeJob.track_id.is_(None),
+                    dep_job.track_id == EncodeJob.track_id,
+                ),
             )
         ),
     )
