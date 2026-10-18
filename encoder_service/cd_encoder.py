@@ -14,8 +14,10 @@ import subprocess
 import time
 from pathlib import Path
 
+from sqlalchemy import select
+
 from common.config import load_config, get_db_url
-from common.models import EncodeJob, JobStatus, naive_utcnow
+from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, naive_utcnow
 from encoder_service import process_registry
 
 logger = logging.getLogger(__name__)
@@ -283,6 +285,67 @@ def encode_mp3(
         return False
 
 
+def _cleanup_wavs_if_flac_complete(
+    disc_id: int, disc_raw_path: str | None, datastore_root: str, session_factory
+) -> None:
+    """
+    After a FLAC encode job completes, check whether every ripped CDTrack for
+    this disc now has a done FLAC encode job. If so, delete the WAV files from
+    the datastore — they are redundant once lossless encodes exist.
+    Handles FileNotFoundError gracefully (WAVs already gone).
+    """
+    if not disc_raw_path:
+        return
+
+    session = session_factory()
+    try:
+        tracks = session.scalars(
+            select(CDTrack).where(CDTrack.disc_id == disc_id)
+        ).all()
+
+        ripped_tracks = [(t.id, t.wav_filename) for t in tracks if t.wav_filename]
+        if not ripped_tracks:
+            return
+
+        for track_id, _ in ripped_tracks:
+            done_flac = session.scalars(
+                select(EncodeJob)
+                .join(EncodeJob.profile)
+                .where(
+                    EncodeJob.track_id == track_id,
+                    EncodeJob.status == JobStatus.done,
+                    EncodeProfile.tool == "flac",
+                )
+            ).first()
+            if done_flac is None:
+                return  # at least one track not yet FLAC-encoded
+    except Exception:
+        logger.exception("_cleanup_wavs_if_flac_complete: error checking disc #%s", disc_id)
+        return
+    finally:
+        session.close()
+
+    # All ripped tracks have a done FLAC job — safe to delete WAVs.
+    deleted = 0
+    for _, wav_filename in ripped_tracks:
+        wav_path = str(Path(datastore_root) / disc_raw_path / wav_filename)
+        try:
+            os.remove(wav_path)
+            deleted += 1
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.warning(
+                "Failed to delete WAV %s for disc #%s", wav_path, disc_id, exc_info=True
+            )
+
+    if deleted:
+        logger.info(
+            "Deleted %d WAV file(s) for disc #%s — all FLAC encodes complete",
+            deleted, disc_id,
+        )
+
+
 def encode_cd_track(job_id: int, session_factory) -> None:
     """
     Main entry point called in a background thread.
@@ -383,3 +446,6 @@ def encode_cd_track(job_id: int, session_factory) -> None:
             logger.exception("Failed to mark EncodeJob %s done", job_id)
         finally:
             session.close()
+
+        if tool == "flac":
+            _cleanup_wavs_if_flac_complete(disc_id, disc_raw_path, datastore_root, session_factory)
