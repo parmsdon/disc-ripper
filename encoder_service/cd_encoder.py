@@ -17,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import load_config, get_db_url
-from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, naive_utcnow
+from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, RipQuality, naive_utcnow
 from encoder_service import process_registry
 
 logger = logging.getLogger(__name__)
@@ -305,6 +305,12 @@ def _cleanup_wavs_if_flac_complete(
 
         ripped_tracks = [(t.id, t.wav_filename) for t in tracks if t.wav_filename]
         if not ripped_tracks:
+            return
+
+        # If any track failed to rip, keep all WAVs — the disc may be
+        # re-inserted for a selective re-rip and the surviving WAVs must
+        # stay intact for those tracks.
+        if any(t.rip_quality == RipQuality.failed for t in tracks):
             return
 
         for track_id, _ in ripped_tracks:

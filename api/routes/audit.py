@@ -289,6 +289,19 @@ def run_audit():
             if track.wav_filename is None:
                 continue
             if not (disc_dir / track.wav_filename).exists():
+                # A WAV deleted after successful FLAC encoding is expected — not an error.
+                flac_done = session.scalar(
+                    select(EncodeJob.id)
+                    .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
+                    .where(
+                        EncodeJob.track_id == track.id,
+                        EncodeJob.status == JobStatus.done,
+                        EncodeProfile.tool == "flac",
+                    )
+                    .limit(1)
+                )
+                if flac_done is not None:
+                    continue
                 missing_wav_files.append({
                     "disc_id": disc.id,
                     "title": _disc_title(disc),
