@@ -404,6 +404,8 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     scratch_subdir = Path(cfg["storage"]["scratch_dir"]) / str(disc_id)
     os.makedirs(scratch_subdir, exist_ok=True)
 
+    track_timeout_seconds = int(cfg.get("cd", {}).get("track_timeout_seconds", 600))
+
     total = len(track_numbers)
     if total == 0:
         logger.warning("RipJob %s (disc %s) has no tracks needing a rip - nothing to do", rip_job_id, disc_id)
@@ -431,6 +433,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
             result = run_cdparanoia(
                 device_path, track_number, scratch_path, track_durations.get(track_number), stage_label,
                 fake_rip_mode, rip_job_id, session_factory, inject_dirty=inject_dirty_this_track,
+                track_timeout_seconds=track_timeout_seconds,
             )
         except Exception:
             logger.exception("Unexpected error ripping track %s for rip job %s", track_number, rip_job_id)

@@ -424,6 +424,7 @@ def detect_dirty_track(log_text: str) -> bool:
 def run_cdparanoia(
     device_path, track_number, output_wav_path, duration_seconds, stage_label,
     fake_mode, rip_job_id, session_factory, inject_dirty: bool = False,
+    track_timeout_seconds: int = 600,
 ) -> dict:
     """
     Rip one CD track (real cdparanoia or its fake_rip_mode stand-in),
@@ -519,6 +520,24 @@ def run_cdparanoia(
                     last_written_percent = percent
                     progress_samples.append((time.time() - track_start_time, percent))
 
+        proc = None
+        timed_out = False
+
+        def _kill_on_timeout():
+            nonlocal timed_out
+            timed_out = True
+            logger.warning(
+                "cdparanoia timed out after %ds for track %s (rip_job %s) — killing process",
+                track_timeout_seconds, track_number, rip_job_id,
+            )
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+        timeout_timer = threading.Timer(track_timeout_seconds, _kill_on_timeout)
+
         if fake_mode:
             # fake_cdparanoia is a Python script we control; PIPE works fine.
             proc = subprocess.Popen(
@@ -529,11 +548,14 @@ def run_cdparanoia(
                 bufsize=1,
             )
             active_jobs.set_process(rip_job_id, proc)
-
-            for line in proc.stderr:
-                line = line.rstrip('\r\n')
-                if line:
-                    _handle_line(line)
+            timeout_timer.start()
+            try:
+                for line in proc.stderr:
+                    line = line.rstrip('\r\n')
+                    if line:
+                        _handle_line(line)
+            finally:
+                timeout_timer.cancel()
 
             proc.wait()
         else:
@@ -548,46 +570,55 @@ def run_cdparanoia(
             )
             os.close(slave_fd)
             active_jobs.set_process(rip_job_id, proc)
-
-            buf = ""
-            while True:
-                r, _, _ = select.select([master_fd], [], [], 0.1)
-                if r:
-                    try:
-                        data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
-                        buf += data
-                        while "\r" in buf or "\n" in buf:
-                            for sep in ("\r\n", "\r", "\n"):
-                                if sep in buf:
-                                    line, buf = buf.split(sep, 1)
-                                    if line.strip():
-                                        _handle_line(line.strip())
-                                    break
-                    except OSError:
-                        break
-                if proc.poll() is not None:
-                    try:
-                        while True:
-                            r, _, _ = select.select([master_fd], [], [], 0.05)
-                            if not r:
-                                break
-                            data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
-                            buf += data
-                    except OSError:
-                        pass
-                    break
-
-            if buf.strip():
-                _handle_line(buf.strip())
+            timeout_timer.start()
 
             try:
-                os.close(master_fd)
-            except OSError:
-                pass
+                buf = ""
+                while True:
+                    r, _, _ = select.select([master_fd], [], [], 0.1)
+                    if r:
+                        try:
+                            data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
+                            buf += data
+                            while "\r" in buf or "\n" in buf:
+                                for sep in ("\r\n", "\r", "\n"):
+                                    if sep in buf:
+                                        line, buf = buf.split(sep, 1)
+                                        if line.strip():
+                                            _handle_line(line.strip())
+                                        break
+                        except OSError:
+                            break
+                    if proc.poll() is not None:
+                        try:
+                            while True:
+                                r, _, _ = select.select([master_fd], [], [], 0.05)
+                                if not r:
+                                    break
+                                data = os.read(master_fd, 4096).decode("utf-8", errors="replace")
+                                buf += data
+                        except OSError:
+                            pass
+                        break
+
+                if buf.strip():
+                    _handle_line(buf.strip())
+
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            finally:
+                timeout_timer.cancel()
 
             proc.wait()
 
         returncode = proc.returncode
+
+        if timed_out:
+            log_lines.append(
+                f"[timeout] cdparanoia killed after {track_timeout_seconds}s — track {track_number} timed out"
+            )
 
         full_log = "\n".join(log_lines)
         if progress_samples:
