@@ -17,8 +17,10 @@ storage:
   dvd_store: "dvd_store"
   cd_store: "cd_store"
   raw_subfolder: "raw"
-  # Local scratch space on the RIPPER machine (not used on app/DB machine)
-  scratch_dir: "/tmp/discripper_scratch"
+  # Local scratch space on the RIPPER machine (not used on app/DB machine).
+  # Use /var/tmp (survives reboots) and a prod-specific name — dev and prod
+  # share the ripper host (rimmer) and must not share a scratch directory.
+  scratch_dir: "/var/tmp/discripper_scratch_prod"
 
 # Drive mappings - only relevant on the ripper machine (rimmer).
 # On the app/DB machine (ripper), leave this as an empty list.

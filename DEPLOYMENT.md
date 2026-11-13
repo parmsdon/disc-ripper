@@ -19,7 +19,7 @@ sudo dnf install -y git
 ### System packages
 
 ```bash
-sudo dnf install -y python3 python3-pip python3-psycopg2 postgresql postgresql-server nodejs npm
+sudo dnf install -y python3 python3-pip python3-psycopg2 python3-pyodbc freetds postgresql postgresql-server nodejs npm
 sudo postgresql-setup --initdb
 sudo systemctl enable --now postgresql
 
@@ -39,9 +39,6 @@ sudo dnf install -y HandBrake
 sudo -u postgres psql -c "CREATE USER discripper WITH PASSWORD 'changeme';"
 sudo -u postgres psql -c "CREATE DATABASE discripper_dev OWNER discripper;"
 ```
-
-(For prod: `discripper_prod`, and use a different password — update
-`config/prod.yaml` accordingly.)
 
 ### Get the code
 
@@ -206,9 +203,6 @@ cd ripperdev
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
 pip install -r requirements-ripper.txt
-# discid and musicbrainzngs are installed via pip (libdiscid system package above
-# provides the shared library that discid wraps):
-pip install discid musicbrainzngs
 ```
 
 ### Stable optical drive device names (udev)
@@ -273,8 +267,12 @@ vary; that's fine — the symlink is what matters).
 
 ```yaml
 drives:
-  - device_path: /dev/sr_drv01
-  - device_path: /dev/sr_drv02
+  - device: /dev/sr_drv01
+    label: "Drive 1"
+    active: true
+  - device: /dev/sr_drv02
+    label: "Drive 2"
+    active: true
   # … through sr_drv09
 ```
 
@@ -317,19 +315,17 @@ export DISCRIPPER_ENV=dev
 python3 -m ripper_service.main
 ```
 
-Runs in the foreground, polling every 3 seconds. For now it only:
+Runs in the foreground, polling every 3 seconds. It:
 - Syncs each configured drive's hardware identity (via `udevadm`) into the
   `drives`/`physical_drives` tables, so drives are recognized across device
   path reassignment.
-- Detects disc insert/removal per drive and logs it. Drives whose region is
-  unknown are logged but otherwise skipped — read the region from the
-  Drive Status tab ("Read Region") before ripping will activate for that
-  drive in a later phase.
-- Does **not** yet create `RipJob`s or run `dvdbackup`/`cdparanoia` — that's
-  the next phase.
+- Detects disc insert/removal per drive. Drives whose region is unknown are
+  skipped — read the region from the Drive Status tab ("Read Region") first.
+- Creates `RipJob`s and runs `dvdbackup`+`mkisofs` (DVD) or `cdparanoia`
+  per track (CD) up to `max_rippers` concurrency.
 
-Run it under `tmux`/`screen` or a process supervisor for now (no systemd
-unit yet). `Ctrl+C` shuts it down cleanly.
+`Ctrl+C` shuts it down cleanly. For production use, run as a systemd
+service — see section 4.
 
 ---
 
@@ -358,6 +354,42 @@ Both run Fedora, code at `/projects/ripper`, venv at `/projects/ripper/venv`, se
 
 ### 4.1 First-time setup (app/DB machine — ripper)
 
+#### System packages
+
+```bash
+sudo dnf install -y python3 python3-pip python3-psycopg2 python3-pyodbc freetds \
+  postgresql postgresql-server nodejs npm ffmpeg flac
+
+# RPM Fusion — needed for HandBrake
+sudo dnf install -y \
+  https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+  https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf install -y HandBrake
+
+sudo postgresql-setup --initdb
+sudo systemctl enable --now postgresql
+```
+
+Copy `/etc/freetds.conf` from the dev setup (see section 1 My Movies sync) —
+the `[mymovies]` stanza is load-bearing; the scheduler connects via
+`SERVERNAME=mymovies`.
+
+#### /etc/fstab (NFS mount)
+
+Add a line so `/mnt/datastore` mounts automatically at boot:
+
+```
+# /etc/fstab
+<nfs-server>:/path/to/export  /mnt/datastore  nfs  defaults,_netdev  0  0
+```
+
+Then:
+
+```bash
+sudo mkdir -p /mnt/datastore
+sudo mount -a
+```
+
 #### Clone the repo
 
 ```bash
@@ -379,6 +411,28 @@ pip install -r requirements.txt    # includes gunicorn
 ```bash
 sudo -u postgres psql -c "CREATE USER discripper WITH PASSWORD '<password>';"
 sudo -u postgres psql -c "CREATE DATABASE discripper OWNER discripper;"
+```
+
+#### PostgreSQL remote access (for the ripper machine)
+
+The ripper machine (rimmer) connects to Postgres on this host.
+
+**Edit `postgresql.conf`** (usually `/var/lib/pgsql/data/postgresql.conf`):
+
+```
+listen_addresses = '*'
+```
+
+**Add a row to `pg_hba.conf`** (same directory):
+
+```
+host    discripper    discripper    192.168.0.0/24    scram-sha-256
+```
+
+Then restart Postgres:
+
+```bash
+sudo systemctl restart postgresql
 ```
 
 #### Config
@@ -418,17 +472,18 @@ sudo nginx -t && sudo systemctl enable --now nginx
 #### Install systemd units
 
 ```bash
-sudo cp deploy/systemd/discripper-api.service     /etc/systemd/system/
-sudo cp deploy/systemd/discripper-encoder.service /etc/systemd/system/
+sudo cp deploy/systemd/discripper-api.service      /etc/systemd/system/
+sudo cp deploy/systemd/discripper-encoder.service  /etc/systemd/system/
+sudo cp deploy/systemd/discripper-mymovies.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now discripper-api discripper-encoder
+sudo systemctl enable --now discripper-api discripper-encoder discripper-mymovies
 ```
 
 #### Configure sudo for the deploy script
 
 ```bash
 sudo tee /etc/sudoers.d/discripper-deploy <<'EOF'
-ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder, \
+ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder discripper-mymovies, \
                             /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/
 EOF
 ```
@@ -437,6 +492,19 @@ EOF
 
 ### 4.2 First-time setup (ripper machine — rimmer)
 
+#### /etc/fstab (NFS mount)
+
+Add the same NFS line as on the app machine (see 4.1) so `/mnt/datastore`
+mounts at boot:
+
+```bash
+sudo mkdir -p /mnt/datastore
+# add entry to /etc/fstab, then:
+sudo mount -a
+```
+
+#### Clone and install
+
 ```bash
 cd /projects
 git clone <your-github-url> ripper
@@ -444,8 +512,7 @@ cd ripper
 
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
-pip install -r requirements-ripper.txt
-pip install discid musicbrainzngs
+pip install -r requirements-ripper.txt   # includes discid and musicbrainzngs
 ```
 
 #### Config
@@ -493,7 +560,7 @@ From the relevant host, run:
 ./scripts/deploy_prod.sh ripper  # on rimmer  — ripper service
 ```
 
-The script does: `git pull` → `pip install` → (app only: `alembic upgrade head`, `npm ci && npm run build`, copy to `/var/www/discripper`) → `systemctl restart`.
+The script does: `git pull` → `pip install` → (app only: `alembic upgrade head`, `npm ci && npm run build`, copy to `/var/www/discripper`) → `systemctl restart` (api + encoder + mymovies for app; ripper for ripper).
 
 ---
 
@@ -501,12 +568,13 @@ The script does: `git pull` → `pip install` → (app only: `alembic upgrade he
 
 ```bash
 # Status
-sudo systemctl status discripper-api discripper-encoder   # on ripper
-sudo systemctl status discripper-ripper                   # on rimmer
+sudo systemctl status discripper-api discripper-encoder discripper-mymovies   # on ripper
+sudo systemctl status discripper-ripper                                        # on rimmer
 
 # Logs
 sudo journalctl -u discripper-api -f
 sudo journalctl -u discripper-encoder -f
+sudo journalctl -u discripper-mymovies -f
 sudo journalctl -u discripper-ripper -f
 ```
 

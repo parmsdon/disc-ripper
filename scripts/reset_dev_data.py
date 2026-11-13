@@ -146,4 +146,11 @@ def main(env: str) -> None:
 
 
 if __name__ == "__main__":
-    main(os.environ.get("DISCRIPPER_ENV", "dev"))
+    _env = os.environ.get("DISCRIPPER_ENV")
+    if _env != "dev":
+        print(
+            f"DISCRIPPER_ENV must be exactly 'dev' to run this script "
+            f"(got: {_env!r}). Set DISCRIPPER_ENV=dev to proceed. No override is available."
+        )
+        sys.exit(1)
+    main(_env)

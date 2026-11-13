@@ -23,7 +23,11 @@ git pull
 
 echo "=== pip install ==="
 source venv/bin/activate
-pip install -r requirements.txt
+if [[ "$TARGET" == "app" ]]; then
+    pip install -r requirements.txt
+elif [[ "$TARGET" == "ripper" ]]; then
+    pip install -r requirements-ripper.txt
+fi
 
 if [[ "$TARGET" == "app" ]]; then
     echo "=== alembic upgrade head ==="
@@ -39,8 +43,8 @@ if [[ "$TARGET" == "app" ]]; then
     echo "=== deploy frontend to /var/www/discripper ==="
     sudo rsync -a --delete frontend/dist/ /var/www/discripper/
 
-    echo "=== restart api and encoder ==="
-    sudo systemctl restart discripper-api discripper-encoder
+    echo "=== restart api, encoder and mymovies ==="
+    sudo systemctl restart discripper-api discripper-encoder discripper-mymovies
 
 elif [[ "$TARGET" == "ripper" ]]; then
     echo "=== restart ripper ==="

@@ -1,0 +1,17 @@
+[Unit]
+Description=Discripper My Movies Sync Scheduler
+After=network-online.target postgresql.service discripper-api.service
+Wants=network-online.target
+RequiresMountsFor=/mnt/datastore
+
+[Service]
+Type=simple
+User=ripper
+WorkingDirectory=/projects/ripper
+Environment=DISCRIPPER_ENV=prod
+ExecStart=/projects/ripper/venv/bin/python3 -m mymovies_sync.scheduler
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
