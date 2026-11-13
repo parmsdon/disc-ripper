@@ -1,0 +1,17 @@
+[Unit]
+Description=Discripper API (gunicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target
+RequiresMountsFor=/mnt/datastore
+
+[Service]
+Type=simple
+User=ripper
+WorkingDirectory=/projects/ripper
+Environment=DISCRIPPER_ENV=prod
+ExecStart=/projects/ripper/venv/bin/gunicorn -w 2 -b 127.0.0.1:8000 "api.app:create_app()"
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

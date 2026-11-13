@@ -1,48 +1,69 @@
 # Disc Ripper - Production environment configuration
 # Copy this file to config/prod.yaml and fill in real values.
-# config/prod.yaml is gitignored - never commit real credentials/paths if sensitive.
+# config/prod.yaml is gitignored - never commit real credentials.
 
 environment: prod
 
 database:
-  host: "app-db-host"
+  host: "192.168.0.23"      # app/DB machine IP
   port: 5432
-  name: "discripper_prod"
+  name: "discripper"
   user: "discripper"
   password: "changeme"
 
 storage:
+  # NFS mount root for the prod environment (mounted on both machines)
   datastore_root: "/mnt/datastore"
   dvd_store: "dvd_store"
   cd_store: "cd_store"
   raw_subfolder: "raw"
+  # Local scratch space on the RIPPER machine (not used on app/DB machine)
   scratch_dir: "/tmp/discripper_scratch"
 
-# Drive mappings - only relevant on the ripper/drive machine, not the app/db machine.
-# Each drive is assigned to exactly one environment (dev or prod).
-# The ripper service for this environment will only manage drives listed here.
-# On the app/db machine, leave this as an empty list.
+# Drive mappings - only relevant on the ripper machine (rimmer).
+# On the app/DB machine (ripper), leave this as an empty list.
 drives: []
-# Example drive entries (uncomment and edit on the ripper machine):
+# Example drive entries for the ripper machine (uncomment and edit):
 # drives:
-#   - device: "/dev/sr0"
-#     label: "Drive 1"
-#     active: true
-#     # type: "dvd"   # optional capability hint: "dvd" for DVD-capable, "cd" for CD-only,
-#                     # omit entirely for auto-detect at rip time
-#   - device: "/dev/sr1"
+#   - device: "/dev/sr_drv02"
 #     label: "Drive 2"
 #     active: true
+#   - device: "/dev/sr_drv03"
+#     label: "Drive 3"
+#     active: true
+#   - device: "/dev/sr_drv04"
+#     label: "Drive 4"
+#     active: true
+#   - device: "/dev/sr_drv05"
+#     label: "Drive 5"
+#     active: true
+#   - device: "/dev/sr_drv06"
+#     label: "Drive 6"
+#     active: true
+#   - device: "/dev/sr_drv07"
+#     label: "Drive 7"
+#     active: true
+#   - device: "/dev/sr_drv08"
+#     label: "Drive 8"
+#     active: true
+#   - device: "/dev/sr_drv09"
+#     label: "Drive 9"
+#     active: true
 
+# Flask API settings (gunicorn in prod - api.host/port/debug are unused,
+# but kept here so the config validator doesn't complain)
 api:
-  host: "0.0.0.0"
-  port: 5000
+  host: "127.0.0.1"
+  port: 8000
   debug: false
 
+# My Movies sync (FreeTDS -> SQL Server, read-only)
 mymovies:
-  odbc_dsn: "MyMoviesDSN"
-  odbc_user: "myuser"
-  odbc_password: "changeme"
+  server: "192.168.2.4"
+  port: "11598"
+  database: "My Movies"
+  username: "mymoviesapi"
+  password: "changeme"
   sync_interval_hours: 24
 
 discogs:

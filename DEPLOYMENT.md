@@ -346,23 +346,169 @@ Code to generate a `CLAUDE.md` for that machine's role.
 
 ---
 
-## 4. Setting up prod (later)
+## 4. Production deployment
 
-Once dev is working end-to-end:
+**Machines:**
+- `ripper` (192.168.0.23) — app/DB machine: PostgreSQL, Flask API (gunicorn), encoder service, nginx
+- `rimmer` — ripper machine: ripper service only
+
+Both run Fedora, code at `/projects/ripper`, venv at `/projects/ripper/venv`, services run as user `ripper`.
+
+---
+
+### 4.1 First-time setup (app/DB machine — ripper)
+
+#### Clone the repo
 
 ```bash
 cd /projects
 git clone <your-github-url> ripper
 cd ripper
-git checkout main
 ```
 
-Then repeat the steps above on each machine using:
-- `config/prod.yaml` (copied from `prod.yaml.example`)
-- `discripper_prod` database
-- `/mnt/datastore` (prod NFS mount)
-- `DISCRIPPER_ENV=prod`
-- Different drives assigned to prod in `config/prod.yaml`
+#### Python environment
+
+```bash
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install -r requirements.txt    # includes gunicorn
+```
+
+#### Create the prod database
+
+```bash
+sudo -u postgres psql -c "CREATE USER discripper WITH PASSWORD '<password>';"
+sudo -u postgres psql -c "CREATE DATABASE discripper OWNER discripper;"
+```
+
+#### Config
+
+```bash
+cp config/prod.yaml.example config/prod.yaml
+# Edit config/prod.yaml:
+#   - database.password: set the real password
+#   - drives: leave as [] (drives are on rimmer)
+#   - mymovies.password, discogs.token: fill in real values
+```
+
+#### Run migrations and seed
+
+```bash
+export DISCRIPPER_ENV=prod
+alembic upgrade head
+python3 scripts/seed.py
+```
+
+#### Install nginx and deploy the frontend
+
+```bash
+sudo dnf install -y nginx
+sudo mkdir -p /var/www/discripper
+
+cd frontend
+npm ci
+npm run build
+cd ..
+sudo rsync -a --delete frontend/dist/ /var/www/discripper/
+
+sudo cp deploy/nginx/discripper.conf /etc/nginx/conf.d/discripper.conf
+sudo nginx -t && sudo systemctl enable --now nginx
+```
+
+#### Install systemd units
+
+```bash
+sudo cp deploy/systemd/discripper-api.service     /etc/systemd/system/
+sudo cp deploy/systemd/discripper-encoder.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now discripper-api discripper-encoder
+```
+
+#### Configure sudo for the deploy script
+
+```bash
+sudo tee /etc/sudoers.d/discripper-deploy <<'EOF'
+ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder, \
+                            /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/
+EOF
+```
+
+---
+
+### 4.2 First-time setup (ripper machine — rimmer)
+
+```bash
+cd /projects
+git clone <your-github-url> ripper
+cd ripper
+
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install -r requirements-ripper.txt
+pip install discid musicbrainzngs
+```
+
+#### Config
+
+```bash
+cp config/prod.yaml.example config/prod.yaml
+# Edit config/prod.yaml:
+#   - database.host: 192.168.0.23 (app/DB machine)
+#   - database.password: set the real password
+#   - storage.datastore_root: /mnt/datastore
+#   - drives: uncomment and list /dev/sr_drv02 ... /dev/sr_drv09
+```
+
+#### Seed drives
+
+```bash
+export DISCRIPPER_ENV=prod
+python3 scripts/seed.py
+```
+
+#### Install systemd unit
+
+```bash
+sudo cp deploy/systemd/discripper-ripper.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now discripper-ripper
+```
+
+#### Configure sudo for the deploy script
+
+```bash
+sudo tee /etc/sudoers.d/discripper-deploy <<'EOF'
+ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-ripper
+EOF
+```
+
+---
+
+### 4.3 Deploying updates
+
+From the relevant host, run:
+
+```bash
+./scripts/deploy_prod.sh app     # on ripper  — API + encoder
+./scripts/deploy_prod.sh ripper  # on rimmer  — ripper service
+```
+
+The script does: `git pull` → `pip install` → (app only: `alembic upgrade head`, `npm ci && npm run build`, copy to `/var/www/discripper`) → `systemctl restart`.
+
+---
+
+### 4.4 Service management
+
+```bash
+# Status
+sudo systemctl status discripper-api discripper-encoder   # on ripper
+sudo systemctl status discripper-ripper                   # on rimmer
+
+# Logs
+sudo journalctl -u discripper-api -f
+sudo journalctl -u discripper-encoder -f
+sudo journalctl -u discripper-ripper -f
+```
 
 ---
 

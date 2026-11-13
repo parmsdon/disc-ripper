@@ -50,6 +50,14 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
     fake_rip_mode = _get_fake_rip_mode(session)
     fake_dirty_mode = _get_fake_dirty_mode(session)
 
+    if os.environ.get("DISCRIPPER_ENV") == "prod":
+        if fake_rip_mode:
+            logger.warning("fake_rip_mode=true is set but ignored in prod environment")
+            fake_rip_mode = False
+        if fake_dirty_mode:
+            logger.warning("fake_dirty_mode=true is set but ignored in prod environment")
+            fake_dirty_mode = False
+
     if not ripping_enabled:
         # ripping_enabled=false means stopped, full stop - kill/roll back
         # anything already running.
