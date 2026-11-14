@@ -1,0 +1,12 @@
+[Unit]
+Description=Discripper Database Backup
+RequiresMountsFor=/mnt/datastore
+
+[Service]
+Type=oneshot
+User=ripper
+WorkingDirectory=/projects/ripper
+Environment=DISCRIPPER_ENV=prod
+ExecStart=/projects/ripper/scripts/backup_db.sh
+StandardOutput=journal
+StandardError=journal

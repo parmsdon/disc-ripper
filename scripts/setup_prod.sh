@@ -288,10 +288,16 @@ fi
 
 _step "7. Systemd units"
 
-for unit in discripper-api discripper-encoder discripper-mymovies; do
+sudo mkdir -p /mnt/datastore/backup
+_done "ensured /mnt/datastore/backup exists"
+
+for unit in discripper-api discripper-encoder discripper-mymovies \
+            discripper-backup; do
     sudo cp "deploy/systemd/${unit}.service" /etc/systemd/system/
     _done "installed ${unit}.service"
 done
+sudo cp deploy/systemd/discripper-backup.timer /etc/systemd/system/
+_done "installed discripper-backup.timer"
 sudo systemctl daemon-reload
 _done "daemon-reload"
 for unit in discripper-api discripper-encoder discripper-mymovies; do
@@ -308,6 +314,18 @@ for unit in discripper-api discripper-encoder discripper-mymovies; do
         _done "started $unit"
     fi
 done
+if systemctl is-enabled discripper-backup.timer &>/dev/null; then
+    _skip "discripper-backup.timer already enabled"
+else
+    sudo systemctl enable discripper-backup.timer
+    _done "enabled discripper-backup.timer"
+fi
+if systemctl is-active --quiet discripper-backup.timer; then
+    _skip "discripper-backup.timer already active"
+else
+    sudo systemctl start discripper-backup.timer
+    _done "started discripper-backup.timer"
+fi
 
 _step "8. Sudoers rule"
 
@@ -345,6 +363,18 @@ else
     echo "  [FAIL] curl http://localhost/api/ping failed" >&2
     ALL_OK=0
 fi
+
+NEXT_BACKUP=$(systemctl show discripper-backup.timer --property=NextElapseUSecRealtime \
+              | python3 -c "
+import sys, datetime
+val = sys.stdin.read().strip().split('=',1)[-1].strip()
+if val and val != '0':
+    ts = int(val) / 1_000_000
+    print(datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'))
+else:
+    print('(unknown)')
+" || true)
+_info "next backup scheduled: $NEXT_BACKUP"
 
 echo ""
 if [[ $ALL_OK -eq 1 ]]; then

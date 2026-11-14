@@ -479,7 +479,54 @@ The script does: `git pull` → `pip install` → (app only: `alembic upgrade he
 
 ---
 
-### 4.4 Service management
+### 4.4 Database backups
+
+A nightly backup runs via systemd timer at 02:00 on the app/DB machine.
+
+**Backup location:** `/mnt/datastore/backup/discripper_YYYY-MM-DD.dump`
+(custom pg_dump format, `-Fc`). Three most recent dumps are retained;
+older ones are deleted automatically after each successful run.
+
+**Run a backup by hand:**
+
+```bash
+cd /projects/ripper
+DISCRIPPER_ENV=prod ./scripts/backup_db.sh
+```
+
+**Check timer status and next scheduled run:**
+
+```bash
+sudo systemctl status discripper-backup.timer
+sudo systemctl list-timers discripper-backup.timer
+```
+
+**Check the last backup run:**
+
+```bash
+sudo journalctl -u discripper-backup.service -n 20 --no-pager
+```
+
+**Restore from a dump:**
+
+```bash
+# Stop services that hold connections first
+sudo systemctl stop discripper-api discripper-encoder discripper-mymovies
+
+PGPASSWORD=<password> pg_restore \
+    --host=localhost \
+    --username=discripper \
+    --dbname=discripper \
+    --clean \
+    --if-exists \
+    /mnt/datastore/backup/discripper_YYYY-MM-DD.dump
+
+sudo systemctl start discripper-api discripper-encoder discripper-mymovies
+```
+
+---
+
+### 4.6 Service management
 
 ```bash
 # Status

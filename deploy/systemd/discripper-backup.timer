@@ -1,0 +1,10 @@
+[Unit]
+Description=Discripper Database Backup Timer
+Requires=discripper-backup.service
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
