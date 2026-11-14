@@ -41,7 +41,7 @@ if [[ "$TARGET" == "app" ]]; then
     cd ..
 
     echo "=== deploy frontend to /var/www/discripper ==="
-    sudo rsync -a --delete frontend/dist/ /var/www/discripper/
+    sudo rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/
 
     echo "=== restart api, encoder and mymovies ==="
     sudo systemctl restart discripper-api discripper-encoder discripper-mymovies

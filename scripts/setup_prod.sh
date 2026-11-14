@@ -145,7 +145,7 @@ _step "3. PostgreSQL"
 PG_DATA=/var/lib/pgsql/data
 PG_CHANGED=0
 
-if [[ -f "$PG_DATA/PG_VERSION" ]]; then
+if sudo test -f "$PG_DATA/PG_VERSION"; then
     _skip "PostgreSQL data directory already initialised"
 else
     sudo postgresql-setup --initdb
@@ -189,7 +189,7 @@ fi
 
 # listen_addresses = '*' in postgresql.conf
 PG_CONF="$PG_DATA/postgresql.conf"
-if grep -qE "^\s*listen_addresses\s*=\s*'\*'" "$PG_CONF"; then
+if sudo grep -qE "^\s*listen_addresses\s*=\s*'\*'" "$PG_CONF"; then
     _skip "listen_addresses already set to '*'"
 else
     sudo sed -i "s/^\(\s*listen_addresses\s*=\)/#\1/" "$PG_CONF"
@@ -198,10 +198,10 @@ else
     PG_CHANGED=1
 fi
 
-# pg_hba.conf line for 192.168.0.0/24
+# pg_hba.conf line for 192.168.0.0/24 (regex so spacing differences don't create duplicates)
 PG_HBA="$PG_DATA/pg_hba.conf"
 HBA_LINE="host    ${DB_NAME}    ${DB_USER}    192.168.0.0/24    scram-sha-256"
-if grep -qF "$HBA_LINE" "$PG_HBA"; then
+if sudo grep -qE "^host\s+${DB_NAME}\s+${DB_USER}\s+192\.168\.0\.0/24\s+scram-sha-256" "$PG_HBA"; then
     _skip "pg_hba.conf line for 192.168.0.0/24 already present"
 else
     echo "$HBA_LINE" | sudo tee -a "$PG_HBA" > /dev/null
@@ -279,14 +279,17 @@ _step "8. Sudoers rule"
 
 SUDOERS_FILE=/etc/sudoers.d/discripper-deploy
 SUDOERS_CONTENT="ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder discripper-mymovies, /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/"
-if [[ -f "$SUDOERS_FILE" ]]; then
-    _skip "$SUDOERS_FILE already exists"
+SUDOERS_TMP=$(mktemp)
+echo "$SUDOERS_CONTENT" > "$SUDOERS_TMP"
+sudo visudo -c -f "$SUDOERS_TMP"
+if sudo test -f "$SUDOERS_FILE" && \
+        [[ "$(sudo cat "$SUDOERS_FILE")" == "$SUDOERS_CONTENT" ]]; then
+    _skip "$SUDOERS_FILE already up to date"
 else
-    echo "$SUDOERS_CONTENT" | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 0440 "$SUDOERS_FILE"
-    sudo visudo -c -f "$SUDOERS_FILE"
+    sudo install -m 0440 "$SUDOERS_TMP" "$SUDOERS_FILE"
     _done "installed and validated $SUDOERS_FILE"
 fi
+rm -f "$SUDOERS_TMP"
 
 _step "9. Health check"
 
@@ -360,14 +363,17 @@ _step "3. Sudoers rule"
 
 SUDOERS_FILE=/etc/sudoers.d/discripper-deploy
 SUDOERS_CONTENT="ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-ripper"
-if [[ -f "$SUDOERS_FILE" ]]; then
-    _skip "$SUDOERS_FILE already exists"
+SUDOERS_TMP=$(mktemp)
+echo "$SUDOERS_CONTENT" > "$SUDOERS_TMP"
+sudo visudo -c -f "$SUDOERS_TMP"
+if sudo test -f "$SUDOERS_FILE" && \
+        [[ "$(sudo cat "$SUDOERS_FILE")" == "$SUDOERS_CONTENT" ]]; then
+    _skip "$SUDOERS_FILE already up to date"
 else
-    echo "$SUDOERS_CONTENT" | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 0440 "$SUDOERS_FILE"
-    sudo visudo -c -f "$SUDOERS_FILE"
+    sudo install -m 0440 "$SUDOERS_TMP" "$SUDOERS_FILE"
     _done "installed and validated $SUDOERS_FILE"
 fi
+rm -f "$SUDOERS_TMP"
 
 _step "4. Health check"
 
