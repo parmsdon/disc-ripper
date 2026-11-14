@@ -141,9 +141,11 @@ else
     _skip "all command-checked packages already available"
 fi
 
-# Verify ffmpeg was built with libmp3lame (required for CD MP3 320 profile)
+# Verify ffmpeg was built with libmp3lame (required for CD MP3 320 profile).
+# Capture first so grep -q exiting early doesn't send SIGPIPE to ffmpeg under pipefail.
 if command -v ffmpeg &>/dev/null; then
-    if ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame; then
+    FFMPEG_ENCODERS=$(ffmpeg -hide_banner -encoders 2>/dev/null || true)
+    if [[ "$FFMPEG_ENCODERS" == *libmp3lame* ]]; then
         _done "ffmpeg has libmp3lame encoder"
     else
         _fail "ffmpeg is present but does not include the libmp3lame encoder — the CD MP3 320 encode profile will not work. Install ffmpeg from RPM Fusion (which includes libmp3lame) rather than the ffmpeg-free package."
@@ -199,8 +201,8 @@ else
 fi
 
 # Create role if absent (SQL-escape single quotes in password)
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER';" \
-        | grep -q 1; then
+PG_ROLE=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER';" || true)
+if [[ "$PG_ROLE" == *1* ]]; then
     _skip "postgres role '$DB_USER' already exists"
 else
     ESCAPED_PASS=$(python3 -c \
@@ -211,9 +213,8 @@ else
 fi
 
 # Create database if absent
-if sudo -u postgres psql -tAc \
-        "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" \
-        | grep -q 1; then
+PG_DB=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" || true)
+if [[ "$PG_DB" == *1* ]]; then
     _skip "postgres database '$DB_NAME' already exists"
 else
     sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
