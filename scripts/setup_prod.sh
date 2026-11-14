@@ -98,12 +98,10 @@ if [[ "$TARGET" == "app" ]]; then
 
 _step "1. DNF packages"
 
-DNF_PACKAGES=(
-    python3-psycopg2 python3-pyodbc freetds
-    rsync nginx nodejs npm postgresql-server ffmpeg flac
-)
+# Packages with stable rpm names — check with rpm -q
+RPM_PACKAGES=(python3-psycopg2 python3-pyodbc freetds postgresql-server)
 MISSING_PKGS=()
-for pkg in "${DNF_PACKAGES[@]}"; do
+for pkg in "${RPM_PACKAGES[@]}"; do
     if rpm -q "$pkg" &>/dev/null; then
         _skip "$pkg already installed"
     else
@@ -114,7 +112,42 @@ if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
     sudo dnf install -y "${MISSING_PKGS[@]}"
     _done "installed: ${MISSING_PKGS[*]}"
 else
-    _skip "all required dnf packages already installed"
+    _skip "all rpm-checked packages already installed"
+fi
+
+# Packages whose rpm name varies by distro version — check with command -v
+# and install the canonical package name only if the command is absent.
+# (Fedora 44: nodejs22, nodejs22-npm, ffmpeg-free, flac; nginx/rsync stable)
+declare -A CMD_PACKAGES=(
+    [node]="nodejs"
+    [npm]="npm"
+    [ffmpeg]="ffmpeg"
+    [flac]="flac"
+    [nginx]="nginx"
+    [rsync]="rsync"
+)
+MISSING_CMD_PKGS=()
+for cmd in "${!CMD_PACKAGES[@]}"; do
+    if command -v "$cmd" &>/dev/null; then
+        _skip "$cmd already available"
+    else
+        MISSING_CMD_PKGS+=("${CMD_PACKAGES[$cmd]}")
+    fi
+done
+if [[ ${#MISSING_CMD_PKGS[@]} -gt 0 ]]; then
+    sudo dnf install -y "${MISSING_CMD_PKGS[@]}"
+    _done "installed: ${MISSING_CMD_PKGS[*]}"
+else
+    _skip "all command-checked packages already available"
+fi
+
+# Verify ffmpeg was built with libmp3lame (required for CD MP3 320 profile)
+if command -v ffmpeg &>/dev/null; then
+    if ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame; then
+        _done "ffmpeg has libmp3lame encoder"
+    else
+        _fail "ffmpeg is present but does not include the libmp3lame encoder — the CD MP3 320 encode profile will not work. Install ffmpeg from RPM Fusion (which includes libmp3lame) rather than the ffmpeg-free package."
+    fi
 fi
 
 if command -v HandBrakeCLI &>/dev/null; then
