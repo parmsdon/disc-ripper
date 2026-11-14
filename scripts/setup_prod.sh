@@ -364,17 +364,8 @@ else
     ALL_OK=0
 fi
 
-NEXT_BACKUP=$(systemctl show discripper-backup.timer --property=NextElapseUSecRealtime \
-              | python3 -c "
-import sys, datetime
-val = sys.stdin.read().strip().split('=',1)[-1].strip()
-if val and val != '0':
-    ts = int(val) / 1_000_000
-    print(datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'))
-else:
-    print('(unknown)')
-" || true)
-_info "next backup scheduled: $NEXT_BACKUP"
+NEXT_BACKUP=$(systemctl show discripper-backup.timer -p NextElapseUSecRealtime --value 2>/dev/null || true)
+_info "next backup scheduled: ${NEXT_BACKUP:-"(unknown)"}"
 
 echo ""
 if [[ $ALL_OK -eq 1 ]]; then
