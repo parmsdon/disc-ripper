@@ -354,170 +354,89 @@ Both run Fedora, code at `/projects/ripper`, venv at `/projects/ripper/venv`, se
 
 ### 4.1 First-time setup (app/DB machine — ripper)
 
-#### System packages
+The setup script (`scripts/setup_prod.sh app`) handles venv, PostgreSQL, migrations,
+frontend build, nginx, systemd units, and sudoers. The steps below must be done
+manually first — they require either root privileges before the user is set up, or
+configuration the script cannot generate for you.
+
+#### Prerequisites
+
+**HandBrakeCLI** (RPM Fusion, manual):
 
 ```bash
-sudo dnf install -y python3 python3-pip python3-psycopg2 python3-pyodbc freetds \
-  postgresql postgresql-server nodejs npm ffmpeg flac
-
-# RPM Fusion — needed for HandBrake
 sudo dnf install -y \
   https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
   https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
 sudo dnf install -y HandBrake
-
-sudo postgresql-setup --initdb
-sudo systemctl enable --now postgresql
 ```
 
-Copy `/etc/freetds.conf` from the dev setup (see section 1 My Movies sync) —
-the `[mymovies]` stanza is load-bearing; the scheduler connects via
-`SERVERNAME=mymovies`.
+**/etc/freetds.conf** (My Movies sync):
 
-#### /etc/fstab (NFS mount)
+Create `/etc/freetds.conf` with a `[mymovies]` section — see section 1
+(My Movies sync) for the full stanza. The setup script preflight checks for
+this section and refuses to proceed if it is absent.
 
-Add a line so `/mnt/datastore` mounts automatically at boot:
+**NFS mount** (`/etc/fstab`):
 
 ```
-# /etc/fstab
 <nfs-server>:/path/to/export  /mnt/datastore  nfs  defaults,_netdev  0  0
 ```
-
-Then:
 
 ```bash
 sudo mkdir -p /mnt/datastore
 sudo mount -a
 ```
 
-#### Clone the repo
+**Clone the repo and create config:**
 
 ```bash
 cd /projects
 git clone <your-github-url> ripper
 cd ripper
-```
-
-#### Python environment
-
-```bash
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
-pip install -r requirements.txt    # includes gunicorn
-```
-
-#### Create the prod database
-
-```bash
-sudo -u postgres psql -c "CREATE USER discripper WITH PASSWORD '<password>';"
-sudo -u postgres psql -c "CREATE DATABASE discripper OWNER discripper;"
-```
-
-#### PostgreSQL remote access (for the ripper machine)
-
-The ripper machine (rimmer) connects to Postgres on this host.
-
-**Edit `postgresql.conf`** (usually `/var/lib/pgsql/data/postgresql.conf`):
-
-```
-listen_addresses = '*'
-```
-
-**Add a row to `pg_hba.conf`** (same directory):
-
-```
-host    discripper    discripper    192.168.0.0/24    scram-sha-256
-```
-
-Then restart Postgres:
-
-```bash
-sudo systemctl restart postgresql
-```
-
-#### Config
-
-```bash
 cp config/prod.yaml.example config/prod.yaml
 # Edit config/prod.yaml:
 #   - database.password: set the real password
-#   - drives: leave as [] (drives are on rimmer)
 #   - mymovies.password, discogs.token: fill in real values
+#   - drives: leave as [] (drives are on rimmer)
 ```
 
-#### Run migrations and seed
+#### Run the setup script
 
 ```bash
-export DISCRIPPER_ENV=prod
-alembic upgrade head
-python3 scripts/seed.py
+cd /projects/ripper
+./scripts/setup_prod.sh app
 ```
 
-#### Install nginx and deploy the frontend
-
-```bash
-sudo dnf install -y nginx
-sudo mkdir -p /var/www/discripper
-
-cd frontend
-npm ci
-npm run build
-cd ..
-sudo rsync -a --delete frontend/dist/ /var/www/discripper/
-
-sudo cp deploy/nginx/discripper.conf /etc/nginx/conf.d/discripper.conf
-sudo nginx -t && sudo systemctl enable --now nginx
-```
-
-#### Install systemd units
-
-```bash
-sudo cp deploy/systemd/discripper-api.service      /etc/systemd/system/
-sudo cp deploy/systemd/discripper-encoder.service  /etc/systemd/system/
-sudo cp deploy/systemd/discripper-mymovies.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now discripper-api discripper-encoder discripper-mymovies
-```
-
-#### Configure sudo for the deploy script
-
-```bash
-sudo tee /etc/sudoers.d/discripper-deploy <<'EOF'
-ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder discripper-mymovies, \
-                            /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/
-EOF
-```
+The script: checks preflight → installs dnf packages → creates venv + pip install →
+initialises PostgreSQL, creates the role/database, sets `listen_addresses = '*'` and
+the `pg_hba.conf` line for 192.168.0.0/24 → runs `alembic upgrade head` and
+`scripts/seed.py` → builds and deploys the frontend → installs nginx conf and
+systemd units → installs the sudoers rule → runs a health check and prints the UI URL.
+Every step is idempotent; re-run safely at any time.
 
 ---
 
 ### 4.2 First-time setup (ripper machine — rimmer)
 
-#### /etc/fstab (NFS mount)
+#### Prerequisites
 
-Add the same NFS line as on the app machine (see 4.1) so `/mnt/datastore`
-mounts at boot:
+**NFS mount** (`/etc/fstab`):
+
+```
+<nfs-server>:/path/to/export  /mnt/datastore  nfs  defaults,_netdev  0  0
+```
 
 ```bash
 sudo mkdir -p /mnt/datastore
-# add entry to /etc/fstab, then:
 sudo mount -a
 ```
 
-#### Clone and install
+**Clone the repo and create config:**
 
 ```bash
 cd /projects
 git clone <your-github-url> ripper
 cd ripper
-
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
-pip install -r requirements-ripper.txt   # includes discid and musicbrainzngs
-```
-
-#### Config
-
-```bash
 cp config/prod.yaml.example config/prod.yaml
 # Edit config/prod.yaml:
 #   - database.host: 192.168.0.23 (app/DB machine)
@@ -526,28 +445,24 @@ cp config/prod.yaml.example config/prod.yaml
 #   - drives: uncomment and list /dev/sr_drv02 ... /dev/sr_drv09
 ```
 
-#### Seed drives
+**Seed drives** (run once Postgres is reachable from this machine):
 
 ```bash
 export DISCRIPPER_ENV=prod
+source venv/bin/activate 2>/dev/null || true
 python3 scripts/seed.py
 ```
 
-#### Install systemd unit
+#### Run the setup script
 
 ```bash
-sudo cp deploy/systemd/discripper-ripper.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now discripper-ripper
+cd /projects/ripper
+./scripts/setup_prod.sh ripper
 ```
 
-#### Configure sudo for the deploy script
-
-```bash
-sudo tee /etc/sudoers.d/discripper-deploy <<'EOF'
-ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-ripper
-EOF
-```
+The script: checks preflight (verifies each configured drive device exists) →
+creates venv + pip install → installs the systemd unit → installs the sudoers rule →
+runs a health check and prints recent journal lines.
 
 ---
 
