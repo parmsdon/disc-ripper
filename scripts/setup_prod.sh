@@ -259,7 +259,7 @@ _done "scripts/seed.py"
 _step "5. Frontend build"
 
 cd frontend
-npm ci --silent
+npm ci
 npm run build
 cd ..
 sudo mkdir -p /var/www/discripper
