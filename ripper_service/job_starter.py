@@ -20,6 +20,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import get_store_path
+from common.encode_invalidation import invalidate_encode_jobs_for_rerip
 from common.encode_queue import create_encode_jobs
 from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob, RipQuality, Setting, naive_utcnow
 from ripper_service import active_jobs
@@ -314,6 +315,17 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
             rip_job_id, label, relative_path, disc.rip_quality,
         )
 
+        datastore_root = cfg["storage"]["datastore_root"]
+        n_inv, n_running = invalidate_encode_jobs_for_rerip(session, disc_id, datastore_root)
+        if n_inv:
+            logger.info(
+                "Invalidated %d encode job(s) for disc #%s (%d were running)",
+                n_inv, disc_id, n_running,
+            )
+            write_log_event(session_factory, "encodes_invalidated", drive_label=label,
+                disc_id=disc_id, working_title=disc.temp_name,
+                outcome=f"{n_inv} jobs invalidated")
+
         try:
             n = create_encode_jobs(session, disc_id, "dvd")
             if n:
@@ -418,7 +430,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
     if total == 0:
         logger.warning("RipJob %s (disc %s) has no tracks needing a rip - nothing to do", rip_job_id, disc_id)
         _cleanup_scratch_dir(str(scratch_subdir))
-        _finish_cd_job(rip_job_id, label, disc_id, session_factory)
+        _finish_cd_job(rip_job_id, label, disc_id, session_factory, cfg=cfg)
         active_jobs.unregister(rip_job_id)
         return
 
@@ -514,7 +526,7 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
         return
 
     _cleanup_scratch_dir(str(scratch_subdir))
-    _finish_cd_job(rip_job_id, label, disc_id, session_factory)
+    _finish_cd_job(rip_job_id, label, disc_id, session_factory, ripped_track_numbers=ripped_in_this_run, cfg=cfg)
     active_jobs.unregister(rip_job_id)
 
 
@@ -573,7 +585,7 @@ def _record_track_result(disc_id, track_number, result, label, session_factory) 
         session.close()
 
 
-def _finish_cd_job(rip_job_id, label, disc_id, session_factory) -> None:
+def _finish_cd_job(rip_job_id, label, disc_id, session_factory, ripped_track_numbers=(), cfg=None) -> None:
     session = session_factory()
     try:
         rip_job = session.get(RipJob, rip_job_id)
@@ -598,6 +610,22 @@ def _finish_cd_job(rip_job_id, label, disc_id, session_factory) -> None:
             "CD rip job %s (%s) completed - disc #%s rip_quality=%s",
             rip_job_id, label, disc_id, disc.rip_quality,
         )
+
+        if cfg and ripped_track_numbers:
+            datastore_root = cfg["storage"]["datastore_root"]
+            ripped_set = set(ripped_track_numbers)
+            ripped_ids = [t.id for t in disc.tracks if t.track_number in ripped_set]
+            n_inv, n_running = invalidate_encode_jobs_for_rerip(
+                session, disc_id, datastore_root, track_ids=ripped_ids,
+            )
+            if n_inv:
+                logger.info(
+                    "Invalidated %d encode job(s) for disc #%s (%d were running)",
+                    n_inv, disc_id, n_running,
+                )
+                write_log_event(session_factory, "encodes_invalidated", drive_label=label,
+                    disc_id=disc_id, working_title=disc.temp_name,
+                    outcome=f"{n_inv} jobs invalidated")
 
         try:
             n = create_encode_jobs(session, disc_id, "cd")

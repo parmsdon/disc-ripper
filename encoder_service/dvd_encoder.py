@@ -427,7 +427,7 @@ def encode_dvd_title(job_id: int, session_factory) -> None:
         session = session_factory()
         try:
             job = session.get(EncodeJob, job_id)
-            if job is not None:
+            if job is not None and job.status == JobStatus.running:
                 job.status           = JobStatus.done
                 job.completed_at     = naive_utcnow()
                 job.progress_percent = 100

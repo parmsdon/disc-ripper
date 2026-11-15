@@ -10,7 +10,8 @@ const EVENT_LABELS = {
   rip_completed:   "Rip Completed",
   rip_failed:      "Rip Failed",
   track_started:   "Track Started",
-  track_completed: "Track Completed",
+  track_completed:      "Track Completed",
+  encodes_invalidated:  "Encodes Invalidated",
 };
 
 const ALL_EVENT_TYPES = Object.keys(EVENT_LABELS);
