@@ -22,6 +22,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import load_config
+from common.disc_paths import encode_dir_name
 from common.models import EncodeJob, JobStatus, naive_utcnow
 from encoder_service import process_registry
 
@@ -350,8 +351,7 @@ def encode_dvd_title(job_id: int, session_factory) -> None:
         disc_fingerprint      = disc.disc_fingerprint
         disc_temp_name        = disc.temp_name
 
-        # Directory label: prefer temp_name, fall back to "disc_<id>".
-        dir_name = disc_temp_name or f"disc_{disc_id}"
+        dir_name = encode_dir_name(disc_temp_name, disc_id)
 
         is_extract = depends_on_profile_id is None
 

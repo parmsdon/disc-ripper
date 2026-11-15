@@ -214,7 +214,6 @@ def generate_library():
 
         year_part = f" ({catalog.year})" if catalog.year else ""
         link_name = _sanitize(f"{catalog.title}{year_part}")
-        dir_name = disc.temp_name or f"disc_{disc.id}"
 
         # ISO symlink — find the actual .iso file
         raw_dir = store_root / "dvd_store" / "raw" / str(disc.id)
