@@ -8,6 +8,7 @@ POST /api/import/stop     -- signal running job to stop
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +73,24 @@ def _legacy_dir(cfg) -> Path:
     return Path(cfg["storage"]["datastore_root"]) / "dvd_store" / "legacy"
 
 
+def _preflight_check(datastore_root: str) -> str | None:
+    """
+    Verify that dvd_store/legacy/ and dvd_store/raw/ are both writable.
+    Returns an error message string on failure, None on success.
+    """
+    errors = []
+    for rel in ["dvd_store/legacy", "dvd_store/raw"]:
+        d = Path(datastore_root) / rel
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            errors.append(f"{rel}: cannot create ({exc.strerror})")
+            continue
+        if not os.access(str(d), os.W_OK):
+            errors.append(f"{rel}: not writable by this user")
+    return "; ".join(errors) if errors else None
+
+
 @import_bp.route("/preview", methods=["GET"])
 def preview():
     Session = current_app.config["DB_SESSION"]
@@ -100,11 +119,14 @@ def preview():
 
     # Get all imported disc records (by filename)
     imported_rows = session.execute(
-        select(Disc.imported_filename, Disc.id, Disc.status, Disc.catalog_id)
+        select(Disc.imported_filename, Disc.id, Disc.status, Disc.catalog_id, Disc.error_message)
         .where(Disc.imported == True, Disc.imported_filename.isnot(None))
     ).all()
     imported_by_filename: dict[str, dict] = {
-        row[0]: {"disc_id": row[1], "status": row[2], "catalog_id": row[3]}
+        row[0]: {
+            "disc_id": row[1], "status": row[2],
+            "catalog_id": row[3], "error_message": row[4],
+        }
         for row in imported_rows
     }
 
@@ -141,8 +163,9 @@ def preview():
     for filename in all_filenames:
         wt = file_wts[filename]
         wt_lower = wt.lower()
+        title_part, year = parse_iso_filename(filename)
         catalog_match, catalog_id, catalog_title = find_catalog_match_from_lookup(
-            catalog_lookup, wt
+            catalog_lookup, title_part, year
         )
 
         # Size check
@@ -164,7 +187,7 @@ def preview():
             reason = None
         elif db_info and db_info["status"] == DiscStatus.error:
             status = "error_retry"
-            reason = "failed on previous attempt"
+            reason = db_info.get("error_message") or "failed on previous attempt"
         else:
             status = "pending"
             reason = None
@@ -192,10 +215,12 @@ def preview():
             "in_raw": filename in extra_filenames,
         })
 
+    job_error = _get_setting(session, _ERROR_KEY) or None
     return jsonify({
         "job_status": job_status,
         "totals": totals,
         "files": files,
+        "job_error": job_error,
     })
 
 
@@ -236,6 +261,11 @@ def start_import():
         if st == DiscStatus.error and fname not in legacy_filenames
     ]
     total = len(legacy_isos) + len(extra_filenames)
+
+    # Preflight: verify write access before committing to "running"
+    preflight_err = _preflight_check(datastore_root)
+    if preflight_err:
+        return jsonify({"error": preflight_err}), 400
 
     _set_setting(session, _STATUS_KEY, "running")
     _set_setting(session, _COMMAND_KEY, "")
@@ -280,6 +310,12 @@ def _run_import_job(db_url: str, datastore_root: str) -> None:
     legacy_dir = Path(datastore_root) / "dvd_store" / "legacy"
 
     try:
+        # Preflight: fail fast rather than erroring on every file
+        preflight_err = _preflight_check(datastore_root)
+        if preflight_err:
+            _set_job_settings(Session, **{_STATUS_KEY: "error", _ERROR_KEY: preflight_err})
+            return
+
         # Build catalog lookup once at job start
         with Session() as session:
             catalog_lookup = build_catalog_lookup(session)

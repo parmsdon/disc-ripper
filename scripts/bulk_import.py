@@ -27,6 +27,20 @@ from common.import_helpers import (
 from common.models import Disc, DiscStatus
 
 
+def _preflight_check(datastore_root: str) -> str | None:
+    errors = []
+    for rel in ["dvd_store/legacy", "dvd_store/raw"]:
+        d = Path(datastore_root) / rel
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            errors.append(f"{rel}: cannot create ({exc.strerror})")
+            continue
+        if not os.access(str(d), os.W_OK):
+            errors.append(f"{rel}: not writable")
+    return "; ".join(errors) if errors else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Bulk ISO import from dvd_store/legacy/")
     parser.add_argument("--dry-run", action="store_true", help="Simulate import without DB writes")
@@ -40,10 +54,12 @@ def main() -> None:
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
 
+    preflight_err = _preflight_check(datastore_root)
+    if preflight_err:
+        print(f"Error: {preflight_err}", file=sys.stderr)
+        sys.exit(1)
+
     legacy_dir = Path(datastore_root) / "dvd_store" / "legacy"
-    if not legacy_dir.exists():
-        print(f"legacy/ directory not found: {legacy_dir}")
-        sys.exit(0)
 
     legacy_isos = sorted(legacy_dir.glob("*.iso"), key=lambda p: p.name.lower())
     legacy_filenames = {p.name for p in legacy_isos}

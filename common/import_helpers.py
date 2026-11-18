@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 _REGION_MARKER_RE = re.compile(r'\s*\([A-Z0-9]+\)\s*$', re.IGNORECASE)
 _YEAR_RE = re.compile(r'\[(\d{4})\]')
 _NON_ALNUM_RE = re.compile(r'[^A-Za-z0-9 ]')
+# For catalog matching only: strip ALL non-alnum so "Alien3", "Alien 3", "Alien³" all match.
+_ALNUM_ONLY_RE = re.compile(r'[^A-Za-z0-9]')
+_SUPER_TABLE = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')
 
 
 def parse_iso_filename(filename: str) -> tuple[str, int | None]:
@@ -44,8 +47,13 @@ def make_working_title(title_part: str, year: int | None) -> str:
 
 
 def normalise_catalog_title(title: str, year: int | None) -> str:
-    cleaned = _NON_ALNUM_RE.sub(' ', title or '')
-    part = '_'.join(cleaned.upper().split())
+    """
+    Catalog match key: letters and digits only (no spaces, punctuation or underscores),
+    superscript digits translated to ASCII. Used for matching only — not for temp_name.
+    "Alien3", "Alien 3" and "Alien³" all produce the same key.
+    """
+    t = (title or '').translate(_SUPER_TABLE)
+    part = _ALNUM_ONLY_RE.sub('', t).upper()
     return f"{part}_{year}" if year else part
 
 
@@ -64,10 +72,16 @@ def build_catalog_lookup(session) -> dict[str, list[dict]]:
 
 def find_catalog_match_from_lookup(
     catalog_lookup: dict[str, list[dict]],
-    working_title: str,
+    title_part: str,
+    year: int | None,
 ) -> tuple[str, int | None, str | None]:
-    """Returns ("exact"|"none"|"ambiguous", catalog_id|None, catalog_title|None)."""
-    matches = catalog_lookup.get(working_title, [])
+    """
+    Returns ("exact"|"none"|"ambiguous", catalog_id|None, catalog_title|None).
+    title_part is the raw parsed title (may contain underscores/spaces);
+    normalise_catalog_title strips them before lookup so "ALIEN_3" matches "ALIEN3".
+    """
+    key = normalise_catalog_title(title_part, year)
+    matches = catalog_lookup.get(key, [])
     if len(matches) == 1:
         m = matches[0]
         return "exact", m["id"], m["title"]
@@ -104,7 +118,7 @@ def import_one_iso(
     title_part, year = parse_iso_filename(filename)
     working_title = make_working_title(title_part, year)
     catalog_match, catalog_id, catalog_title = find_catalog_match_from_lookup(
-        catalog_lookup, working_title
+        catalog_lookup, title_part, year
     )
 
     # Size check (file must exist in legacy/ OR already moved to raw/)
