@@ -463,6 +463,21 @@ def run_audit():
             "started_at": job.started_at.isoformat() if job.started_at else None,
         })
 
+    # ── Import: informational counts (not dvd_issues) ────────────────────────
+    legacy_dir = store_root / "dvd_store" / "legacy"
+    legacy_waiting = sum(1 for _ in legacy_dir.glob("*.iso")) if legacy_dir.exists() else 0
+
+    imported_discs = session.scalar(
+        select(func.count(Disc.id)).where(Disc.imported == True)
+    ) or 0
+
+    imported_unlinked = session.scalar(
+        select(func.count(Disc.id)).where(
+            Disc.imported == True,
+            Disc.catalog_id.is_(None),
+        )
+    ) or 0
+
     # ── Summary ──────────────────────────────────────────────────────────────
     dvd_issues = (
         len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
@@ -497,6 +512,11 @@ def run_audit():
         },
         "jobs": {
             "stuck_running_jobs": stuck_running_jobs,
+        },
+        "import": {
+            "legacy_waiting": legacy_waiting,
+            "imported_discs": imported_discs,
+            "imported_unlinked": imported_unlinked,
         },
         "summary": {
             "total_issues": dvd_issues + cd_issues + job_issues,

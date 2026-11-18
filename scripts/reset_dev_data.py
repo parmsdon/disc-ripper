@@ -85,6 +85,7 @@ def main(env: str) -> None:
         get_store_path(cfg, "dvd_store", "extract"),
         get_store_path(cfg, "dvd_store", "plex"),
         get_store_path(cfg, "dvd_store", "iphone"),
+        get_store_path(cfg, "dvd_store", "legacy"),
         get_store_path(cfg, "cd_store", "raw"),
         get_store_path(cfg, "cd_store", "flac"),
         get_store_path(cfg, "cd_store", "mp3_320"),
@@ -97,7 +98,7 @@ def main(env: str) -> None:
           f"{lookup_candidate_count} candidate(s), {cd_track_count} CD track(s))")
     print(f"  - All rip log events ({log_event_count})")
     print("Will clear filesystem:")
-    print("  - dvd_store/raw/, extract/, plex/, iphone/")
+    print("  - dvd_store/raw/, extract/, plex/, iphone/, legacy/")
     print("  - cd_store/raw/, flac/, mp3_320/")
     print("  - library/ (entire directory, recreated on next generation)")
     print("Will reset settings: library_last_generated, library_last_stats, "

@@ -788,18 +788,16 @@ export default function DriveStatus() {
           onToggle={toggleRippingEnabled}
           disabled={reconcileMode}
         />
-        {(oldIsos.length > 0 || reconcileMode) && (
-          <div className="control-bar-group">
-            <button
-              className={`reconcile-btn${reconcileMode ? " active" : ""}`}
-              onClick={() => setReconcileMode((m) => !m)}
-              disabled={rippingEnabled}
-              title={rippingEnabled ? "Stop ripping before reconciling" : "Match existing ISOs to detected discs"}
-            >
-              Reconcile ISOs{oldIsos.length > 0 ? ` (${oldIsos.length})` : ""}
-            </button>
-          </div>
-        )}
+        <div className="control-bar-group">
+          <button
+            className={`reconcile-btn${reconcileMode ? " active" : ""}`}
+            onClick={() => setReconcileMode((m) => !m)}
+            disabled={rippingEnabled || (oldIsos.length === 0 && !reconcileMode)}
+            title={rippingEnabled ? "Stop ripping before reconciling" : oldIsos.length === 0 ? "No ISOs in old/ to reconcile" : "Match existing ISOs to detected discs"}
+          >
+            Reconcile ISOs ({oldIsos.length})
+          </button>
+        </div>
       </div>
 
       <div className="drive-list">

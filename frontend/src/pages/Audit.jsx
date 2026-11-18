@@ -127,7 +127,7 @@ export default function Audit() {
     runAudit();
   }, [runAudit]);
 
-  const { summary, dvd, cd, jobs } = data ?? {};
+  const { summary, dvd, cd, jobs, import: importData } = data ?? {};
 
   async function handleDvdJobs() { await dvdJobs.run(); runAudit(); }
   async function handleCdJobs() { await cdJobs.run(); runAudit(); }
@@ -435,6 +435,47 @@ export default function Audit() {
           ])}
         />
       </IssueSection>
+
+      {/* Import informational section */}
+      {importData && (
+        <div className="audit-section">
+          <div className="audit-section-header">
+            <button className="audit-section-toggle" disabled>
+              <span className="audit-section-title">Import</span>
+              {importData.imported_unlinked > 0 ? (
+                <span
+                  className="audit-issue-count"
+                  style={{ background: "var(--color-warn, #c27c00)" }}
+                >
+                  {importData.imported_unlinked} unlinked
+                </span>
+              ) : (
+                <span className="audit-issue-count audit-count-clean">0</span>
+              )}
+            </button>
+          </div>
+          <div
+            className="audit-section-body"
+            style={{ display: "flex", gap: "2rem", padding: "0.75rem 0" }}
+          >
+            <div>
+              <strong>{importData.legacy_waiting}</strong>
+              <span className="text-dim"> waiting in legacy/</span>
+            </div>
+            <div>
+              <strong>{importData.imported_discs}</strong>
+              <span className="text-dim"> imported discs</span>
+            </div>
+            <div>
+              <strong>{importData.imported_unlinked}</strong>
+              <span className="text-dim"> unlinked</span>
+              {importData.imported_unlinked > 0 && (
+                <span className="text-dim"> — link in Identification tab</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

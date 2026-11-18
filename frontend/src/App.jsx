@@ -12,6 +12,7 @@ import DataEditing from "./pages/DataEditing.jsx";
 import Log from "./pages/Log.jsx";
 import Audit from "./pages/Audit.jsx";
 import Library from "./pages/Library.jsx";
+import Import from "./pages/Import.jsx";
 
 const TABS = [
   { path: "/drive-status", label: "Drive Status" },
@@ -24,6 +25,7 @@ const TABS = [
   { path: "/db-health", label: "Health" },
   { path: "/audit", label: "Audit" },
   { path: "/log", label: "Log" },
+  { path: "/import", label: "Import" },
 ];
 
 const THEME_STORAGE_KEY = "discripper-theme";
@@ -271,6 +273,7 @@ export default function App() {
             <Route path="/log" element={<Log />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/library" element={<Library />} />
+            <Route path="/import" element={<Import />} />
           </Routes>
         </main>
       </div>

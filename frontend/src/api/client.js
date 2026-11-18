@@ -117,6 +117,11 @@ export const api = {
   fixStaleDvdDriveAssociations: () => request("/audit/fix-stale-dvd-drive-associations", { method: "POST" }),
   fixStaleCdDriveAssociations: () => request("/audit/fix-stale-cd-drive-associations", { method: "POST" }),
   cleanupOrphanedWavDirs: () => request("/audit/cleanup-orphaned-wav-dirs", { method: "POST" }),
+
+  // Import
+  getImportPreview: () => request("/import/preview"),
+  startImport: () => request("/import/start", { method: "POST" }),
+  stopImport: () => request("/import/stop", { method: "POST" }),
   checkTempName: (name, discId, type) =>
     request(`/discs/check-temp-name?name=${encodeURIComponent(name)}&disc_id=${discId}&type=${type}`),
 

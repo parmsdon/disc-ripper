@@ -224,6 +224,8 @@ class Disc(Base):
     # Captured as a snapshot for historical record even though the drive's
     # region could theoretically change later (discouraged, but possible).
     ripped_in_region = Column(String, nullable=True)
+    imported = Column(Boolean, nullable=False, default=False, server_default="false")
+    imported_filename = Column(String, nullable=True)
 
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")

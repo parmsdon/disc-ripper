@@ -8,6 +8,7 @@ Serves a JSON API consumed by the React frontend. CORS is enabled for
 dev (frontend dev server runs on a different port).
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from flask_cors import CORS
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-from common.config import load_config, get_db_url
+from common.config import get_store_path, load_config, get_db_url
 from api.routes.discs import discs_bp
 from api.routes.drives import drives_bp
 from api.routes.health import health_bp
@@ -30,6 +31,7 @@ from api.routes.log import log_bp
 from api.routes.audit import audit_bp
 from api.routes.encode import encode_bp
 from api.routes.library import library_bp
+from api.routes.import_bp import import_bp
 
 
 def create_app(env: str | None = None) -> Flask:
@@ -37,6 +39,10 @@ def create_app(env: str | None = None) -> Flask:
 
     cfg = load_config(env)
     app.config["DISCRIPPER_CFG"] = cfg
+
+    # Ensure dvd_store/legacy/ exists on startup
+    legacy_dir = get_store_path(cfg, "dvd_store", "legacy")
+    os.makedirs(str(legacy_dir), exist_ok=True)
 
     CORS(app)
 
@@ -61,6 +67,7 @@ def create_app(env: str | None = None) -> Flask:
     app.register_blueprint(audit_bp, url_prefix="/api/audit")
     app.register_blueprint(encode_bp, url_prefix="/api/encode")
     app.register_blueprint(library_bp, url_prefix="/api/library")
+    app.register_blueprint(import_bp, url_prefix="/api/import")
 
     @app.route("/api/ping")
     def ping():
