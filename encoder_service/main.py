@@ -25,13 +25,14 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import create_engine, desc, select
 from sqlalchemy.orm import sessionmaker
 
 from common.config import load_config, get_db_url
-from common.encode_queue import get_next_encode_jobs
-from common.models import EncodeJob, EncodeProfile, JobStatus, Setting
+from common.encode_queue import create_encode_jobs, get_next_encode_jobs
+from common.models import EncodeJob, EncodeProfile, JobStatus, Setting, naive_utcnow
 from encoder_service.cd_encoder import encode_cd_track
 from encoder_service.dvd_encoder import encode_dvd_title
 from encoder_service.job_rollback import rollback_encode_job
@@ -180,6 +181,50 @@ def run(cfg: dict) -> None:
                 job.progress_percent = None
                 job.progress_stage = None
             session.commit()
+
+        # Close off jobs that were invalidated mid-run but whose subprocess
+        # never reported exit (started_at IS NOT NULL, completed_at IS NULL,
+        # status=error). This happens when the encoder crashes or is killed
+        # between invalidation and the stale-exit handler in encode_dvd_title /
+        # encode_cd_track. Without this, create_encode_jobs sees the in-flight
+        # signal and permanently blocks the replacement job.
+        interrupted = session.scalars(
+            select(EncodeJob).where(
+                EncodeJob.status == JobStatus.error,
+                EncodeJob.started_at.isnot(None),
+                EncodeJob.completed_at.is_(None),
+            )
+        ).all()
+        if interrupted:
+            logger.warning(
+                "%d EncodeJob(s) invalidated mid-run with no subprocess exit - closing off",
+                len(interrupted),
+            )
+            disc_media: dict[int, str] = {}
+            for job in interrupted:
+                job.completed_at = naive_utcnow()
+                if job.output_path:
+                    try:
+                        os.remove(job.output_path)
+                    except FileNotFoundError:
+                        pass
+                    except Exception:
+                        logger.warning("Could not delete stale output %s (job %s)", job.output_path, job.id)
+                    try:
+                        Path(job.output_path).parent.rmdir()
+                    except OSError:
+                        pass
+                profile = session.get(EncodeProfile, job.profile_id)
+                if profile:
+                    disc_media[job.disc_id] = profile.media_type
+            session.commit()
+            for disc_id, media_type in disc_media.items():
+                try:
+                    create_encode_jobs(session, disc_id, media_type)
+                except Exception:
+                    logger.exception(
+                        "Failed to queue replacement encode jobs for disc #%s at startup", disc_id,
+                    )
 
         _set_setting(session, _STATUS_KEY, "running")
         session.commit()
