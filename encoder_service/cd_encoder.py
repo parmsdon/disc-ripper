@@ -17,6 +17,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import load_config, get_db_url
+from common.encode_queue import create_encode_jobs
 from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, RipQuality, naive_utcnow
 from encoder_service import process_registry
 
@@ -478,8 +479,34 @@ def encode_cd_track(job_id: int, session_factory) -> None:
                 job.completed_at = naive_utcnow()
                 job.progress_percent = 100
                 session.commit()
+            elif job is not None and job.status == JobStatus.error:
+                # Invalidated while this subprocess was running. Mark it exited,
+                # delete the stale output, then unblock the held-back fresh job.
+                job.completed_at = naive_utcnow()
+                session.commit()
+                try:
+                    os.remove(output_path)
+                except FileNotFoundError:
+                    pass
+                except Exception:
+                    logger.warning("Could not delete stale encode output %s (job %s)", output_path, job_id)
+                try:
+                    Path(output_path).parent.rmdir()
+                except OSError:
+                    pass
+                try:
+                    n = create_encode_jobs(session, disc_id, "cd")
+                    if n:
+                        logger.info(
+                            "Queued %d fresh CD encode job(s) for disc #%s after stale run exit",
+                            n, disc_id,
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to queue fresh CD encode jobs for disc #%s after stale run exit", disc_id,
+                    )
         except Exception:
-            logger.exception("Failed to mark EncodeJob %s done", job_id)
+            logger.exception("Failed to handle post-run state for EncodeJob %s", job_id)
         finally:
             session.close()
 

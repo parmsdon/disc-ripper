@@ -2,12 +2,19 @@
 Invalidate encode jobs whose source was replaced by a re-rip.
 
 Called from job_starter._finish_success (DVD) and _finish_cd_job (CD)
-immediately before create_encode_jobs queues fresh work. Encode jobs
-that are still running are set to error so the guard in
-encode_dvd_title / encode_cd_track prevents them from being overwritten
-with 'done' when their subprocess finishes; their output files are left
-in place until the fresh job overwrites them. Jobs that are queued or
-done have their output files deleted before being marked error.
+immediately before create_encode_jobs queues fresh work.
+
+Non-running jobs (queued or done): output files are deleted, jobs are
+marked error immediately, and create_encode_jobs queues fresh ones.
+
+Running jobs (subprocess in flight): output files are left in place
+(the subprocess is still writing), jobs are marked error but started_at
+is kept set. encode_queue.create_encode_jobs treats started_at IS NOT
+NULL AND completed_at IS NULL as "subprocess still running" and skips
+queueing a replacement. When the subprocess finishes, the guard in
+encode_dvd_title / encode_cd_track detects status=error, sets
+completed_at, deletes the now-stale output, and calls create_encode_jobs
+to unblock the fresh job.
 """
 
 import logging
@@ -54,16 +61,21 @@ def invalidate_encode_jobs_for_rerip(
         is_running = job.status == JobStatus.running
         if is_running:
             n_were_running += 1
-
-        if not is_running and job.output_path:
-            _delete_output(job.output_path, job.id)
+            # Keep started_at set so encode_queue knows the subprocess is still
+            # in flight (started_at IS NOT NULL AND completed_at IS NULL is the
+            # signal). The encoder sets completed_at when the process exits.
+            job.progress_percent = None
+            job.progress_stage = None
+        else:
+            if job.output_path:
+                _delete_output(job.output_path, job.id)
+            job.started_at = None
+            job.completed_at = None
+            job.progress_percent = None
+            job.progress_stage = None
 
         job.status = JobStatus.error
         job.error_message = "Source replaced by re-rip"
-        job.started_at = None
-        job.completed_at = None
-        job.progress_percent = None
-        job.progress_stage = None
 
     session.commit()
     return len(jobs), n_were_running

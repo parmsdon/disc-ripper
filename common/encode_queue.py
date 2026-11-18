@@ -5,7 +5,7 @@ batch of work).
 """
 
 import logging
-from sqlalchemy import select, exists, or_
+from sqlalchemy import and_, select, exists, or_
 from sqlalchemy.orm import aliased
 
 from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, naive_utcnow
@@ -38,13 +38,21 @@ def create_encode_jobs(session, disc_id: int, media_type: str) -> int:
     created = 0
     now = naive_utcnow()
 
+    # An error job where started_at IS NOT NULL and completed_at IS NULL means
+    # the encode subprocess is still running (invalidated mid-flight). Block
+    # fresh jobs until the encoder sets completed_at on exit.
+    _subprocess_running = and_(
+        EncodeJob.started_at.isnot(None),
+        EncodeJob.completed_at.is_(None),
+    )
+
     if media_type == "dvd":
         for profile in profiles:
             already = session.scalar(
                 select(EncodeJob.id).where(
                     EncodeJob.disc_id == disc_id,
                     EncodeJob.profile_id == profile.id,
-                    EncodeJob.status != JobStatus.error,
+                    or_(EncodeJob.status != JobStatus.error, _subprocess_running),
                 ).limit(1)
             )
             if already is not None:
@@ -70,7 +78,7 @@ def create_encode_jobs(session, disc_id: int, media_type: str) -> int:
                         EncodeJob.disc_id == disc_id,
                         EncodeJob.profile_id == profile.id,
                         EncodeJob.track_id == track.id,
-                        EncodeJob.status != JobStatus.error,
+                        or_(EncodeJob.status != JobStatus.error, _subprocess_running),
                     ).limit(1)
                 )
                 if already is not None:
