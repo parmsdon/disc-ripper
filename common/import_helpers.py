@@ -5,7 +5,6 @@ Bulk ISO import helpers for dvd_store/legacy/.
 import logging
 import os
 import re
-import shutil
 from pathlib import Path
 
 from sqlalchemy import select
@@ -172,7 +171,7 @@ def import_one_iso(
         if not dst.exists():
             if not src.exists():
                 raise FileNotFoundError(f"ISO not found in legacy/ or raw/: {filename}")
-            shutil.move(str(src), str(dst))
+            os.rename(str(src), str(dst))
 
         try:
             original_region = patch_region_if_needed(str(dst), disc_id)
