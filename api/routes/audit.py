@@ -8,9 +8,10 @@ from pathlib import Path
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import select, func, update
 
+from common.catalog_dups import compute_dup_roles, normalise_catalog_title
 from common.encode_queue import create_encode_jobs
 from common.models import (
-    Disc, DiscType, DiscStatus, Drive, RipJob, EncodeJob, EncodeProfile, JobStatus,
+    Catalog, Disc, DiscType, DiscStatus, Drive, RipJob, EncodeJob, EncodeProfile, JobStatus,
 )
 
 audit_bp = Blueprint("audit", __name__)
@@ -478,6 +479,42 @@ def run_audit():
         )
     ) or 0
 
+    # ── Catalog: duplicate entries needing review ─────────────────────────────
+    all_catalog = session.scalars(select(Catalog)).all()
+    dup_roles = compute_dup_roles(all_catalog)
+
+    # Re-group entries that need review; build one group per normalised key
+    from collections import defaultdict
+    _needs_review_groups_map: dict[str, list] = defaultdict(list)
+    for entry in all_catalog:
+        dr = dup_roles.get(entry.id)
+        if dr and dr.needs_review:
+            key = normalise_catalog_title(entry.title, entry.year)
+            _needs_review_groups_map[key].append(entry)
+
+    catalog_dup_needs_review = []
+    for key, group_entries in _needs_review_groups_map.items():
+        catalog_dup_needs_review.append({
+            "group_key": key,
+            "entries": [
+                {
+                    "catalog_id": e.id,
+                    "title": e.title,
+                    "year": e.year,
+                    "collection_number": e.collection_number,
+                    "edition": e.edition,
+                    "video_standard": e.video_standard,
+                    "region_codes": e.region_codes,
+                    "role": dup_roles[e.id].role,
+                    "link_suffix": dup_roles[e.id].link_suffix,
+                }
+                for e in sorted(group_entries, key=lambda e: (
+                    e.collection_number is None, e.collection_number or 0
+                ))
+            ],
+        })
+    catalog_dup_needs_review.sort(key=lambda g: g["group_key"])
+
     # ── Summary ──────────────────────────────────────────────────────────────
     dvd_issues = (
         len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
@@ -491,6 +528,7 @@ def run_audit():
     )
     job_issues = len(stuck_running_jobs)
     missing_encode_jobs = len(missing_dvd_encode_jobs) + len(missing_cd_encode_jobs)
+    catalog_issues = len(catalog_dup_needs_review)
 
     return jsonify({
         "dvd": {
@@ -513,16 +551,20 @@ def run_audit():
         "jobs": {
             "stuck_running_jobs": stuck_running_jobs,
         },
+        "catalog": {
+            "duplicate_needs_review": catalog_dup_needs_review,
+        },
         "import": {
             "legacy_waiting": legacy_waiting,
             "imported_discs": imported_discs,
             "imported_unlinked": imported_unlinked,
         },
         "summary": {
-            "total_issues": dvd_issues + cd_issues + job_issues,
+            "total_issues": dvd_issues + cd_issues + job_issues + catalog_issues,
             "dvd_issues": dvd_issues,
             "cd_issues": cd_issues,
             "job_issues": job_issues,
+            "catalog_issues": catalog_issues,
             "missing_encode_jobs": missing_encode_jobs,
         },
     })

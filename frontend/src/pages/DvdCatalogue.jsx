@@ -31,18 +31,19 @@ export default function DvdCatalogue() {
   const [mmStatus, setMmStatus] = useState(null);     // null | "matched" | "unmatched"
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("collection");
 
-  const fetchRows = useCallback((rs, is, ms, d, s) => {
-    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, mmStatus: ms, dirty: d, search: s })
+  const fetchRows = useCallback((rs, is, ms, d, s, so) => {
+    api.getDvdCatalogue({ ripStatus: rs, idStatus: is, mmStatus: ms, dirty: d, search: s, sort: so })
       .then((data) => { setRows(data); setLoadError(null); })
       .catch((e) => setLoadError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, mmStatus, dirty, search), SEARCH_DEBOUNCE_MS);
+    const handle = setTimeout(() => fetchRows(ripStatus, idStatus, mmStatus, dirty, search, sort), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [ripStatus, idStatus, mmStatus, dirty, search, fetchRows]);
+  }, [ripStatus, idStatus, mmStatus, dirty, search, sort, fetchRows]);
 
   const refreshSyncStatus = useCallback(() => {
     api.getSyncStatus().then(setSyncStatus).catch(() => {});
@@ -55,7 +56,7 @@ export default function DvdCatalogue() {
     pollRef.current = setInterval(() => {
       api.getSyncStatus().then((data) => {
         setSyncStatus(data);
-        if (!data.running) fetchRows(ripStatus, idStatus, mmStatus, dirty, search);
+        if (!data.running) fetchRows(ripStatus, idStatus, mmStatus, dirty, search, sort);
       }).catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(pollRef.current);
@@ -66,7 +67,7 @@ export default function DvdCatalogue() {
     setDeleteError(null);
     try {
       await api.deleteDisc(discId);
-      fetchRows(ripStatus, idStatus, mmStatus, dirty, search);
+      fetchRows(ripStatus, idStatus, mmStatus, dirty, search, sort);
     } catch (e) {
       setDeleteError(e.message);
     }
@@ -167,6 +168,22 @@ export default function DvdCatalogue() {
               </div>
             </div>
           </div>
+          <div className="catalogue-filters">
+            <button
+              className={`catalogue-filter-btn${sort === "collection" ? " active" : ""}`}
+              onClick={() => { setSort("collection"); setLoading(true); }}
+              title="Sort by shelf number"
+            >
+              Sort: #
+            </button>
+            <button
+              className={`catalogue-filter-btn${sort === "title" ? " active" : ""}`}
+              onClick={() => { setSort("title"); setLoading(true); }}
+              title="Sort by title"
+            >
+              Sort: A–Z
+            </button>
+          </div>
           <button
             className={`catalogue-filter-btn catalogue-filter-btn--warn${dirty ? " active" : ""}`}
             onClick={() => { setDirty((v) => !v); setLoading(true); }}
@@ -198,6 +215,7 @@ export default function DvdCatalogue() {
             <thead>
               <tr>
                 <th>Type</th>
+                <th style={{ width: "2.5rem" }}>#</th>
                 <th>My Movies</th>
                 <th>DVD</th>
                 <th>Ripped</th>
@@ -212,11 +230,25 @@ export default function DvdCatalogue() {
                   className="catalogue-row"
                 >
                   <td><RowTypeBadge type={row.row_type} /></td>
+                  <td className="catalogue-collection-num">
+                    {row.catalog_collection_number != null
+                      ? <span className="catalog-result-num">#{row.catalog_collection_number}</span>
+                      : <span className="catalogue-dim">—</span>}
+                  </td>
                   <td>
                     {row.catalog_title ? (
                       <>
-                        <div>{row.catalog_title}</div>
+                        <div>
+                          {row.catalog_title}
+                          {row.catalog_duplicate_role === "primary" && (
+                            <span className="dup-badge dup-badge--primary" style={{ marginLeft: "0.4rem" }}>Primary</span>
+                          )}
+                          {row.catalog_duplicate_role === "secondary" && (
+                            <span className="dup-badge dup-badge--secondary" style={{ marginLeft: "0.4rem" }}>Secondary</span>
+                          )}
+                        </div>
                         <div className="catalogue-meta">
+                          {row.catalog_edition && <span style={{ marginRight: "0.4rem" }}>{row.catalog_edition}</span>}
                           {[row.catalog_year, row.catalog_imdb_id].filter(Boolean).join(" · ")}
                         </div>
                       </>

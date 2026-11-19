@@ -16,6 +16,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import func, select
 
+from common.catalog_dups import load_dup_roles
 from common.models import (
     Catalog, CDTrack, Disc, DiscStatus, DiscType, EncodeJob, EncodeProfile,
     JobStatus, Setting, naive_utcnow,
@@ -186,6 +187,8 @@ def generate_library():
     iphone_profile = dvd_profiles.get("DVD iPhone")
 
     # ── DVD symlinks ──────────────────────────────────────────────────────────
+    dup_roles = load_dup_roles(session)
+
     dvd_discs = session.scalars(
         select(Disc).where(
             Disc.type == DiscType.dvd,
@@ -213,7 +216,11 @@ def generate_library():
             continue
 
         year_part = f" ({catalog.year})" if catalog.year else ""
-        link_name = _sanitize(f"{catalog.title}{year_part}")
+        dr = dup_roles.get(catalog.id)
+        if dr and dr.link_suffix:
+            link_name = _sanitize(f"{catalog.title}{year_part} [{dr.link_suffix}]")
+        else:
+            link_name = _sanitize(f"{catalog.title}{year_part}")
 
         # ISO symlink — find the actual .iso file
         raw_dir = store_root / "dvd_store" / "raw" / str(disc.id)

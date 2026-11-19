@@ -140,7 +140,7 @@ const DISC_FILTER_LABEL = {
   all: "All", needs_id: "Needs ID", encoding: "Encoding", complete: "Complete", error: "Error",
 };
 
-function CatalogCell({ catalogId, catalogTitle, source }) {
+function CatalogCell({ catalogId, catalogTitle, source, collectionNumber, edition, duplicateRole }) {
   if (!catalogId) {
     return (
       <Link to="/data-editing" style={{ fontSize: "0.85rem" }}>
@@ -149,6 +149,9 @@ function CatalogCell({ catalogId, catalogTitle, source }) {
     );
   }
   const prefix = source === "auto" ? "Auto" : source === "manual" ? "Manual" : null;
+  const shortTitle = catalogTitle
+    ? (catalogTitle.length > 28 ? catalogTitle.slice(0, 28) + "…" : catalogTitle)
+    : null;
   return (
     <span>
       {prefix && (
@@ -156,9 +159,18 @@ function CatalogCell({ catalogId, catalogTitle, source }) {
           {prefix}:
         </span>
       )}
-      {catalogTitle
-        ? (catalogTitle.length > 32 ? catalogTitle.slice(0, 32) + "…" : catalogTitle)
-        : <span className="text-dim">#{catalogId}</span>}
+      {shortTitle || <span className="text-dim">#{catalogId}</span>}
+      {duplicateRole === "primary" && (
+        <span className="dup-badge dup-badge--primary" style={{ marginLeft: "0.3rem" }}>1°</span>
+      )}
+      {duplicateRole === "secondary" && (
+        <span className="dup-badge dup-badge--secondary" style={{ marginLeft: "0.3rem" }}>2°</span>
+      )}
+      {(collectionNumber != null || edition) && (
+        <span className="text-dim" style={{ fontSize: "0.78rem", display: "block", marginTop: "0.1rem" }}>
+          {[collectionNumber != null ? `#${collectionNumber}` : null, edition].filter(Boolean).join(" · ")}
+        </span>
+      )}
     </span>
   );
 }
@@ -307,6 +319,9 @@ function ImportedDiscsSection() {
                       catalogId={d.catalog_id}
                       catalogTitle={d.catalog_title}
                       source={d.catalog_match_source}
+                      collectionNumber={d.catalog_collection_number}
+                      edition={d.catalog_edition}
+                      duplicateRole={d.catalog_duplicate_role}
                     />
                   </td>
                   <td>

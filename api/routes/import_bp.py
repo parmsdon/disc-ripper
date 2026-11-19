@@ -17,6 +17,7 @@ from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import joinedload, sessionmaker
 
+from common.catalog_dups import load_dup_roles
 from common.config import get_db_url
 from common.import_helpers import (
     build_catalog_lookup,
@@ -312,15 +313,20 @@ def imported_discs():
     offset = (page - 1) * per_page
     page_rows = rows[offset: offset + per_page]
 
+    dup_roles = load_dup_roles(session)
     result = []
     for d, enc, _fk in page_rows:
+        dr = dup_roles.get(d.catalog_id) if d.catalog_id else None
         result.append({
             "id": d.id,
             "imported_filename": d.imported_filename,
             "temp_name": d.temp_name,
             "catalog_id": d.catalog_id,
             "catalog_title": d.catalog.title if d.catalog else None,
+            "catalog_collection_number": d.catalog.collection_number if d.catalog else None,
+            "catalog_edition": d.catalog.edition if d.catalog else None,
             "catalog_match_source": d.catalog_match_source,
+            "catalog_duplicate_role": dr.role if dr and dr.role != "sole" else None,
             "disc_status": d.status.value if d.status else None,
             "error_message": d.error_message,
             "created_at": d.created_at.isoformat() if d.created_at else None,

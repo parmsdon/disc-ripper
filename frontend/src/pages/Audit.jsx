@@ -127,7 +127,7 @@ export default function Audit() {
     runAudit();
   }, [runAudit]);
 
-  const { summary, dvd, cd, jobs, import: importData } = data ?? {};
+  const { summary, dvd, cd, jobs, catalog: catalogData, import: importData } = data ?? {};
 
   async function handleDvdJobs() { await dvdJobs.run(); runAudit(); }
   async function handleCdJobs() { await cdJobs.run(); runAudit(); }
@@ -162,6 +162,11 @@ export default function Audit() {
             <span className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}>
               Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
             </span>
+            {summary.catalog_issues > 0 && (
+              <span className="audit-summary-item has-issues">
+                Catalog: {summary.catalog_issues} issue{summary.catalog_issues !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -434,6 +439,30 @@ export default function Audit() {
               : "—",
           ])}
         />
+      </IssueSection>
+
+      {/* Catalog sections */}
+      <IssueSection
+        title="Catalog: Duplicate entries needing review"
+        count={catalogData?.duplicate_needs_review?.length}
+      >
+        {(catalogData?.duplicate_needs_review ?? []).map((group) => (
+          <div key={group.group_key} className="audit-dup-group">
+            <IssueTable
+              columns={["#", "Title", "Year", "Edition", "Std", "Regions", "Role", "Library suffix"]}
+              rows={group.entries.map((e) => [
+                e.collection_number != null ? `#${e.collection_number}` : "—",
+                e.title,
+                e.year ?? "—",
+                e.edition || <em>standard</em>,
+                e.video_standard || "—",
+                e.region_codes || "—",
+                e.role,
+                e.link_suffix ? <code key="ls">{e.link_suffix}</code> : <em>plain name</em>,
+              ])}
+            />
+          </div>
+        ))}
       </IssueSection>
 
       {/* Import informational section */}

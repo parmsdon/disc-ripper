@@ -3,18 +3,48 @@ import { api } from "../api/client";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+function CatalogEntryMeta({ entry }) {
+  const stdRegion = [entry.video_standard, entry.region_codes
+    ? entry.region_codes.split(',').filter(r => r.trim() && r.trim() !== 'NoRegionCode')
+        .map(r => `R${r.trim()}`).join('/')
+    : null
+  ].filter(Boolean).join(' · ');
+  return (
+    <>
+      <div className="catalog-result-row-top">
+        {entry.collection_number != null && (
+          <span className="catalog-result-num">#{entry.collection_number}</span>
+        )}
+        <span className="catalog-result-title">{entry.title}</span>
+        {stdRegion && (
+          <span className="catalog-result-std text-dim">{stdRegion}</span>
+        )}
+        {entry.duplicate_role === "primary" && (
+          <span className="dup-badge dup-badge--primary">Primary</span>
+        )}
+        {entry.duplicate_role === "secondary" && (
+          <span className="dup-badge dup-badge--secondary">Secondary</span>
+        )}
+      </div>
+      {(entry.edition || entry.year || entry.imdb_id) && (
+        <div className="catalog-result-meta">
+          {entry.edition && <span className="catalog-result-edition">{entry.edition}</span>}
+          <span className="text-dim">
+            {[entry.year, entry.imdb_id].filter(Boolean).join(' · ')}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 function CatalogRow({ entry, selected, onSelect }) {
   return (
     <div
       className={`catalog-result-row${selected ? " selected" : ""}`}
       onClick={() => onSelect(entry)}
     >
-      <span className="catalog-result-title">{entry.title}</span>
-      {(entry.year || entry.imdb_id) && (
-        <span className="catalog-result-meta">
-          {[entry.year, entry.imdb_id].filter(Boolean).join(" · ")}
-        </span>
-      )}
+      <CatalogEntryMeta entry={entry} />
     </div>
   );
 }
@@ -113,10 +143,31 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     className={`suggestion-card${selected?.id === entry.id ? " selected" : ""}`}
                     onClick={() => handleSelect(entry)}
                   >
-                    <div className="suggestion-card-title">{entry.title}</div>
-                    {(entry.year || entry.imdb_id) && (
+                    <div className="suggestion-card-top">
+                      {entry.collection_number != null && (
+                        <span className="catalog-result-num">#{entry.collection_number}</span>
+                      )}
+                      <div className="suggestion-card-title">{entry.title}</div>
+                      {entry.duplicate_role === "primary" && (
+                        <span className="dup-badge dup-badge--primary">Primary</span>
+                      )}
+                      {entry.duplicate_role === "secondary" && (
+                        <span className="dup-badge dup-badge--secondary">Secondary</span>
+                      )}
+                    </div>
+                    {entry.edition && (
+                      <div className="suggestion-card-edition">{entry.edition}</div>
+                    )}
+                    {(entry.year || entry.imdb_id || entry.video_standard) && (
                       <div className="suggestion-card-meta">
-                        {[entry.year, entry.imdb_id].filter(Boolean).join(" · ")}
+                        {[
+                          entry.video_standard,
+                          entry.region_codes
+                            ? entry.region_codes.split(',').filter(r => r.trim() && r.trim() !== 'NoRegionCode').map(r => `R${r.trim()}`).join('/')
+                            : null,
+                          entry.year,
+                          entry.imdb_id,
+                        ].filter(Boolean).join(" · ")}
                       </div>
                     )}
                   </div>

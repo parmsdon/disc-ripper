@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from common.catalog_dups import normalise_catalog_title
 from common.models import (
     Catalog, Disc, DiscStatus, DiscType, JobStatus, RipJob, naive_utcnow,
 )
@@ -20,9 +21,6 @@ logger = logging.getLogger(__name__)
 _REGION_MARKER_RE = re.compile(r'\s*\([A-Z0-9]+\)\s*$', re.IGNORECASE)
 _YEAR_RE = re.compile(r'\[(\d{4})\]')
 _NON_ALNUM_RE = re.compile(r'[^A-Za-z0-9 ]')
-# For catalog matching only: strip ALL non-alnum so "Alien3", "Alien 3", "Alien³" all match.
-_ALNUM_ONLY_RE = re.compile(r'[^A-Za-z0-9]')
-_SUPER_TABLE = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')
 
 
 def parse_iso_filename(filename: str) -> tuple[str, int | None]:
@@ -44,17 +42,6 @@ def parse_iso_filename(filename: str) -> tuple[str, int | None]:
 
 def make_working_title(title_part: str, year: int | None) -> str:
     return f"{title_part}_{year}" if year else title_part
-
-
-def normalise_catalog_title(title: str, year: int | None) -> str:
-    """
-    Catalog match key: letters and digits only (no spaces, punctuation or underscores),
-    superscript digits translated to ASCII. Used for matching only — not for temp_name.
-    "Alien3", "Alien 3" and "Alien³" all produce the same key.
-    """
-    t = (title or '').translate(_SUPER_TABLE)
-    part = _ALNUM_ONLY_RE.sub('', t).upper()
-    return f"{part}_{year}" if year else part
 
 
 def build_catalog_lookup(session) -> dict[str, list[dict]]:

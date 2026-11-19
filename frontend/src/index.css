@@ -1185,7 +1185,7 @@ button:disabled {
 .suggestion-cards {
   display: flex;
   gap: 8px;
-  height: 64px;
+  min-height: 72px;
   align-items: stretch;
 }
 
@@ -1242,11 +1242,17 @@ button:disabled {
 
 .catalog-result-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 8px 12px;
   cursor: pointer;
   border-bottom: 1px solid var(--panel-border);
+}
+
+.catalog-result-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .catalog-result-row:last-child {
@@ -1261,6 +1267,14 @@ button:disabled {
   background: rgba(79, 140, 255, 0.08);
 }
 
+.catalog-result-num {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 .catalog-result-title {
   font-size: 13px;
   flex: 1;
@@ -1268,6 +1282,19 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.catalog-result-std {
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.catalog-result-edition {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-dim);
+  margin-right: 0.4rem;
 }
 
 .catalog-result-meta {
@@ -2418,5 +2445,52 @@ button:disabled {
 
 .stat-error {
   color: var(--error);
+}
+
+/* ── Duplicate-role badges ──────────────────────────────────────────────────── */
+.dup-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.dup-badge--primary {
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.dup-badge--secondary {
+  background: rgba(150, 150, 150, 0.15);
+  color: var(--text-dim);
+}
+
+/* ── Suggestion card updates ────────────────────────────────────────────────── */
+.suggestion-card-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.suggestion-card-edition {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ── DVD Catalogue collection-number column ─────────────────────────────────── */
+.catalogue-collection-num {
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* ── Audit: duplicate group spacing ────────────────────────────────────────── */
+.audit-dup-group + .audit-dup-group {
+  margin-top: 1rem;
 }
 

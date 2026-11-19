@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import case, func, select
 
+from common.catalog_dups import load_dup_roles
 from common.models import Catalog, Disc, DiscStatus, DiscType
 from mymovies_sync.sync import run_sync
 
@@ -30,7 +31,8 @@ _last_run_at = None
 _sync_progress = None  # {"current": int, "total": int} while running, None otherwise
 
 
-def _catalog_to_dict(entry: Catalog) -> dict:
+def _catalog_to_dict(entry: Catalog, dup_roles: dict | None = None) -> dict:
+    dr = dup_roles.get(entry.id) if dup_roles else None
     return {
         "id": entry.id,
         "mymovies_id": entry.mymovies_id,
@@ -39,6 +41,12 @@ def _catalog_to_dict(entry: Catalog) -> dict:
         "imdb_id": entry.imdb_id,
         "upc": entry.upc,
         "synced_at": entry.synced_at.isoformat() if entry.synced_at else None,
+        "collection_number": entry.collection_number,
+        "edition": entry.edition,
+        "video_standard": entry.video_standard,
+        "region_codes": entry.region_codes,
+        "duplicate_role": dr.role if dr and dr.role != "sole" else None,
+        "library_link_suffix": dr.link_suffix if dr else None,
     }
 
 
@@ -65,6 +73,7 @@ def unmatched_suggestions():
     title = request.args.get("title", "")
     limit = min(int(request.args.get("limit", 3)), 20)
 
+    dup_roles = load_dup_roles(session)
     query = (
         select(Catalog)
         .where(Catalog.title.ilike(f"%{title}%"))
@@ -73,7 +82,7 @@ def unmatched_suggestions():
         .limit(limit)
     )
     entries = session.scalars(query).all()
-    return jsonify([_catalog_to_dict(e) for e in entries])
+    return jsonify([_catalog_to_dict(e, dup_roles) for e in entries])
 
 
 @catalog_bp.route("/", methods=["GET"])
@@ -81,6 +90,7 @@ def list_catalog():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
+    dup_roles = load_dup_roles(session)
     query = select(Catalog)
 
     search = request.args.get("search", "")
@@ -94,7 +104,7 @@ def list_catalog():
         query = query.where(_unmatched_filter())
 
     entries = session.scalars(query).all()
-    return jsonify([_catalog_to_dict(e) for e in entries])
+    return jsonify([_catalog_to_dict(e, dup_roles) for e in entries])
 
 
 @catalog_bp.route("/<int:catalog_id>", methods=["GET"])
@@ -102,11 +112,12 @@ def get_catalog_entry(catalog_id):
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
+    dup_roles = load_dup_roles(session)
     entry = session.get(Catalog, catalog_id)
     if entry is None:
         return jsonify({"error": "Catalog entry not found"}), 404
 
-    return jsonify(_catalog_to_dict(entry))
+    return jsonify(_catalog_to_dict(entry, dup_roles))
 
 
 def _run_sync_in_background(cfg: dict) -> None:
@@ -158,7 +169,9 @@ def dvd_catalogue():
         elif _legacy == "unidentified":
             id_status = "unidentified"
 
+    sort_by = request.args.get("sort", "collection")
     rows = []
+    dup_roles = load_dup_roles(session)
 
     def _search_matches_catalog(q):
         return q.where(Catalog.title.ilike(f"%{search}%")) if search else q
@@ -181,11 +194,16 @@ def dvd_catalogue():
         }
 
     def _catalog_fields(catalog):
+        dr = dup_roles.get(catalog.id)
         return {
             "catalog_id": catalog.id,
             "catalog_title": catalog.title,
             "catalog_year": catalog.year,
             "catalog_imdb_id": catalog.imdb_id,
+            "catalog_collection_number": catalog.collection_number,
+            "catalog_edition": catalog.edition,
+            "catalog_duplicate_role": dr.role if dr and dr.role != "sole" else None,
+            "catalog_link_suffix": dr.link_suffix if dr else None,
         }
 
     # ── matched rows: catalog joined to disc via catalog_id ──────────────────
@@ -235,7 +253,7 @@ def dvd_catalogue():
                 "row_type": "unripped",
                 **_catalog_fields(catalog),
                 "disc_id": None, "disc_fingerprint": None, "disc_temp_name": None,
-                "disc_ripped_at": None, "disc_rip_quality": None,
+                "disc_ripped_at": None, "disc_rip_quality": None, "disc_status": None,
             })
 
     # ── unmatched_rip rows: DVD discs with no catalog entry ───────────────────
@@ -262,8 +280,17 @@ def dvd_catalogue():
                 "row_type": "unmatched_rip",
                 "catalog_id": None, "catalog_title": None,
                 "catalog_year": None, "catalog_imdb_id": None,
+                "catalog_collection_number": None, "catalog_edition": None,
+                "catalog_duplicate_role": None, "catalog_link_suffix": None,
                 **_disc_fields(disc),
             })
+
+    if sort_by == "collection":
+        rows.sort(key=lambda r: (
+            r.get("catalog_collection_number") is None,
+            r.get("catalog_collection_number") or 0,
+            (r.get("catalog_title") or "").lower(),
+        ))
 
     return jsonify(rows)
 

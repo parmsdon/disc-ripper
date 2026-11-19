@@ -87,13 +87,14 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/log/${qs ? `?${qs}` : ""}`);
   },
-  getDvdCatalogue: ({ ripStatus, idStatus, mmStatus, search, dirty } = {}) => {
+  getDvdCatalogue: ({ ripStatus, idStatus, mmStatus, search, dirty, sort } = {}) => {
     const p = new URLSearchParams();
     if (ripStatus) p.set("rip_status", ripStatus);
     if (idStatus) p.set("id_status", idStatus);
     if (mmStatus) p.set("mm_status", mmStatus);
     if (search) p.set("search", search);
     if (dirty) p.set("dirty", "true");
+    if (sort) p.set("sort", sort);
     const qs = p.toString();
     return request(`/catalog/dvd-catalogue${qs ? `?${qs}` : ""}`);
   },
