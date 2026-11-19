@@ -290,7 +290,7 @@ def encode_transcode(
         "-i", input_path,
         "-o", output_path,
         "--preset", preset,
-    ]
+    ] + (tool_params or {}).get("extra_args", [])
 
     result = _run_handbrake(
         command, job_id, f"Transcoding ({preset})", session_factory,

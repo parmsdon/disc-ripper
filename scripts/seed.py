@@ -48,7 +48,7 @@ ENCODE_PROFILES = [
         "media_type": "dvd",
         "output_folder": "dvd_store/iphone",
         "tool": "handbrake",
-        "tool_params": '{"preset": "Apple 1080p30 Surround"}',
+        "tool_params": '{"preset": "Apple 720p30 Surround", "extra_args": ["-q", "25", "--aencoder", "aac", "--mixdown", "stereo"]}',
         "depends_on_name": "DVD Extract",
         "enabled": True,
         "display_order": 3,
