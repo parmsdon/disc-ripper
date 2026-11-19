@@ -158,6 +158,10 @@ class Catalog(Base):
     upc = Column(String, nullable=True)
     raw_metadata = Column(JSON, nullable=True)
     synced_at = Column(DateTime, nullable=True)
+    collection_number = Column(Integer, nullable=True)   # tblTitlePersonal.intCollectionNumber — shelf position
+    edition           = Column(String,  nullable=True)   # tblTitles.nvcEdition; null = standard
+    video_standard    = Column(String,  nullable=True)   # "PAL" / "NTSC"
+    region_codes      = Column(String,  nullable=True)   # comma-separated region strings, e.g. "2" or "1,2"
 
     discs = relationship("Disc", back_populates="catalog")
 

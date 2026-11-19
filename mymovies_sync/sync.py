@@ -17,10 +17,33 @@ from mymovies_sync.connector import get_connection
 logger = logging.getLogger(__name__)
 
 _QUERY = """
-    SELECT intId, nvcLocalTitle, nvcOriginalTitle, intProductionYear,
-           nvcIMDB, nvcUPC, datUpdateAt
-    FROM tblTitles
-    ORDER BY intId
+    SELECT
+        t.intId,
+        t.nvcLocalTitle,
+        t.nvcOriginalTitle,
+        t.intProductionYear,
+        t.nvcIMDB,
+        t.nvcUPC,
+        t.datUpdateAt,
+        t.nvcEdition,
+        t.nvcVideoStandard,
+        tp.intCollectionNumber,
+        (
+            SELECT STUFF((
+                SELECT DISTINCT ',' + rc.nvcName
+                FROM tblTitleRegionCode trc
+                JOIN tblRegionCodes rc ON rc.intId = trc.intRegionCode
+                WHERE trc.intTitle = t.intId
+                FOR XML PATH(''), TYPE
+            ).value('.','NVARCHAR(MAX)'), 1, 1, '')
+        ) AS region_codes
+    FROM tblTitles t
+    LEFT JOIN (
+        SELECT intTitle, MIN(intCollectionNumber) AS intCollectionNumber
+        FROM tblTitlePersonal
+        GROUP BY intTitle
+    ) tp ON tp.intTitle = t.intId
+    ORDER BY t.intId
 """
 
 
@@ -90,6 +113,10 @@ def sync_catalog(cfg: dict, session, progress_callback=None) -> dict:
             existing.upc = data.get("nvcUPC")
             existing.raw_metadata = raw_metadata
             existing.synced_at = now
+            existing.collection_number = data.get("intCollectionNumber")
+            existing.edition = data.get("nvcEdition") or None   # coerce "" → None
+            existing.video_standard = data.get("nvcVideoStandard") or None
+            existing.region_codes = data.get("region_codes") or None
 
             session.commit()
             synced += 1
