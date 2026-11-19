@@ -197,6 +197,7 @@ def import_one_iso(
 
         if catalog_id is not None:
             disc.catalog_id = catalog_id
+            disc.catalog_match_source = "auto"
         session.commit()
 
         rip_job = RipJob(

@@ -226,6 +226,8 @@ class Disc(Base):
     ripped_in_region = Column(String, nullable=True)
     imported = Column(Boolean, nullable=False, default=False, server_default="false")
     imported_filename = Column(String, nullable=True)
+    # "auto" = matched during bulk import; "manual" = set by user via Identification tab.
+    catalog_match_source = Column(String, nullable=True)
 
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")

@@ -48,6 +48,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "rip_attempt_count": disc.rip_attempt_count,
         "imported": disc.imported if disc.imported is not None else False,
         "imported_filename": disc.imported_filename,
+        "catalog_match_source": disc.catalog_match_source,
         "scheduled_start": active_job.scheduled_start.isoformat() if active_job and active_job.scheduled_start else None,
         "progress_percent": active_job.progress_percent if active_job else None,
         "progress_stage": active_job.progress_stage if active_job else None,
@@ -149,6 +150,7 @@ def identify_dvd(disc_id):
         return jsonify({"error": "This catalog entry is already matched to another disc"}), 409
 
     disc.catalog_id = catalog_id
+    disc.catalog_match_source = "manual"
     session.commit()
 
     return jsonify({

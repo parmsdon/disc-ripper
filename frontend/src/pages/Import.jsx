@@ -1,35 +1,29 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 
 const POLL_INTERVAL_MS = 3000;
+const DISCS_POLL_MS = 10000;
+const DISCS_PER_PAGE = 50;
+
+// ── File table ────────────────────────────────────────────────────────────────
 
 const FILE_FILTERS = ["all", "pending", "error_retry", "already_imported", "skipped"];
 const FILE_FILTER_LABEL = {
-  all: "All",
-  pending: "Pending",
-  error_retry: "Error",
-  already_imported: "Imported",
-  skipped: "Skipped",
+  all: "All", pending: "Pending", error_retry: "Error",
+  already_imported: "Imported", skipped: "Skipped",
 };
-
-// Map import file status → status-pill CSS modifier (reuses existing pill classes)
 const STATUS_PILL = {
-  pending: "queued",
-  already_imported: "done",
-  error_retry: "error",
-  skipped: "warn",
+  pending: "queued", already_imported: "done", error_retry: "error", skipped: "warn",
 };
 const STATUS_LABEL = {
-  pending: "Pending",
-  already_imported: "Imported",
-  error_retry: "Error",
-  skipped: "Skipped",
+  pending: "Pending", already_imported: "Imported", error_retry: "Error", skipped: "Skipped",
 };
 
 function MatchCell({ match, title }) {
   if (match === "exact") {
     const display = title
-      ? title.length > 36 ? title.slice(0, 36) + "…" : title
+      ? (title.length > 36 ? title.slice(0, 36) + "…" : title)
       : "Exact";
     return <span title={title || undefined}>{display}</span>;
   }
@@ -37,10 +31,9 @@ function MatchCell({ match, title }) {
   return <span className="text-dim">—</span>;
 }
 
-function SummaryPills({ files, totals, jobStatus }) {
+function FileSummaryPills({ files, totals, jobStatus }) {
   const counts = {};
   for (const f of files) counts[f.status] = (counts[f.status] || 0) + 1;
-
   return (
     <div className="encoder-stats">
       {jobStatus === "running" && (totals.total || 0) > 0 && (
@@ -62,12 +55,307 @@ function SummaryPills({ files, totals, jobStatus }) {
       {(counts.skipped || 0) > 0 && (
         <span className="encoder-stat-pill idle">{counts.skipped} skipped</span>
       )}
-      {files.length === 0 && (
-        <span className="encoder-stat-pill idle">No files</span>
+      {files.length === 0 && <span className="encoder-stat-pill idle">No files</span>}
+    </div>
+  );
+}
+
+// ── Last run banner ───────────────────────────────────────────────────────────
+
+function fmtDatetime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + (iso.includes("Z") || iso.includes("+") ? "" : "Z"));
+  return d.toLocaleString([], {
+    month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function fmtDuration(startIso, endIso) {
+  if (!startIso || !endIso) return null;
+  const ms =
+    new Date(endIso + (endIso.includes("Z") ? "" : "Z")) -
+    new Date(startIso + (startIso.includes("Z") ? "" : "Z"));
+  if (ms < 0) return null;
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+const OUTCOME_PILL = {
+  done: "done",
+  stopped: "warn",
+  interrupted: "warn",
+  error: "error",
+};
+const OUTCOME_LABEL = {
+  done: "Done",
+  stopped: "Stopped",
+  interrupted: "Interrupted",
+  error: "Error",
+};
+
+function LastRunBanner({ lastRun }) {
+  if (!lastRun) return null;
+  const { started_at, finished_at, outcome, imported, skipped, already_imported, total } = lastRun;
+  const dur = fmtDuration(started_at, finished_at);
+  const pillClass = OUTCOME_PILL[outcome] || "idle";
+  const parts = [];
+  if (imported > 0) parts.push(`${imported} imported`);
+  if (skipped > 0) parts.push(`${skipped} skipped`);
+  if (already_imported > 0) parts.push(`${already_imported} already done`);
+  if (total > 0 && parts.length === 0) parts.push(`0 of ${total}`);
+  return (
+    <div className="panel" style={{ marginBottom: "0.75rem", padding: "0.55rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <span className="text-dim" style={{ fontSize: "0.82rem" }}>Last run</span>
+      <span style={{ fontSize: "0.85rem" }}>{fmtDatetime(started_at)}</span>
+      {finished_at && (
+        <>
+          <span className="text-dim">→</span>
+          <span style={{ fontSize: "0.85rem" }}>{fmtDatetime(finished_at)}</span>
+          {dur && <span className="text-dim" style={{ fontSize: "0.82rem" }}>({dur})</span>}
+        </>
+      )}
+      {!finished_at && outcome == null && (
+        <span className="text-dim" style={{ fontSize: "0.82rem" }}>in progress</span>
+      )}
+      {parts.length > 0 && (
+        <span className="text-dim" style={{ fontSize: "0.85rem" }}>· {parts.join(", ")}</span>
+      )}
+      {outcome && (
+        <span className={`status-pill ${pillClass}`} style={{ marginLeft: "auto" }}>
+          {OUTCOME_LABEL[outcome] || outcome}
+        </span>
       )}
     </div>
   );
 }
+
+// ── Imported discs section ────────────────────────────────────────────────────
+
+const DISC_FILTERS = ["all", "needs_id", "encoding", "complete", "error"];
+const DISC_FILTER_LABEL = {
+  all: "All", needs_id: "Needs ID", encoding: "Encoding", complete: "Complete", error: "Error",
+};
+
+function CatalogCell({ catalogId, catalogTitle, source }) {
+  if (!catalogId) {
+    return (
+      <Link to="/data-editing" style={{ fontSize: "0.85rem" }}>
+        <span className="status-pill warn">Needs ID</span>
+      </Link>
+    );
+  }
+  const prefix = source === "auto" ? "Auto" : source === "manual" ? "Manual" : null;
+  return (
+    <span>
+      {prefix && (
+        <span className="text-dim" style={{ fontSize: "0.78rem", marginRight: "0.3rem" }}>
+          {prefix}:
+        </span>
+      )}
+      {catalogTitle
+        ? (catalogTitle.length > 32 ? catalogTitle.slice(0, 32) + "…" : catalogTitle)
+        : <span className="text-dim">#{catalogId}</span>}
+    </span>
+  );
+}
+
+function EncodeCell({ encode, discStatus }) {
+  if (discStatus === "error") {
+    return <span className="status-pill error">Disc error</span>;
+  }
+  const { total, done, error, active } = encode;
+  if (total === 0) return <span className="text-dim">—</span>;
+  if (error > 0 && active === 0) {
+    return (
+      <>
+        <span className="status-pill error">Error</span>
+        <span className="text-dim" style={{ marginLeft: "0.3rem", fontSize: "0.8rem" }}>
+          {done}/{total}
+        </span>
+      </>
+    );
+  }
+  if (active > 0) {
+    return (
+      <>
+        <span className="status-pill running">Encoding</span>
+        <span className="text-dim" style={{ marginLeft: "0.3rem", fontSize: "0.8rem" }}>
+          {done}/{total}
+        </span>
+      </>
+    );
+  }
+  if (done === total && total > 0) {
+    return <span className="status-pill done">{done}/{total}</span>;
+  }
+  return (
+    <span className="text-dim" style={{ fontSize: "0.85rem" }}>{done}/{total}</span>
+  );
+}
+
+function ImportedDiscsSection() {
+  const [data, setData] = useState(null);
+  const [discFilter, setDiscFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchDiscs = useCallback(async (p = page, f = discFilter) => {
+    try {
+      const result = await api.getImportedDiscs({ filter: f, page: p, per_page: DISCS_PER_PAGE });
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, discFilter]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchDiscs(page, discFilter);
+  }, [discFilter, page]);
+
+  // Poll slowly so encode progress updates
+  useEffect(() => {
+    const iv = setInterval(() => fetchDiscs(page, discFilter), DISCS_POLL_MS);
+    return () => clearInterval(iv);
+  }, [fetchDiscs, discFilter, page]);
+
+  function handleFilterChange(f) {
+    setDiscFilter(f);
+    setPage(1);
+  }
+
+  const counts = data?.counts || {};
+  const discs = data?.discs || [];
+
+  return (
+    <div className="panel" style={{ marginTop: "0.75rem" }}>
+      <div className="panel-heading-row" style={{ padding: "0.75rem 1rem 0" }}>
+        <h2>Imported discs</h2>
+        {data && (
+          <span className="text-dim" style={{ fontSize: "0.85rem" }}>
+            {counts.all || 0} total
+          </span>
+        )}
+      </div>
+
+      <div className="encoder-filter-row">
+        {DISC_FILTERS.map((f) => {
+          const cnt = f === "all" ? (counts.all || 0) : (counts[f] || 0);
+          if (f !== "all" && cnt === 0) return null;
+          return (
+            <button
+              key={f}
+              className={`catalogue-filter-btn${discFilter === f ? " active" : ""}`}
+              onClick={() => handleFilterChange(f)}
+            >
+              {DISC_FILTER_LABEL[f]}{f !== "all" && ` (${cnt})`}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading && discs.length === 0 ? (
+        <div className="empty-state">Loading…</div>
+      ) : error ? (
+        <div className="empty-state">Error: {error}</div>
+      ) : discs.length === 0 ? (
+        <div className="empty-state">
+          {discFilter === "all"
+            ? "No imported discs yet. Run an import to see them here."
+            : "No discs match this filter."}
+        </div>
+      ) : (
+        <>
+          <table className="catalogue-table">
+            <colgroup>
+              <col />
+              <col style={{ width: "190px" }} />
+              <col style={{ width: "210px" }} />
+              <col style={{ width: "140px" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Working title</th>
+                <th>Catalog</th>
+                <th>Encode</th>
+              </tr>
+            </thead>
+            <tbody>
+              {discs.map((d) => (
+                <tr key={d.id} className="catalogue-row">
+                  <td>
+                    <span className="encoder-disc-name">
+                      {d.imported_filename || <span className="text-dim">#{d.id}</span>}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="text-dim" style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                      {d.temp_name || "—"}
+                    </span>
+                  </td>
+                  <td>
+                    <CatalogCell
+                      catalogId={d.catalog_id}
+                      catalogTitle={d.catalog_title}
+                      source={d.catalog_match_source}
+                    />
+                  </td>
+                  <td>
+                    <EncodeCell encode={d.encode} discStatus={d.disc_status} />
+                    {d.disc_status === "error" && d.error_message && (
+                      <span
+                        className="error-hint"
+                        title={d.error_message}
+                        style={{ marginLeft: "0.4rem", fontSize: "0.75rem" }}
+                      >
+                        {d.error_message.length > 40
+                          ? d.error_message.slice(0, 40) + "…"
+                          : d.error_message}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", borderTop: "1px solid var(--panel-border)" }}>
+            <span className="text-dim" style={{ fontSize: "0.85rem" }}>
+              {(page - 1) * DISCS_PER_PAGE + 1}–
+              {Math.min(page * DISCS_PER_PAGE, data?.total || 0)} of {data?.total || 0}
+            </span>
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              style={{ padding: "0.2rem 0.6rem" }}
+            >
+              ← Prev
+            </button>
+            <button
+              disabled={!data?.has_more}
+              onClick={() => setPage((p) => p + 1)}
+              style={{ padding: "0.2rem 0.6rem" }}
+            >
+              Next →
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Import() {
   const [preview, setPreview] = useState(null);
@@ -136,13 +424,13 @@ export default function Import() {
   const totals = preview?.totals || {};
   const jobStatus = preview?.job_status || "idle";
   const jobError = preview?.job_error || null;
+  const lastRun = preview?.last_run || null;
   const isRunning = jobStatus === "running";
 
   const pendingCount = files.filter(
     (f) => f.status === "pending" || f.status === "error_retry"
   ).length;
 
-  // Filter buttons: only show filters that have at least one matching file
   const filterCounts = { all: files.length };
   for (const f of files) filterCounts[f.status] = (filterCounts[f.status] || 0) + 1;
 
@@ -151,20 +439,17 @@ export default function Import() {
 
   return (
     <div>
+      {/* Control bar */}
       <div className="control-bar encoder-header">
         <div className="control-bar-group">
           <span className="control-bar-label">Legacy Import</span>
 
           {!isRunning && !confirming && (
             <button
-              className={`ripping-toggle${pendingCount > 0 ? "" : ""}`}
+              className="ripping-toggle"
               onClick={() => setConfirming(true)}
               disabled={pendingCount === 0 || starting}
-              title={
-                pendingCount === 0
-                  ? "No pending files"
-                  : `Import ${pendingCount} pending file${pendingCount !== 1 ? "s" : ""}`
-              }
+              title={pendingCount === 0 ? "No pending files" : undefined}
             >
               Import all ({pendingCount})
             </button>
@@ -189,23 +474,18 @@ export default function Import() {
           )}
 
           {isRunning && (
-            <button onClick={handleStop} style={{ marginLeft: "0.25rem" }}>
-              Stop
-            </button>
+            <button onClick={handleStop} style={{ marginLeft: "0.25rem" }}>Stop</button>
           )}
 
-          <button
-            onClick={fetchPreview}
-            disabled={isRunning}
-            style={{ marginLeft: "0.5rem" }}
-          >
+          <button onClick={fetchPreview} disabled={isRunning} style={{ marginLeft: "0.5rem" }}>
             Refresh
           </button>
         </div>
 
-        <SummaryPills files={files} totals={totals} jobStatus={jobStatus} />
+        <FileSummaryPills files={files} totals={totals} jobStatus={jobStatus} />
       </div>
 
+      {/* Error */}
       {(fetchError || jobError) && (
         <div className="panel" style={{ marginBottom: "0.75rem", padding: "0.6rem 1rem" }}>
           <span className="status-pill error" style={{ marginRight: "0.5rem" }}>Error</span>
@@ -213,6 +493,10 @@ export default function Import() {
         </div>
       )}
 
+      {/* Last run banner */}
+      <LastRunBanner lastRun={lastRun} />
+
+      {/* Live file table */}
       <div className="panel">
         <div className="encoder-filter-row">
           {FILE_FILTERS.map((f) => {
@@ -224,8 +508,7 @@ export default function Import() {
                 className={`catalogue-filter-btn${statusFilter === f ? " active" : ""}`}
                 onClick={() => setStatusFilter(f)}
               >
-                {FILE_FILTER_LABEL[f]}
-                {f !== "all" && ` (${count})`}
+                {FILE_FILTER_LABEL[f]}{f !== "all" && ` (${count})`}
               </button>
             );
           })}
@@ -265,9 +548,7 @@ export default function Import() {
                         className="error-hint"
                         title={f.duplicate_warning}
                         style={{ marginLeft: "0.4rem" }}
-                      >
-                        ⚠
-                      </span>
+                      >⚠</span>
                     )}
                     {f.in_raw && (
                       <span
@@ -286,9 +567,7 @@ export default function Import() {
                       {f.working_title || "—"}
                     </span>
                   </td>
-                  <td>
-                    <MatchCell match={f.catalog_match} title={f.catalog_title} />
-                  </td>
+                  <td><MatchCell match={f.catalog_match} title={f.catalog_title} /></td>
                   <td>
                     <span className={`status-pill ${STATUS_PILL[f.status] || f.status}`}>
                       {STATUS_LABEL[f.status] || f.status}
@@ -309,6 +588,9 @@ export default function Import() {
           </table>
         )}
       </div>
+
+      {/* Imported discs history */}
+      <ImportedDiscsSection />
     </div>
   );
 }

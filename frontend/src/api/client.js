@@ -122,6 +122,10 @@ export const api = {
   getImportPreview: () => request("/import/preview"),
   startImport: () => request("/import/start", { method: "POST" }),
   stopImport: () => request("/import/stop", { method: "POST" }),
+  getImportedDiscs: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/import/discs${q ? `?${q}` : ""}`);
+  },
   checkTempName: (name, discId, type) =>
     request(`/discs/check-temp-name?name=${encodeURIComponent(name)}&disc_id=${discId}&type=${type}`),
 
