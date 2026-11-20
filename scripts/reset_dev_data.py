@@ -34,6 +34,40 @@ from common.models import (
     RipJob, RipLogEvent, Setting,
 )
 
+
+def _return_imported_isos(session, raw_root: Path, legacy_dir: Path) -> int:
+    """Move ISOs for imported discs from dvd_store/raw/<id>/ back to dvd_store/legacy/.
+
+    Returns the number of ISOs successfully returned.
+    """
+    imported_discs = session.scalars(
+        select(Disc).where(Disc.imported == True)
+    ).all()
+
+    returned = 0
+    for disc in imported_discs:
+        if not disc.imported_filename:
+            print(f"  Warning: disc {disc.id} has imported=true but no imported_filename — skipping")
+            continue
+
+        disc_raw_dir = raw_root / str(disc.id)
+        isos = sorted(disc_raw_dir.glob("*.iso")) if disc_raw_dir.is_dir() else []
+        if not isos:
+            print(f"  Warning: no ISO found for disc {disc.id} ({disc.imported_filename}) — skipping")
+            continue
+
+        iso_src = isos[0]
+        dest = legacy_dir / disc.imported_filename
+        if dest.exists():
+            print(f"  Warning: {disc.imported_filename} already exists in legacy/ — leaving disc {disc.id} in place")
+            continue
+
+        legacy_dir.mkdir(parents=True, exist_ok=True)
+        os.rename(iso_src, dest)
+        returned += 1
+
+    return returned
+
 _SETTINGS_TO_RESET = {
     "library_last_generated": "",
     "library_last_stats": "",
@@ -71,6 +105,9 @@ def main(env: str) -> None:
     session = Session()
 
     disc_count = session.scalar(select(func.count()).select_from(Disc))
+    imported_count = session.scalar(
+        select(func.count()).select_from(Disc).where(Disc.imported == True)
+    )
     rip_job_count = session.scalar(select(func.count()).select_from(RipJob))
     encode_job_count = session.scalar(select(func.count()).select_from(EncodeJob))
     lookup_candidate_count = session.scalar(select(func.count()).select_from(LookupCandidate))
@@ -79,13 +116,14 @@ def main(env: str) -> None:
     catalog_count = session.scalar(select(func.count()).select_from(Catalog))
 
     datastore_root = Path(cfg["storage"]["datastore_root"])
+    raw_dir = get_store_path(cfg, "dvd_store", "raw")
+    legacy_dir = get_store_path(cfg, "dvd_store", "legacy")
 
     clear_dirs = [
-        get_store_path(cfg, "dvd_store", "raw"),
+        raw_dir,
         get_store_path(cfg, "dvd_store", "extract"),
         get_store_path(cfg, "dvd_store", "plex"),
         get_store_path(cfg, "dvd_store", "iphone"),
-        get_store_path(cfg, "dvd_store", "legacy"),
         get_store_path(cfg, "cd_store", "raw"),
         get_store_path(cfg, "cd_store", "flac"),
         get_store_path(cfg, "cd_store", "mp3_320"),
@@ -98,7 +136,8 @@ def main(env: str) -> None:
           f"{lookup_candidate_count} candidate(s), {cd_track_count} CD track(s))")
     print(f"  - All rip log events ({log_event_count})")
     print("Will clear filesystem:")
-    print("  - dvd_store/raw/, extract/, plex/, iphone/, legacy/")
+    print(f"  - Return {imported_count} imported ISO(s) to dvd_store/legacy/ (preserved)")
+    print("  - dvd_store/raw/, extract/, plex/, iphone/")
     print("  - cd_store/raw/, flac/, mp3_320/")
     print("  - library/ (entire directory, recreated on next generation)")
     print("Will reset settings: library_last_generated, library_last_stats, "
@@ -111,6 +150,10 @@ def main(env: str) -> None:
     if confirmation != "yes":
         print("Aborted - no changes made.")
         return
+
+    # Return imported ISOs to legacy/ before clearing raw/.
+    returned_count = _return_imported_isos(session, raw_dir, legacy_dir)
+    print(f"Returned {returned_count} of {imported_count} imported ISO(s) to dvd_store/legacy/.")
 
     # Explicit FK-ordered bulk DELETEs. The DB FK constraints are all NO
     # ACTION (not CASCADE), so children must be deleted before parents.
@@ -130,7 +173,8 @@ def main(env: str) -> None:
     session.commit()
     print(f"Deleted {disc_count} disc(s), {rip_job_count} rip job(s), "
           f"{encode_job_count} encode job(s), {lookup_candidate_count} candidate(s), "
-          f"{cd_track_count} CD track(s), {log_event_count} log event(s).")
+          f"{cd_track_count} CD track(s), {log_event_count} log event(s). "
+          f"Returned {returned_count} imported ISO(s) to legacy/.")
 
     for directory in clear_dirs:
         if _clear_dir_contents(directory):
