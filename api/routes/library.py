@@ -27,11 +27,12 @@ library_bp = Blueprint("library", __name__)
 _KEY_LAST_GENERATED = "library_last_generated"
 _KEY_LAST_STATS = "library_last_stats"
 
-_INVALID_CHARS = re.compile(r'[:/\\|?*<>"]')
+_REMAINING_INVALID = re.compile(r'[/\\|?*<>"]')
 
 
 def _sanitize(name: str) -> str:
-    return _INVALID_CHARS.sub("_", name).strip()
+    name = name.replace(": ", " - ").replace(":", "-")
+    return _REMAINING_INVALID.sub("_", name).strip()
 
 
 def _get_setting(session, key: str) -> str:
