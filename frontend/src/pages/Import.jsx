@@ -135,9 +135,9 @@ function LastRunBanner({ lastRun }) {
 
 // ── Imported discs section ────────────────────────────────────────────────────
 
-const DISC_FILTERS = ["all", "needs_id", "encoding", "complete", "error"];
+const DISC_FILTERS = ["all", "needs_id", "error"];
 const DISC_FILTER_LABEL = {
-  all: "All", needs_id: "Needs ID", encoding: "Encoding", complete: "Complete", error: "Error",
+  all: "All", needs_id: "Needs ID", error: "Error",
 };
 
 function CatalogCell({ catalogId, catalogTitle, source, collectionNumber, edition, duplicateRole }) {
@@ -175,39 +175,6 @@ function CatalogCell({ catalogId, catalogTitle, source, collectionNumber, editio
   );
 }
 
-function EncodeCell({ encode, discStatus }) {
-  if (discStatus === "error") {
-    return <span className="status-pill error">Disc error</span>;
-  }
-  const { total, done, error, active } = encode;
-  if (total === 0) return <span className="text-dim">—</span>;
-  if (error > 0 && active === 0) {
-    return (
-      <>
-        <span className="status-pill error">Error</span>
-        <span className="text-dim" style={{ marginLeft: "0.3rem", fontSize: "0.8rem" }}>
-          {done}/{total}
-        </span>
-      </>
-    );
-  }
-  if (active > 0) {
-    return (
-      <>
-        <span className="status-pill running">Encoding</span>
-        <span className="text-dim" style={{ marginLeft: "0.3rem", fontSize: "0.8rem" }}>
-          {done}/{total}
-        </span>
-      </>
-    );
-  }
-  if (done === total && total > 0) {
-    return <span className="status-pill done">{done}/{total}</span>;
-  }
-  return (
-    <span className="text-dim" style={{ fontSize: "0.85rem" }}>{done}/{total}</span>
-  );
-}
 
 function ImportedDiscsSection() {
   const [data, setData] = useState(null);
@@ -291,14 +258,12 @@ function ImportedDiscsSection() {
               <col />
               <col style={{ width: "190px" }} />
               <col style={{ width: "210px" }} />
-              <col style={{ width: "140px" }} />
             </colgroup>
             <thead>
               <tr>
                 <th>Filename</th>
                 <th>Working title</th>
                 <th>Catalog</th>
-                <th>Encode</th>
               </tr>
             </thead>
             <tbody>
@@ -308,6 +273,17 @@ function ImportedDiscsSection() {
                     <span className="encoder-disc-name">
                       {d.imported_filename || <span className="text-dim">#{d.id}</span>}
                     </span>
+                    {d.disc_status === "error" && d.error_message && (
+                      <div
+                        className="text-dim"
+                        title={d.error_message}
+                        style={{ fontSize: "0.75rem", marginTop: "0.15rem", color: "var(--error)" }}
+                      >
+                        {d.error_message.length > 60
+                          ? d.error_message.slice(0, 60) + "…"
+                          : d.error_message}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className="text-dim" style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
@@ -323,20 +299,6 @@ function ImportedDiscsSection() {
                       edition={d.catalog_edition}
                       duplicateRole={d.catalog_duplicate_role}
                     />
-                  </td>
-                  <td>
-                    <EncodeCell encode={d.encode} discStatus={d.disc_status} />
-                    {d.disc_status === "error" && d.error_message && (
-                      <span
-                        className="error-hint"
-                        title={d.error_message}
-                        style={{ marginLeft: "0.4rem", fontSize: "0.75rem" }}
-                      >
-                        {d.error_message.length > 40
-                          ? d.error_message.slice(0, 40) + "…"
-                          : d.error_message}
-                      </span>
-                    )}
                   </td>
                 </tr>
               ))}
