@@ -2084,6 +2084,118 @@ button:disabled {
   color: var(--text-dim);
 }
 
+/* ── Audit tab: compact check-row layout ─────────────────────────────────── */
+
+.audit-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audit-check-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.audit-check-card--group-start {
+  margin-top: 10px;
+}
+
+.audit-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  min-height: 38px;
+}
+
+.audit-check-row--clickable {
+  cursor: pointer;
+}
+
+.audit-check-row--clickable:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] .audit-check-row--clickable:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.audit-check-group {
+  width: 160px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.audit-check-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.audit-check-chevron {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.audit-check-status {
+  flex-shrink: 0;
+  min-width: 100px;
+  text-align: right;
+}
+
+.audit-check-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.audit-check-pill--pending {
+  color: var(--text-dim);
+}
+
+.audit-check-pill--clear {
+  color: var(--good);
+}
+
+.audit-check-pill--issues {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
+.audit-check-detail {
+  border-top: 1px solid var(--panel-border);
+}
+
+.audit-check-detail-action {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.audit-check-detail-action .audit-action-row {
+  margin-top: 0;
+}
+
+.audit-check-detail-body {
+  overflow-x: auto;
+}
+
+.audit-import-counts {
+  flex: 1;
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+}
+
 /* ── Encoder tabs (DVD Encoders / CD Encoders) ────────────────────────────── */
 
 .encoder-header {
