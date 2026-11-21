@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 
 export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
@@ -26,6 +26,12 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const [confirmError, setConfirmError] = useState(null);
   // Per-candidate cover load errors (by candidate id)
   const [coverErrors, setCoverErrors] = useState(new Set());
+  // Per-candidate cover load successes
+  const [coverLoadedIds, setCoverLoadedIds] = useState(new Set());
+  // Keep Image objects alive until loaded so GC doesn't fire onerror prematurely
+  const preloadRefs = useRef([]);
+  // Whether candidates are still loading (after disc data is ready)
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
 
   function getCoverUrl(cand) {
     if (!cand) return null;
@@ -34,14 +40,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       : cand.image_url || null;
   }
 
-  // Preload all candidate cover thumbnails when the candidate list loads
+  // Preload all candidate cover thumbnails when the candidate list loads.
+  // Image objects are kept in a ref so GC can't fire onerror before the 1-2s CAA
+  // redirect chain completes. Only onload marks a cover ready; errors are handled
+  // by the display <img> onError so a preload timing issue never hides a cover.
   useEffect(() => {
+    preloadRefs.current = [];
     for (const cand of candidates) {
       const url = getCoverUrl(cand);
       if (!url) continue;
       const img = new Image();
-      img.onerror = () => setCoverErrors((prev) => new Set(prev).add(cand.id));
+      img.onload = () => setCoverLoadedIds((prev) => new Set(prev).add(cand.id));
       img.src = url;
+      preloadRefs.current.push(img);
     }
   }, [candidates]);
 
@@ -72,68 +83,89 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      api.getDiscCandidates(disc.id),
-      api.disc(disc.id),
-    ]).then(([cands, discData]) => {
-      setCandidates(cands);
-      const sorted = (discData.tracks || [])
-        .slice()
-        .sort((a, b) => a.track_number - b.track_number);
-      setPhysicalTracks(sorted);
+    setCandidatesLoading(true);
 
-      if (discData.album_title) {
-        // Already identified — pre-fill from saved data, all fields unlocked
-        setAlbumTitle(discData.album_title || "");
-        const artist = discData.album_artist || "";
-        const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
-        setAlbumArtist(various ? "Various" : artist);
-        setIsCompilation(various);
-        setPreCompilationArtist("");
-        if (various) setAlbumArtistLocked(true);
-        const titles = new Map();
-        const artists = new Map();
-        for (const t of sorted) {
-          titles.set(t.id, t.title || "");
-          artists.set(t.id, t.artist || "");
+    // Phase 1: load disc data so the form renders immediately (local DB, fast).
+    // Phase 2: load candidates after (may trigger external lookup — kept separate
+    //           so a slow MusicBrainz/Discogs call never delays the form).
+    let localTracks = [];
+    let discHasAlbum = false;
+    let discLoadDone = false;
+
+    api.disc(disc.id)
+      .then((discData) => {
+        const sorted = (discData.tracks || [])
+          .slice()
+          .sort((a, b) => a.track_number - b.track_number);
+        localTracks = sorted;
+        setPhysicalTracks(sorted);
+
+        if (discData.album_title) {
+          // Already identified — pre-fill from saved data
+          discHasAlbum = true;
+          setAlbumTitle(discData.album_title || "");
+          const artist = discData.album_artist || "";
+          const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+          setAlbumArtist(various ? "Various" : artist);
+          setIsCompilation(various);
+          setPreCompilationArtist("");
+          if (various) setAlbumArtistLocked(true);
+          const titles = new Map();
+          const artists = new Map();
+          for (const t of sorted) {
+            titles.set(t.id, t.title || "");
+            artists.set(t.id, t.artist || "");
+          }
+          setTrackTitles(titles);
+          setTrackArtists(artists);
+        } else {
+          // Empty maps — will be filled when candidates arrive
+          const titles = new Map();
+          const artists = new Map();
+          for (const t of sorted) { titles.set(t.id, ""); artists.set(t.id, ""); }
+          setTrackTitles(titles);
+          setTrackArtists(artists);
         }
-        setTrackTitles(titles);
-        setTrackArtists(artists);
-      } else if (cands.length > 0) {
-        // First candidate — populate all fields (nothing is locked yet)
-        const first = cands[0];
-        setAlbumTitle(first.title || "");
-        const artist = first.artist || "";
-        const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
-        setAlbumArtist(various ? "Various" : artist);
-        setIsCompilation(various);
-        setPreCompilationArtist("");
-        if (various) setAlbumArtistLocked(true);
-        setSelectedCandidateId(first.id);
-        setCandidateIndex(0);
-        const titles = new Map();
-        const artists = new Map();
-        for (const t of sorted) {
-          const mbTrack = first.tracks?.find(
-            (mt) => parseInt(mt.number, 10) === t.track_number
-          );
-          titles.set(t.id, mbTrack?.title || "");
-          artists.set(t.id, mbTrack?.artist || "");
+        discLoadDone = true;
+        setLoading(false);
+        return api.getDiscCandidates(disc.id);
+      })
+      .then((cands) => {
+        setCandidates(cands);
+        if (!discHasAlbum && cands.length > 0) {
+          // First candidate — populate all fields (nothing is locked yet)
+          const first = cands[0];
+          setAlbumTitle(first.title || "");
+          const artist = first.artist || "";
+          const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+          setAlbumArtist(various ? "Various" : artist);
+          setIsCompilation(various);
+          setPreCompilationArtist("");
+          if (various) setAlbumArtistLocked(true);
+          setSelectedCandidateId(first.id);
+          setCandidateIndex(0);
+          const titles = new Map();
+          const artists = new Map();
+          for (const t of localTracks) {
+            const mbTrack = first.tracks?.find(
+              (mt) => parseInt(mt.number, 10) === t.track_number
+            );
+            titles.set(t.id, mbTrack?.title || "");
+            artists.set(t.id, mbTrack?.artist || "");
+          }
+          setTrackTitles(titles);
+          setTrackArtists(artists);
         }
-        setTrackTitles(titles);
-        setTrackArtists(artists);
-      } else {
-        const titles = new Map();
-        const artists = new Map();
-        for (const t of sorted) { titles.set(t.id, ""); artists.set(t.id, ""); }
-        setTrackTitles(titles);
-        setTrackArtists(artists);
-      }
-      setLoading(false);
-    }).catch((e) => {
-      setLoadError(e.message);
-      setLoading(false);
-    });
+        setCandidatesLoading(false);
+      })
+      .catch((e) => {
+        if (!discLoadDone) {
+          setLoadError(e.message);
+          setLoading(false);
+        }
+        // If only candidates failed, the form still works in manual-entry mode
+        setCandidatesLoading(false);
+      });
   }, [disc.id]);
 
   useEffect(() => {
@@ -266,7 +298,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   }
 
   const coverUrl = getCoverUrl(currentCandidate);
-  const hasCover = !!coverUrl && !coverErrors.has(currentCandidate?.id);
+  const coverFailed = coverErrors.has(currentCandidate?.id);
+  const coverLoaded = coverLoadedIds.has(currentCandidate?.id);
+  const coverIsLoading = !!coverUrl && !coverFailed && !coverLoaded;
 
   return (
     <div className="identify-panel-overlay" onClick={onSkip}>
@@ -296,7 +330,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
           {!loading && !loadError && (
             <>
-              {!hasCandidates && (
+              {!hasCandidates && !candidatesLoading && (
                 <div className="cd-no-candidates-notice">
                   {disc.mb_lookup_status === "pending"
                     ? "MusicBrainz lookup in progress — enter track details manually while waiting"
@@ -305,47 +339,61 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
               )}
 
               <div className="cd-album-section">
-                {hasCandidates && (
+                {(hasCandidates || candidatesLoading) && (
                   <div className="cd-nav-row">
-                    <button
-                      className="cd-nav-btn"
-                      onClick={() => navToCandidate(candidateIndex - 1)}
-                      disabled={candidateIndex === 0}
-                    >
-                      ← Prev
-                    </button>
-                    <span className="cd-nav-counter">
-                      {candidateIndex + 1} of {candidates.length}
-                    </span>
-                    {currentCandidate?.source === "discogs" ? (
-                      <span className="candidate-source-badge candidate-source-badge--discogs">Discogs</span>
-                    ) : currentCandidate?.source === "musicbrainz" ? (
-                      <span className="candidate-source-badge candidate-source-badge--mb">MB</span>
-                    ) : null}
-                    <button
-                      className="cd-nav-btn"
-                      onClick={() => navToCandidate(candidateIndex + 1)}
-                      disabled={candidateIndex === candidates.length - 1}
-                    >
-                      Next →
-                    </button>
+                    {candidatesLoading ? (
+                      <span className="cd-nav-counter">Loading matches…</span>
+                    ) : (
+                      <>
+                        <button
+                          className="cd-nav-btn"
+                          onClick={() => navToCandidate(candidateIndex - 1)}
+                          disabled={candidateIndex === 0}
+                        >
+                          ← Prev
+                        </button>
+                        <span className="cd-nav-counter">
+                          {candidateIndex + 1} of {candidates.length}
+                        </span>
+                        {currentCandidate?.source === "discogs" ? (
+                          <span className="candidate-source-badge candidate-source-badge--discogs">Discogs</span>
+                        ) : currentCandidate?.source === "musicbrainz" ? (
+                          <span className="candidate-source-badge candidate-source-badge--mb">MB</span>
+                        ) : null}
+                        <button
+                          className="cd-nav-btn"
+                          onClick={() => navToCandidate(candidateIndex + 1)}
+                          disabled={candidateIndex === candidates.length - 1}
+                        >
+                          Next →
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
 
                 {hasCandidates && (
                   <div className="cd-cover-row">
                     <div className="cd-cover-box">
-                      {hasCover ? (
+                      {coverUrl && !coverFailed && (
                         <img
                           key={coverUrl}
                           src={coverUrl}
                           className="cd-cover-thumb"
+                          style={coverLoaded ? {} : { display: "none" }}
                           alt="Album cover"
+                          onLoad={() =>
+                            setCoverLoadedIds((prev) => new Set(prev).add(currentCandidate?.id))
+                          }
                           onError={() =>
                             setCoverErrors((prev) => new Set(prev).add(currentCandidate?.id))
                           }
                         />
-                      ) : (
+                      )}
+                      {coverIsLoading && (
+                        <div className="cd-cover-placeholder">Loading…</div>
+                      )}
+                      {(!coverUrl || coverFailed) && (
                         <div className="cd-cover-placeholder">No cover</div>
                       )}
                     </div>
