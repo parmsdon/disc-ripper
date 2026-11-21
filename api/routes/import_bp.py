@@ -243,17 +243,12 @@ def preview():
 def imported_discs():
     """
     List discs that entered through bulk import (imported=True), newest first.
-    Query params: filter (all|needs_id|encoding|complete|error), page, per_page.
+    Query params: filter (all|needs_id|encoding|complete|error).
     """
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
     disc_filter = request.args.get("filter", "all")
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(200, max(1, int(request.args.get("per_page", 50))))
-    except (ValueError, TypeError):
-        page, per_page = 1, 50
 
     discs = session.scalars(
         select(Disc)
@@ -309,13 +304,9 @@ def imported_discs():
     if disc_filter != "all":
         rows = [(d, enc, fk) for d, enc, fk in rows if fk == disc_filter]
 
-    total_filtered = len(rows)
-    offset = (page - 1) * per_page
-    page_rows = rows[offset: offset + per_page]
-
     dup_roles = load_dup_roles(session)
     result = []
-    for d, enc, _fk in page_rows:
+    for d, enc, _fk in rows:
         dr = dup_roles.get(d.catalog_id) if d.catalog_id else None
         result.append({
             "id": d.id,
@@ -336,10 +327,6 @@ def imported_discs():
     return jsonify({
         "discs": result,
         "counts": counts,
-        "total": total_filtered,
-        "page": page,
-        "per_page": per_page,
-        "has_more": offset + per_page < total_filtered,
     })
 
 

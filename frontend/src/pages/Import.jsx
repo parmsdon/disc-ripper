@@ -4,7 +4,6 @@ import { api } from "../api/client";
 
 const POLL_INTERVAL_MS = 3000;
 const DISCS_POLL_MS = 10000;
-const DISCS_PER_PAGE = 50;
 
 // ── File table ────────────────────────────────────────────────────────────────
 
@@ -179,13 +178,12 @@ function CatalogCell({ catalogId, catalogTitle, source, collectionNumber, editio
 function ImportedDiscsSection() {
   const [data, setData] = useState(null);
   const [discFilter, setDiscFilter] = useState("all");
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchDiscs = useCallback(async (p = page, f = discFilter) => {
+  const fetchDiscs = useCallback(async (f = discFilter) => {
     try {
-      const result = await api.getImportedDiscs({ filter: f, page: p, per_page: DISCS_PER_PAGE });
+      const result = await api.getImportedDiscs({ filter: f });
       setData(result);
       setError(null);
     } catch (err) {
@@ -193,23 +191,17 @@ function ImportedDiscsSection() {
     } finally {
       setLoading(false);
     }
-  }, [page, discFilter]);
+  }, [discFilter]);
 
   useEffect(() => {
     setLoading(true);
-    fetchDiscs(page, discFilter);
-  }, [discFilter, page]);
+    fetchDiscs(discFilter);
+  }, [discFilter]);
 
-  // Poll slowly so encode progress updates
   useEffect(() => {
-    const iv = setInterval(() => fetchDiscs(page, discFilter), DISCS_POLL_MS);
+    const iv = setInterval(() => fetchDiscs(discFilter), DISCS_POLL_MS);
     return () => clearInterval(iv);
-  }, [fetchDiscs, discFilter, page]);
-
-  function handleFilterChange(f) {
-    setDiscFilter(f);
-    setPage(1);
-  }
+  }, [fetchDiscs, discFilter]);
 
   const counts = data?.counts || {};
   const discs = data?.discs || [];
@@ -233,7 +225,7 @@ function ImportedDiscsSection() {
             <button
               key={f}
               className={`catalogue-filter-btn${discFilter === f ? " active" : ""}`}
-              onClick={() => handleFilterChange(f)}
+              onClick={() => setDiscFilter(f)}
             >
               {DISC_FILTER_LABEL[f]}{f !== "all" && ` (${cnt})`}
             </button>
@@ -252,81 +244,57 @@ function ImportedDiscsSection() {
             : "No discs match this filter."}
         </div>
       ) : (
-        <>
-          <table className="catalogue-table">
-            <colgroup>
-              <col />
-              <col style={{ width: "190px" }} />
-              <col style={{ width: "210px" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Filename</th>
-                <th>Working title</th>
-                <th>Catalog</th>
+        <table className="catalogue-table">
+          <colgroup>
+            <col />
+            <col style={{ width: "190px" }} />
+            <col style={{ width: "210px" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Working title</th>
+              <th>Catalog</th>
+            </tr>
+          </thead>
+          <tbody>
+            {discs.map((d) => (
+              <tr key={d.id} className="catalogue-row">
+                <td>
+                  <span className="encoder-disc-name">
+                    {d.imported_filename || <span className="text-dim">#{d.id}</span>}
+                  </span>
+                  {d.disc_status === "error" && d.error_message && (
+                    <div
+                      className="text-dim"
+                      title={d.error_message}
+                      style={{ fontSize: "0.75rem", marginTop: "0.15rem", color: "var(--error)" }}
+                    >
+                      {d.error_message.length > 60
+                        ? d.error_message.slice(0, 60) + "…"
+                        : d.error_message}
+                    </div>
+                  )}
+                </td>
+                <td>
+                  <span className="text-dim" style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                    {d.temp_name || "—"}
+                  </span>
+                </td>
+                <td>
+                  <CatalogCell
+                    catalogId={d.catalog_id}
+                    catalogTitle={d.catalog_title}
+                    source={d.catalog_match_source}
+                    collectionNumber={d.catalog_collection_number}
+                    edition={d.catalog_edition}
+                    duplicateRole={d.catalog_duplicate_role}
+                  />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {discs.map((d) => (
-                <tr key={d.id} className="catalogue-row">
-                  <td>
-                    <span className="encoder-disc-name">
-                      {d.imported_filename || <span className="text-dim">#{d.id}</span>}
-                    </span>
-                    {d.disc_status === "error" && d.error_message && (
-                      <div
-                        className="text-dim"
-                        title={d.error_message}
-                        style={{ fontSize: "0.75rem", marginTop: "0.15rem", color: "var(--error)" }}
-                      >
-                        {d.error_message.length > 60
-                          ? d.error_message.slice(0, 60) + "…"
-                          : d.error_message}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <span className="text-dim" style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
-                      {d.temp_name || "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <CatalogCell
-                      catalogId={d.catalog_id}
-                      catalogTitle={d.catalog_title}
-                      source={d.catalog_match_source}
-                      collectionNumber={d.catalog_collection_number}
-                      edition={d.catalog_edition}
-                      duplicateRole={d.catalog_duplicate_role}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Pagination */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", borderTop: "1px solid var(--panel-border)" }}>
-            <span className="text-dim" style={{ fontSize: "0.85rem" }}>
-              {(page - 1) * DISCS_PER_PAGE + 1}–
-              {Math.min(page * DISCS_PER_PAGE, data?.total || 0)} of {data?.total || 0}
-            </span>
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              style={{ padding: "0.2rem 0.6rem" }}
-            >
-              ← Prev
-            </button>
-            <button
-              disabled={!data?.has_more}
-              onClick={() => setPage((p) => p + 1)}
-              style={{ padding: "0.2rem 0.6rem" }}
-            >
-              Next →
-            </button>
-          </div>
-        </>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
