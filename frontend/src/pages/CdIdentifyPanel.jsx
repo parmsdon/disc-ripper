@@ -32,6 +32,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const preloadRefs = useRef([]);
   // Whether candidates are still loading (after disc data is ready)
   const [candidatesLoading, setCandidatesLoading] = useState(true);
+  // Cover lock — when true, the cover box stays on coverLockedCandidateId
+  const [coverLocked, setCoverLocked] = useState(false);
+  const [coverLockedCandidateId, setCoverLockedCandidateId] = useState(null);
 
   function getCoverUrl(cand) {
     if (!cand) return null;
@@ -213,6 +216,16 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     setAlbumArtistLocked(true);
   }
 
+  function handleCoverLock() {
+    if (coverLocked) {
+      setCoverLocked(false);
+      setCoverLockedCandidateId(null);
+    } else {
+      setCoverLocked(true);
+      setCoverLockedCandidateId(currentCandidate?.id ?? null);
+    }
+  }
+
   function lockAllRemaining() {
     setLockedTitleIds((prev) => new Set([...prev, ...physicalTracks.map((t) => t.id)]));
     if (isCompilation) {
@@ -289,6 +302,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
           artist: trackArtists.get(t.id) || "",
         })),
         selected_candidate_id: selectedCandidateId,
+        cover_candidate_id: coverLocked ? coverLockedCandidateId : null,
       });
       onConfirm();
     } catch (e) {
@@ -297,10 +311,23 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     }
   }
 
-  const coverUrl = getCoverUrl(currentCandidate);
-  const coverFailed = coverErrors.has(currentCandidate?.id);
-  const coverLoaded = coverLoadedIds.has(currentCandidate?.id);
+  const lockedCoverCand = coverLocked
+    ? (candidates.find((c) => c.id === coverLockedCandidateId) ?? null)
+    : null;
+  const displayCoverCand = lockedCoverCand ?? currentCandidate;
+  const coverUrl = getCoverUrl(displayCoverCand);
+  const coverFailed = coverErrors.has(displayCoverCand?.id);
+  const coverLoaded = coverLoadedIds.has(displayCoverCand?.id);
   const coverIsLoading = !!coverUrl && !coverFailed && !coverLoaded;
+
+  // Mini thumb shows the current candidate's cover when it differs from the locked cover
+  const currentCandCoverUrl = getCoverUrl(currentCandidate);
+  const showCurrentThumb = coverLocked &&
+    !!currentCandCoverUrl &&
+    currentCandCoverUrl !== coverUrl;
+  const currentThumbLoaded = coverLoadedIds.has(currentCandidate?.id);
+  const currentThumbFailed = coverErrors.has(currentCandidate?.id);
+  const currentThumbIsLoading = showCurrentThumb && !currentThumbFailed && !currentThumbLoaded;
 
   return (
     <div className="identify-panel-overlay" onClick={onSkip}>
@@ -383,10 +410,10 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                           style={coverLoaded ? {} : { display: "none" }}
                           alt="Album cover"
                           onLoad={() =>
-                            setCoverLoadedIds((prev) => new Set(prev).add(currentCandidate?.id))
+                            setCoverLoadedIds((prev) => new Set(prev).add(displayCoverCand?.id))
                           }
                           onError={() =>
-                            setCoverErrors((prev) => new Set(prev).add(currentCandidate?.id))
+                            setCoverErrors((prev) => new Set(prev).add(displayCoverCand?.id))
                           }
                         />
                       )}
@@ -395,6 +422,42 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                       )}
                       {(!coverUrl || coverFailed) && (
                         <div className="cd-cover-placeholder">No cover</div>
+                      )}
+                    </div>
+                    <div className="cd-cover-controls">
+                      <button
+                        className={`cd-lock-btn${coverLocked ? " cd-lock-btn-active" : ""}`}
+                        onClick={handleCoverLock}
+                      >
+                        {coverLocked ? "Locked ✓" : "Lock"}
+                      </button>
+                      {showCurrentThumb && (
+                        <div className="cd-cover-mini-wrap">
+                          <div className="cd-cover-mini-box">
+                            {!currentThumbFailed && (
+                              <img
+                                key={currentCandCoverUrl}
+                                src={currentCandCoverUrl}
+                                className="cd-cover-mini-thumb"
+                                style={currentThumbLoaded ? {} : { display: "none" }}
+                                alt="Current candidate cover"
+                                onLoad={() =>
+                                  setCoverLoadedIds((prev) => new Set(prev).add(currentCandidate?.id))
+                                }
+                                onError={() =>
+                                  setCoverErrors((prev) => new Set(prev).add(currentCandidate?.id))
+                                }
+                              />
+                            )}
+                            {currentThumbIsLoading && (
+                              <div className="cd-cover-mini-placeholder">…</div>
+                            )}
+                            {(!currentCandCoverUrl || currentThumbFailed) && (
+                              <div className="cd-cover-mini-placeholder">None</div>
+                            )}
+                          </div>
+                          <div className="cd-cover-mini-label">Current</div>
+                        </div>
                       )}
                     </div>
                   </div>

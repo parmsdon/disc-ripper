@@ -1462,6 +1462,7 @@ button:disabled {
 .cd-cover-row {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding: 4px 0 2px;
 }
 
@@ -1491,6 +1492,55 @@ button:disabled {
   justify-content: center;
   font-size: 11px;
   color: var(--text-dim);
+}
+
+.cd-cover-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-left: 8px;
+  padding-top: 2px;
+}
+
+.cd-cover-mini-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cd-cover-mini-box {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+}
+
+.cd-cover-mini-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--panel-border);
+  display: block;
+}
+
+.cd-cover-mini-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 3px;
+  border: 1px dashed var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.cd-cover-mini-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 .cd-disc-position {
