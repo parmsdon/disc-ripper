@@ -53,13 +53,13 @@ function MaxRippersControl({ maxRippers, driveCount, onChange }) {
   );
 }
 
-function RippingToggle({ rippingEnabled, saving, onToggle, disabled }) {
+function RippingToggle({ rippingEnabled, saving, onToggle }) {
   return (
     <button
       className={`ripping-toggle${rippingEnabled ? " active" : ""}`}
       onClick={onToggle}
-      disabled={saving || disabled}
-      title={disabled ? "Stop reconcile mode before starting ripping" : rippingEnabled ? "Ripping is enabled - click to stop" : "Ripping is stopped - click to start"}
+      disabled={saving}
+      title={rippingEnabled ? "Ripping is enabled - click to stop" : "Ripping is stopped - click to start"}
     >
       {rippingEnabled ? "Stop Ripping" : "Start Ripping"}
     </button>
@@ -487,101 +487,7 @@ function MbPopover({ candidates, onSelect, onClose }) {
   );
 }
 
-function MatchIsoPanel({ drive, oldIsos, onClose, onSuccess }) {
-  const disc = drive.current_disc;
-  const [titleValue, setTitleValue] = useState(disc?.temp_name || "");
-  const [selectedIso, setSelectedIso] = useState(null);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    function onKey(e) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const filteredIsos = oldIsos.filter(
-    (iso) => iso.filename.toLowerCase().includes(search.toLowerCase())
-  );
-
-  async function handleConfirm() {
-    if (!selectedIso || !disc) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await api.reconcileDisc({
-        drive_id: drive.id,
-        disc_fingerprint: disc.disc_fingerprint,
-        old_iso_filename: selectedIso.filename,
-        temp_name: titleValue.trim() || disc.disc_fingerprint,
-      });
-      onSuccess();
-      onClose();
-    } catch (e) {
-      setError(e.message);
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="match-iso-panel-backdrop" onClick={onClose}>
-      <div className="match-iso-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="match-iso-panel-header">
-          <div>
-            <div className="match-iso-panel-title">Match ISO to Disc</div>
-            <div className="match-iso-panel-fp">{disc?.disc_fingerprint || "Unknown disc"}</div>
-          </div>
-          <button className="mb-popover-close" onClick={onClose}>×</button>
-        </div>
-        <div className="match-iso-panel-body">
-          <div className="match-iso-title-row">
-            <span className="match-iso-title-label">Working title</span>
-            <input
-              type="text"
-              className="match-iso-title-input"
-              value={titleValue}
-              onChange={(e) => setTitleValue(e.target.value)}
-              placeholder="Working title…"
-            />
-          </div>
-          <input
-            type="text"
-            className="match-iso-search"
-            placeholder="Search ISOs…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="old-iso-list">
-            {filteredIsos.length === 0 ? (
-              <div className="empty-state">No ISOs found</div>
-            ) : filteredIsos.map((iso) => (
-              <div
-                key={iso.filename}
-                className={`old-iso-row${selectedIso?.filename === iso.filename ? " selected" : ""}${!iso.is_valid ? " old-iso-invalid" : ""}`}
-                onClick={() => setSelectedIso(iso)}
-              >
-                <span className="old-iso-filename">{iso.filename}</span>
-                <span className="old-iso-size">{iso.size_display}</span>
-                {!iso.is_valid && <span className="old-iso-warn">⚠ small</span>}
-              </div>
-            ))}
-          </div>
-          {error && <div className="match-iso-error">{error}</div>}
-        </div>
-        <div className="match-iso-panel-footer">
-          <button onClick={onClose}>Skip</button>
-          <button onClick={handleConfirm} disabled={!selectedIso || loading}>
-            {loading ? "Matching…" : "Confirm"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
+function DrivePanel({ drive, onRefresh }) {
   // An open tray can't have a disc actually loaded, no matter what
   // current_disc the backend still has on record for it (e.g. ejection
   // is in flight, or the disc was removed before the next API refresh) -
@@ -633,16 +539,6 @@ function DrivePanel({ drive, onRefresh, reconcileMode, onMatchIso }) {
         ) && (
           <RetryRipButton disc={disc} onRefresh={onRefresh} />
         )}
-        {reconcileMode && disc && disc.type === "dvd" && disc.disc_fingerprint
-          && disc.temp_name && !["ripped", "identifying", "done"].includes(disc.status) && (
-          <button
-            className="match-iso-btn"
-            onClick={() => onMatchIso(drive)}
-            title="Match an existing ISO to this disc"
-          >
-            Match ISO
-          </button>
-        )}
       </div>
 
       <div className="drive-row-status">
@@ -691,20 +587,10 @@ export default function DriveStatus() {
   const [rippingEnabled, setRippingEnabled] = useState(false);
   const [savingRippingEnabled, setSavingRippingEnabled] = useState(false);
   const [error, setError] = useState(null);
-  const [reconcileMode, setReconcileMode] = useState(false);
-  const [oldIsos, setOldIsos] = useState([]);
-  const [matchIsoDrive, setMatchIsoDrive] = useState(null);
-
   const fetchDrives = useCallback(() => {
     api.drives()
       .then(setDrives)
       .catch((e) => setError(e.message));
-  }, []);
-
-  const fetchOldIsos = useCallback(() => {
-    api.getOldIsos()
-      .then(setOldIsos)
-      .catch(() => {});
   }, []);
 
   const fetchMaxRippers = useCallback(() => {
@@ -729,30 +615,16 @@ export default function DriveStatus() {
     }
   }
 
-  async function handleReconcileSuccess() {
-    fetchDrives();
-    try {
-      const data = await api.getOldIsos();
-      setOldIsos(data);
-      if (data.length === 0) setReconcileMode(false);
-    } catch (_) {}
-  }
-
   useEffect(() => {
     fetchDrives();
     fetchMaxRippers();
     fetchRippingEnabled();
-    fetchOldIsos();
     const interval = setInterval(() => {
       fetchDrives();
       fetchRippingEnabled();
     }, 1000);
-    const isoInterval = setInterval(fetchOldIsos, 30000);
-    return () => {
-      clearInterval(interval);
-      clearInterval(isoInterval);
-    };
-  }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled, fetchOldIsos]);
+    return () => clearInterval(interval);
+  }, [fetchDrives, fetchMaxRippers, fetchRippingEnabled]);
 
   if (error) {
     return <div className="panel"><h2>Drive Status</h2><div className="empty-state">Error loading drives: {error}</div></div>;
@@ -786,18 +658,7 @@ export default function DriveStatus() {
           rippingEnabled={rippingEnabled}
           saving={savingRippingEnabled}
           onToggle={toggleRippingEnabled}
-          disabled={reconcileMode}
         />
-        <div className="control-bar-group">
-          <button
-            className={`reconcile-btn${reconcileMode ? " active" : ""}`}
-            onClick={() => setReconcileMode((m) => !m)}
-            disabled={rippingEnabled || (oldIsos.length === 0 && !reconcileMode)}
-            title={rippingEnabled ? "Stop ripping before reconciling" : oldIsos.length === 0 ? "No ISOs in old/ to reconcile" : "Match existing ISOs to detected discs"}
-          >
-            Reconcile ISOs ({oldIsos.length})
-          </button>
-        </div>
       </div>
 
       <div className="drive-list">
@@ -806,20 +667,9 @@ export default function DriveStatus() {
             key={drive.id}
             drive={drive}
             onRefresh={fetchDrives}
-            reconcileMode={reconcileMode}
-            onMatchIso={setMatchIsoDrive}
           />
         ))}
       </div>
-
-      {matchIsoDrive && (
-        <MatchIsoPanel
-          drive={matchIsoDrive}
-          oldIsos={oldIsos}
-          onClose={() => setMatchIsoDrive(null)}
-          onSuccess={handleReconcileSuccess}
-        />
-      )}
     </div>
   );
 }
