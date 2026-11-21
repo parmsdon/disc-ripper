@@ -28,6 +28,7 @@ def _job_to_dict(job: EncodeJob) -> dict:
         "status": job.status.value,
         "progress_percent": job.progress_percent,
         "progress_stage": job.progress_stage,
+        "eta_seconds": job.eta_seconds,
         "input_path": job.source_file,
         "output_path": job.output_path,
         "created_at": job.created_at.isoformat() if job.created_at else None,

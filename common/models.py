@@ -345,6 +345,7 @@ class EncodeJob(Base):
     error_message = Column(Text, nullable=True)
     progress_percent = Column(Integer, nullable=True)
     progress_stage = Column(String, nullable=True)
+    eta_seconds = Column(Integer, nullable=True)
     log = Column(Text, nullable=True)
 
     disc = relationship("Disc", back_populates="encode_jobs")

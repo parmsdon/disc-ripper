@@ -100,6 +100,26 @@ function formatDuration(job) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
+function formatEtaSecs(secs) {
+  if (secs < 60) return `${Math.round(secs)}s`;
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m ${Math.round(secs % 60)}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function EtaCell({ job }) {
+  if (job.status !== "running") return null;
+  let secs = null;
+  if (job.eta_seconds != null) {
+    secs = job.eta_seconds;
+  } else if (job.progress_percent > 0 && job.started_at) {
+    const elapsed = (Date.now() - new Date(job.started_at + "Z")) / 1000;
+    secs = elapsed * (100 - job.progress_percent) / job.progress_percent;
+  }
+  if (secs == null || secs < 0) return <span className="text-dim">—</span>;
+  return <span className="encoder-eta">{formatEtaSecs(secs)}</span>;
+}
+
 function discLabel(job) {
   const name = job.disc_temp_name || `Disc #${job.disc_id}`;
   if (job.track_number != null) {
@@ -121,6 +141,7 @@ function JobsTable({ jobs }) {
         <col style={{ width: "160px" }} />
         <col style={{ width: "65px" }} />
         <col style={{ width: "80px" }} />
+        <col style={{ width: "80px" }} />
       </colgroup>
       <thead>
         <tr>
@@ -130,6 +151,7 @@ function JobsTable({ jobs }) {
           <th>Progress</th>
           <th>Started</th>
           <th>Duration</th>
+          <th>ETA</th>
         </tr>
       </thead>
       <tbody>
@@ -149,6 +171,7 @@ function JobsTable({ jobs }) {
             </td>
             <td className="encoder-time">{formatTime(job.started_at)}</td>
             <td className="encoder-duration">{formatDuration(job)}</td>
+            <td className="encoder-eta-cell"><EtaCell job={job} /></td>
           </tr>
         ))}
       </tbody>

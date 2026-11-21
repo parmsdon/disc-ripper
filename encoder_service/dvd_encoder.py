@@ -33,8 +33,9 @@ MIN_ISO_SIZE = 100 * 1024 * 1024  # 100 MB — real DVDs are always larger
 
 _DVD_PROGRESS_THROTTLE_SECONDS = 5.0
 
-# HandBrake stdout: "Encoding: task 1 of 1, 12.50 % (195.23 fps, ...)"
+# HandBrake stdout: "Encoding: task 1 of 1, 12.50 % (195.23 fps, avg 192.10 fps, ETA 00h12m30s)"
 _HB_PROGRESS_RE = re.compile(r"Encoding: task \d+ of \d+,\s+([\d.]+)\s*%", re.IGNORECASE)
+_HB_ETA_RE = re.compile(r"ETA\s+(\d+)h(\d+)m(\d+)s", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -118,13 +119,16 @@ def _set_job_error(job_id: int, message: str, session_factory) -> None:
         session.close()
 
 
-def _update_job_progress(job_id: int, percent: int, stage: str, session_factory) -> None:
+def _update_job_progress(
+    job_id: int, percent: int, stage: str, session_factory, eta_seconds: int | None = None
+) -> None:
     session = session_factory()
     try:
         job = session.get(EncodeJob, job_id)
         if job is not None:
             job.progress_percent = percent
             job.progress_stage = stage
+            job.eta_seconds = eta_seconds
             session.commit()
     except Exception:
         logger.exception("Failed to update progress for EncodeJob %s", job_id)
@@ -170,7 +174,15 @@ def _run_handbrake(
                     m = _HB_PROGRESS_RE.search(line)
                     if m:
                         pct = min(99, int(float(m.group(1))))
-                        _update_job_progress(job_id, pct, stage, session_factory)
+                        eta_m = _HB_ETA_RE.search(line)
+                        eta_secs = None
+                        if eta_m:
+                            eta_secs = (
+                                int(eta_m.group(1)) * 3600
+                                + int(eta_m.group(2)) * 60
+                                + int(eta_m.group(3))
+                            )
+                        _update_job_progress(job_id, pct, stage, session_factory, eta_secs)
                         last_update = now
 
             proc.wait()
