@@ -12,7 +12,8 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const [albumArtist, setAlbumArtist] = useState("");
   const [trackTitles, setTrackTitles] = useState(new Map());
   const [trackArtists, setTrackArtists] = useState(new Map());
-  const [showArtistCol, setShowArtistCol] = useState(false);
+  const [isCompilation, setIsCompilation] = useState(false);
+  const [preCompilationArtist, setPreCompilationArtist] = useState("");
 
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [confirming, setConfirming] = useState(false);
@@ -21,7 +22,10 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   function applyCandidate(cand, tracks) {
     setAlbumTitle(cand.title || "");
     const artist = cand.artist || "";
-    setAlbumArtist(artist);
+    const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+    setAlbumArtist(various ? "Various" : artist);
+    setIsCompilation(various);
+    setPreCompilationArtist("");
     setSelectedCandidateId(cand.id);
     const titles = new Map();
     const artists = new Map();
@@ -34,7 +38,6 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     }
     setTrackTitles(titles);
     setTrackArtists(artists);
-    if (artist.trim().toLowerCase() === "various") setShowArtistCol(true);
   }
 
   useEffect(() => {
@@ -54,7 +57,10 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         // Already identified — pre-fill from existing saved data
         setAlbumTitle(discData.album_title || "");
         const artist = discData.album_artist || "";
-        setAlbumArtist(artist);
+        const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+        setAlbumArtist(various ? "Various" : artist);
+        setIsCompilation(various);
+        setPreCompilationArtist("");
         const titles = new Map();
         const artists = new Map();
         for (const t of sorted) {
@@ -63,7 +69,6 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         }
         setTrackTitles(titles);
         setTrackArtists(artists);
-        if (artist.trim().toLowerCase() === "various") setShowArtistCol(true);
       } else if (cands.length > 0) {
         applyCandidate(cands[0], sorted);
         setCandidateIndex(0);
@@ -105,17 +110,21 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     applyCandidate(candidates[idx], physicalTracks);
   }
 
-  function handleAlbumArtistChange(v) {
-    setAlbumArtist(v);
-    if (v.trim().toLowerCase() === "various") setShowArtistCol(true);
+  function handleCompilationToggle(checked) {
+    if (checked) {
+      setPreCompilationArtist(albumArtist);
+      setAlbumArtist("Various");
+    } else {
+      setAlbumArtist(preCompilationArtist);
+      setPreCompilationArtist("");
+    }
+    setIsCompilation(checked);
   }
 
   const setTitle = (id, v) =>
     setTrackTitles((prev) => new Map(prev).set(id, v));
   const setArtist = (id, v) =>
     setTrackArtists((prev) => new Map(prev).set(id, v));
-
-  const isCompilation = albumArtist.trim().toLowerCase() === "various";
 
   const canConfirm =
     !confirming &&
@@ -278,11 +287,11 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                 <div className="cd-album-row">
                   <span className="cd-album-label">Artist</span>
                   <input
-                    type="text"
-                    className="cd-album-input"
+                    type=”text”
+                    className=”cd-album-input”
                     value={albumArtist}
-                    onChange={(e) => handleAlbumArtistChange(e.target.value)}
-                    placeholder={'Album artist (use “Various” for compilations)'}
+                    onChange={(e) => setAlbumArtist(e.target.value)}
+                    placeholder=”Album artist”
                   />
                 </div>
 
@@ -290,10 +299,10 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                   <label className="cd-compilation-toggle">
                     <input
                       type="checkbox"
-                      checked={showArtistCol}
-                      onChange={(e) => setShowArtistCol(e.target.checked)}
+                      checked={isCompilation}
+                      onChange={(e) => handleCompilationToggle(e.target.checked)}
                     />
-                    Show track artists
+                    Compilation
                   </label>
 
                   {disc.mb_medium_count > 1 && (
@@ -311,13 +320,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     <colgroup>
                       <col className="cd-col-num" />
                       <col />
-                      {showArtistCol && <col className="cd-col-artist" />}
+                      {isCompilation && <col className="cd-col-artist" />}
                     </colgroup>
                     <thead>
                       <tr>
                         <th className="cd-col-num">#</th>
                         <th>Title</th>
-                        {showArtistCol && <th>Artist</th>}
+                        {isCompilation && <th>Artist</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -334,14 +343,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                               onChange={(e) => setTitle(track.id, e.target.value)}
                             />
                           </td>
-                          {showArtistCol && (
+                          {isCompilation && (
                             <td>
                               <input
                                 type="text"
                                 className="cd-track-input"
                                 value={trackArtists.get(track.id) || ""}
                                 onChange={(e) => setArtist(track.id, e.target.value)}
-                                placeholder={isCompilation ? "" : albumArtist}
                               />
                             </td>
                           )}
