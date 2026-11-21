@@ -5,10 +5,13 @@ Phase 1: basic listing/detail/status. Rip/encode job creation and
 metadata editing endpoints will be expanded in later phases.
 """
 
+import logging
 import os
 import threading
 import shutil
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import and_, case, func, or_, select, update
@@ -211,62 +214,66 @@ def identify_cd(disc_id):
     session.commit()
 
     # Kick off a background cover download. Uses force=True so re-identification
-    # replaces any previously cached cover.
-    # cover_candidate_id lets the UI lock the cover to a different candidate
-    # from the one that supplied the text metadata.
-    _disc_id = disc.id
-    _cfg = current_app.config["DISCRIPPER_CFG"]
-    _covers_dir = Path(_cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+    # replaces any previously cached cover. Wrapped in try/except so a cover
+    # error never rolls back the identification that was already committed.
+    try:
+        _disc_id = disc.id
+        _cfg = current_app.config["DISCRIPPER_CFG"]
+        _covers_dir = Path(_cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
 
-    def _dl_cover(did, mbid, cdir):
-        from common.cd_tagger import fetch_cover
-        fetch_cover(did, mbid, cdir, force=True)
+        def _dl_cover(did, mbid, cdir):
+            from common.cd_tagger import fetch_cover
+            fetch_cover(did, mbid, cdir, force=True)
 
-    def _dl_discogs_cover(did, iurl, cdir):
-        from common.cd_tagger import fetch_cover_from_url
-        fetch_cover_from_url(did, iurl, cdir, force=True)
+        def _dl_discogs_cover(did, iurl, cdir):
+            from common.cd_tagger import fetch_cover_from_url
+            fetch_cover_from_url(did, iurl, cdir, force=True)
 
-    cover_candidate_id = body.get("cover_candidate_id")
-    _cover_cand = None
-    if cover_candidate_id is not None:
-        _cover_cand = next(
-            (c for c in disc.lookup_candidates if c.id == cover_candidate_id), None
-        )
+        cover_candidate_id = body.get("cover_candidate_id")
+        _cover_cand = None
+        if cover_candidate_id is not None:
+            _cover_cand = next(
+                (c for c in disc.lookup_candidates if c.id == cover_candidate_id), None
+            )
 
-    if _cover_cand is not None:
-        # Explicit cover lock — use the specified candidate regardless of text source
-        if _cover_cand.source == "musicbrainz" and _cover_cand.mb_release_id:
+        if _cover_cand is not None:
+            # Explicit cover lock — use the specified candidate regardless of text source.
+            # mb_release_id lives in candidate_data, not as a model column.
+            _cover_mbid = (_cover_cand.candidate_data or {}).get("mb_release_id")
+            if _cover_cand.source == "musicbrainz" and _cover_mbid:
+                threading.Thread(
+                    target=_dl_cover,
+                    args=(_disc_id, _cover_mbid, _covers_dir),
+                    daemon=True,
+                ).start()
+            elif _cover_cand.source == "discogs":
+                _image_url = (_cover_cand.candidate_data or {}).get("image_url")
+                if _image_url:
+                    threading.Thread(
+                        target=_dl_discogs_cover,
+                        args=(_disc_id, _image_url, _covers_dir),
+                        daemon=True,
+                    ).start()
+        elif disc.mb_release_id:
             threading.Thread(
                 target=_dl_cover,
-                args=(_disc_id, _cover_cand.mb_release_id, _covers_dir),
+                args=(_disc_id, disc.mb_release_id, _covers_dir),
                 daemon=True,
             ).start()
-        elif _cover_cand.source == "discogs":
-            _image_url = (_cover_cand.candidate_data or {}).get("image_url")
+        elif selected_candidate_id is not None:
+            # Discogs candidate — download the full-size image stored in candidate_data.
+            _selected = next(
+                (c for c in disc.lookup_candidates if c.id == selected_candidate_id), None
+            )
+            _image_url = (_selected.candidate_data or {}).get("image_url") if _selected else None
             if _image_url:
                 threading.Thread(
                     target=_dl_discogs_cover,
                     args=(_disc_id, _image_url, _covers_dir),
                     daemon=True,
                 ).start()
-    elif disc.mb_release_id:
-        threading.Thread(
-            target=_dl_cover,
-            args=(_disc_id, disc.mb_release_id, _covers_dir),
-            daemon=True,
-        ).start()
-    elif selected_candidate_id is not None:
-        # Discogs candidate — download the full-size image stored in candidate_data.
-        _selected = next(
-            (c for c in disc.lookup_candidates if c.id == selected_candidate_id), None
-        )
-        _image_url = (_selected.candidate_data or {}).get("image_url") if _selected else None
-        if _image_url:
-            threading.Thread(
-                target=_dl_discogs_cover,
-                args=(_disc_id, _image_url, _covers_dir),
-                daemon=True,
-            ).start()
+    except Exception:
+        log.exception("Cover download setup failed for disc %s — identification saved", disc_id)
 
     return jsonify({"status": "ok"})
 
