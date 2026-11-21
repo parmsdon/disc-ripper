@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import CdIdentifyPanel from "./CdIdentifyPanel.jsx";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -44,6 +45,8 @@ export default function CdCatalogue() {
   const [filter, setFilter] = useState("all");
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
+  const [reidentifyDisc, setReidentifyDisc] = useState(null);
+  const [reidentifyLoadingId, setReidentifyLoadingId] = useState(null);
 
   const fetchRows = useCallback((f, d, s) => {
     api.getCdCatalogue(f, s, d)
@@ -64,6 +67,16 @@ export default function CdCatalogue() {
       fetchRows(filter, dirty, search);
     } catch (e) {
       setDeleteError(e.message);
+    }
+  }
+
+  async function handleReidentify(discId) {
+    setReidentifyLoadingId(discId);
+    try {
+      const disc = await api.disc(discId);
+      setReidentifyDisc(disc);
+    } finally {
+      setReidentifyLoadingId(null);
     }
   }
 
@@ -168,7 +181,17 @@ export default function CdCatalogue() {
                         ? <span className="dirty-rip-badge">⚠ dirty</span>
                         : <span className="catalogue-dim">—</span>}
                     </td>
-                    <td>
+                    <td className="catalogue-actions-cell">
+                      {row.identified && (
+                        <button
+                          className="catalogue-reidentify-btn"
+                          onClick={() => handleReidentify(row.disc_id)}
+                          disabled={reidentifyLoadingId === row.disc_id}
+                          title="Re-open identification panel to change cover or correct names"
+                        >
+                          {reidentifyLoadingId === row.disc_id ? "…" : "Re-identify"}
+                        </button>
+                      )}
                       {row.disc_id && !row.disc_temp_name && !row.album_title && (
                         <button
                           className="catalogue-delete-btn"
@@ -186,6 +209,17 @@ export default function CdCatalogue() {
           </table>
         )}
       </div>
+
+      {reidentifyDisc && (
+        <CdIdentifyPanel
+          disc={reidentifyDisc}
+          onConfirm={() => {
+            setReidentifyDisc(null);
+            fetchRows(filter, dirty, search);
+          }}
+          onSkip={() => setReidentifyDisc(null)}
+        />
+      )}
     </div>
   );
 }

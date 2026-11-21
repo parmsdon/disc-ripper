@@ -844,6 +844,36 @@ button:disabled {
   background: var(--bg);
 }
 
+.catalogue-actions-cell {
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.catalogue-reidentify-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.catalogue-reidentify-btn:hover {
+  opacity: 1;
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.catalogue-reidentify-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 .catalogue-delete-btn {
   background: transparent;
   border: 1px solid var(--error);
