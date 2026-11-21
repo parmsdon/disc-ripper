@@ -1616,6 +1616,8 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 
 .cd-track-table {
@@ -1646,7 +1648,7 @@ button:disabled {
 }
 
 .cd-col-artist {
-  width: 38%;
+  /* width unset — with table-layout:fixed, shares remaining space equally with title col */
 }
 
 .cd-track-row {
