@@ -1465,6 +1465,13 @@ button:disabled {
   padding: 4px 0 2px;
 }
 
+/* Fixed-size wrapper so layout never shifts while cover loads or is absent */
+.cd-cover-box {
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
 .cd-cover-thumb {
   width: 120px;
   height: 120px;
@@ -1578,6 +1585,27 @@ button:disabled {
   padding: 2px 8px;
 }
 
+.cd-lock-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.cd-album-row .cd-lock-btn {
+  min-width: 64px;
+}
+
+.cd-track-table .cd-lock-btn {
+  min-width: 0;
+  width: 100%;
+  padding: 3px 4px;
+}
+
+.cd-lock-btn-active {
+  color: var(--good);
+  border-color: var(--good);
+}
+
 .cd-album-toggles {
   display: flex;
   align-items: center;
@@ -1609,6 +1637,19 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.cd-lock-all-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 5px 16px 4px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.cd-lock-all-btn {
+  font-size: 12px;
+  padding: 3px 10px;
 }
 
 .cd-track-wrap {
@@ -1651,12 +1692,20 @@ button:disabled {
   /* width unset — with table-layout:fixed, shares remaining space equally with title col */
 }
 
+.cd-col-lock {
+  width: 54px;
+}
+
 .cd-track-row {
   border-bottom: 1px solid rgba(50, 56, 68, 0.5);
 }
 
 .cd-track-row:nth-child(even) {
   background: rgba(0, 0, 0, 0.08);
+}
+
+.cd-track-locked {
+  background: rgba(76, 175, 109, 0.05) !important;
 }
 
 .cd-track-table td {

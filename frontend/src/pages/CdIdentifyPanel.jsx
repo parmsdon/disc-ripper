@@ -15,33 +15,61 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const [isCompilation, setIsCompilation] = useState(false);
   const [preCompilationArtist, setPreCompilationArtist] = useState("");
 
+  // Lock state — locked fields are not overwritten when navigating candidates
+  const [albumTitleLocked, setAlbumTitleLocked] = useState(false);
+  const [albumArtistLocked, setAlbumArtistLocked] = useState(false);
+  const [lockedTitleIds, setLockedTitleIds] = useState(new Set());
+  const [lockedArtistIds, setLockedArtistIds] = useState(new Set());
+
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState(null);
+  // Per-candidate cover load errors (by candidate id)
+  const [coverErrors, setCoverErrors] = useState(new Set());
 
+  function getCoverUrl(cand) {
+    if (!cand) return null;
+    return cand.source === "musicbrainz" && cand.mb_release_id
+      ? `https://coverartarchive.org/release/${cand.mb_release_id}/front-250`
+      : cand.image_url || null;
+  }
+
+  // Preload all candidate cover thumbnails when the candidate list loads
+  useEffect(() => {
+    for (const cand of candidates) {
+      const url = getCoverUrl(cand);
+      if (!url) continue;
+      const img = new Image();
+      img.onerror = () => setCoverErrors((prev) => new Set(prev).add(cand.id));
+      img.src = url;
+    }
+  }, [candidates]);
+
+  // applyCandidate: fills only unlocked fields from the given candidate
   function applyCandidate(cand, tracks) {
-    setAlbumTitle(cand.title || "");
-    const artist = cand.artist || "";
-    const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
-    setAlbumArtist(various ? "Various" : artist);
-    setIsCompilation(various);
-    setPreCompilationArtist("");
+    if (!albumTitleLocked) setAlbumTitle(cand.title || "");
+    if (!albumArtistLocked && !isCompilation) {
+      const artist = cand.artist || "";
+      const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+      setAlbumArtist(various ? "Various" : artist);
+      setIsCompilation(various);
+      setPreCompilationArtist("");
+    }
     setSelectedCandidateId(cand.id);
-    const titles = new Map();
-    const artists = new Map();
+    const newTitles = new Map(trackTitles);
+    const newArtists = new Map(trackArtists);
     for (const track of tracks) {
       const mbTrack = cand.tracks?.find(
         (t) => parseInt(t.number, 10) === track.track_number
       );
-      titles.set(track.id, mbTrack?.title || "");
-      artists.set(track.id, mbTrack?.artist || "");
+      if (!lockedTitleIds.has(track.id)) newTitles.set(track.id, mbTrack?.title || "");
+      if (!lockedArtistIds.has(track.id)) newArtists.set(track.id, mbTrack?.artist || "");
     }
-    setTrackTitles(titles);
-    setTrackArtists(artists);
+    setTrackTitles(newTitles);
+    setTrackArtists(newArtists);
   }
 
   useEffect(() => {
-    setCoverError(false);
     setLoading(true);
     Promise.all([
       api.getDiscCandidates(disc.id),
@@ -54,7 +82,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       setPhysicalTracks(sorted);
 
       if (discData.album_title) {
-        // Already identified — pre-fill from existing saved data
+        // Already identified — pre-fill from saved data, all fields unlocked
         setAlbumTitle(discData.album_title || "");
         const artist = discData.album_artist || "";
         const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
@@ -70,8 +98,27 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         setTrackTitles(titles);
         setTrackArtists(artists);
       } else if (cands.length > 0) {
-        applyCandidate(cands[0], sorted);
+        // First candidate — populate all fields (nothing is locked yet)
+        const first = cands[0];
+        setAlbumTitle(first.title || "");
+        const artist = first.artist || "";
+        const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
+        setAlbumArtist(various ? "Various" : artist);
+        setIsCompilation(various);
+        setPreCompilationArtist("");
+        setSelectedCandidateId(first.id);
         setCandidateIndex(0);
+        const titles = new Map();
+        const artists = new Map();
+        for (const t of sorted) {
+          const mbTrack = first.tracks?.find(
+            (mt) => parseInt(mt.number, 10) === t.track_number
+          );
+          titles.set(t.id, mbTrack?.title || "");
+          artists.set(t.id, mbTrack?.artist || "");
+        }
+        setTrackTitles(titles);
+        setTrackArtists(artists);
       } else {
         const titles = new Map();
         const artists = new Map();
@@ -95,18 +142,8 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const hasCandidates = candidates.length > 0;
   const currentCandidate = hasCandidates ? candidates[candidateIndex] : null;
 
-  // Thumbnail URL for the current candidate
-  const coverThumbUrl = currentCandidate
-    ? currentCandidate.source === "musicbrainz" && currentCandidate.mb_release_id
-      ? `https://coverartarchive.org/release/${currentCandidate.mb_release_id}/front-250`
-      : currentCandidate.image_url || null
-    : null;
-
-  const [coverError, setCoverError] = useState(false);
-
   function navToCandidate(idx) {
     setCandidateIndex(idx);
-    setCoverError(false);
     applyCandidate(candidates[idx], physicalTracks);
   }
 
@@ -114,17 +151,44 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     if (checked) {
       setPreCompilationArtist(albumArtist);
       setAlbumArtist("Various");
+      setAlbumArtistLocked(true);
     } else {
       setAlbumArtist(preCompilationArtist);
       setPreCompilationArtist("");
+      setAlbumArtistLocked(false);
     }
     setIsCompilation(checked);
   }
 
-  const setTitle = (id, v) =>
+  // Typing auto-locks the field
+  const setTitle = (id, v) => {
     setTrackTitles((prev) => new Map(prev).set(id, v));
-  const setArtist = (id, v) =>
+    setLockedTitleIds((prev) => new Set(prev).add(id));
+  };
+  const setArtist = (id, v) => {
     setTrackArtists((prev) => new Map(prev).set(id, v));
+    setLockedArtistIds((prev) => new Set(prev).add(id));
+  };
+  function handleAlbumTitleChange(v) {
+    setAlbumTitle(v);
+    setAlbumTitleLocked(true);
+  }
+  function handleAlbumArtistChange(v) {
+    setAlbumArtist(v);
+    setAlbumArtistLocked(true);
+  }
+
+  function lockAllRemaining() {
+    setLockedTitleIds((prev) => new Set([...prev, ...physicalTracks.map((t) => t.id)]));
+    if (isCompilation) {
+      setLockedArtistIds((prev) => new Set([...prev, ...physicalTracks.map((t) => t.id)]));
+    }
+  }
+
+  const lockAllDisabled =
+    physicalTracks.length > 0 &&
+    physicalTracks.every((t) => lockedTitleIds.has(t.id)) &&
+    (!isCompilation || physicalTracks.every((t) => lockedArtistIds.has(t.id)));
 
   const canConfirm =
     !confirming &&
@@ -184,6 +248,9 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       setConfirming(false);
     }
   }
+
+  const coverUrl = getCoverUrl(currentCandidate);
+  const hasCover = !!coverUrl && !coverErrors.has(currentCandidate?.id);
 
   return (
     <div className="identify-panel-overlay" onClick={onSkip}>
@@ -251,17 +318,21 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
                 {hasCandidates && (
                   <div className="cd-cover-row">
-                    {coverThumbUrl && !coverError ? (
-                      <img
-                        key={coverThumbUrl}
-                        src={coverThumbUrl}
-                        className="cd-cover-thumb"
-                        alt="Album cover"
-                        onError={() => setCoverError(true)}
-                      />
-                    ) : (
-                      <div className="cd-cover-placeholder">No cover</div>
-                    )}
+                    <div className="cd-cover-box">
+                      {hasCover ? (
+                        <img
+                          key={coverUrl}
+                          src={coverUrl}
+                          className="cd-cover-thumb"
+                          alt="Album cover"
+                          onError={() =>
+                            setCoverErrors((prev) => new Set(prev).add(currentCandidate?.id))
+                          }
+                        />
+                      ) : (
+                        <div className="cd-cover-placeholder">No cover</div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -279,9 +350,17 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     type="text"
                     className="cd-album-input"
                     value={albumTitle}
-                    onChange={(e) => setAlbumTitle(e.target.value)}
+                    onChange={(e) => handleAlbumTitleChange(e.target.value)}
                     placeholder="Album title"
                   />
+                  {hasCandidates && (
+                    <button
+                      className={`cd-lock-btn${albumTitleLocked ? " cd-lock-btn-active" : ""}`}
+                      onClick={() => setAlbumTitleLocked((v) => !v)}
+                    >
+                      {albumTitleLocked ? "Locked ✓" : "Lock"}
+                    </button>
+                  )}
                 </div>
 
                 <div className="cd-album-row">
@@ -290,9 +369,17 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     type="text"
                     className="cd-album-input"
                     value={albumArtist}
-                    onChange={(e) => setAlbumArtist(e.target.value)}
+                    onChange={(e) => handleAlbumArtistChange(e.target.value)}
                     placeholder="Album artist"
                   />
+                  {hasCandidates && !isCompilation && (
+                    <button
+                      className={`cd-lock-btn${albumArtistLocked ? " cd-lock-btn-active" : ""}`}
+                      onClick={() => setAlbumArtistLocked((v) => !v)}
+                    >
+                      {albumArtistLocked ? "Locked ✓" : "Lock"}
+                    </button>
+                  )}
                 </div>
 
                 <div className="cd-album-toggles">
@@ -315,46 +402,103 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
               </div>
 
               <div className="cd-track-section">
+                {hasCandidates && (
+                  <div className="cd-lock-all-row">
+                    <button
+                      className="cd-lock-all-btn"
+                      onClick={lockAllRemaining}
+                      disabled={lockAllDisabled}
+                    >
+                      {lockAllDisabled ? "All locked ✓" : "Lock All Remaining"}
+                    </button>
+                  </div>
+                )}
+
                 <div className="cd-track-wrap">
                   <table className="cd-track-table">
                     <colgroup>
                       <col className="cd-col-num" />
                       <col />
+                      {hasCandidates && <col className="cd-col-lock" />}
                       {isCompilation && <col className="cd-col-artist" />}
+                      {isCompilation && hasCandidates && <col className="cd-col-lock" />}
                     </colgroup>
                     <thead>
                       <tr>
                         <th className="cd-col-num">#</th>
                         <th>Title</th>
+                        {hasCandidates && <th className="cd-col-lock"></th>}
                         {isCompilation && <th>Artist</th>}
+                        {isCompilation && hasCandidates && <th className="cd-col-lock"></th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {physicalTracks.map((track) => (
-                        <tr key={track.id} className="cd-track-row">
-                          <td className="cd-col-num cd-track-num">
-                            {track.track_number}
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              className="cd-track-input"
-                              value={trackTitles.get(track.id) || ""}
-                              onChange={(e) => setTitle(track.id, e.target.value)}
-                            />
-                          </td>
-                          {isCompilation && (
+                      {physicalTracks.map((track) => {
+                        const titleLocked = lockedTitleIds.has(track.id);
+                        const artistLocked = lockedArtistIds.has(track.id);
+                        return (
+                          <tr
+                            key={track.id}
+                            className={`cd-track-row${titleLocked ? " cd-track-locked" : ""}`}
+                          >
+                            <td className="cd-col-num cd-track-num">
+                              {track.track_number}
+                            </td>
                             <td>
                               <input
                                 type="text"
                                 className="cd-track-input"
-                                value={trackArtists.get(track.id) || ""}
-                                onChange={(e) => setArtist(track.id, e.target.value)}
+                                value={trackTitles.get(track.id) || ""}
+                                onChange={(e) => setTitle(track.id, e.target.value)}
                               />
                             </td>
-                          )}
-                        </tr>
-                      ))}
+                            {hasCandidates && (
+                              <td className="cd-col-lock">
+                                <button
+                                  className={`cd-lock-btn${titleLocked ? " cd-lock-btn-active" : ""}`}
+                                  onClick={() =>
+                                    setLockedTitleIds((prev) => {
+                                      const s = new Set(prev);
+                                      if (s.has(track.id)) s.delete(track.id);
+                                      else s.add(track.id);
+                                      return s;
+                                    })
+                                  }
+                                >
+                                  {titleLocked ? "✓" : "Lock"}
+                                </button>
+                              </td>
+                            )}
+                            {isCompilation && (
+                              <td>
+                                <input
+                                  type="text"
+                                  className="cd-track-input"
+                                  value={trackArtists.get(track.id) || ""}
+                                  onChange={(e) => setArtist(track.id, e.target.value)}
+                                />
+                              </td>
+                            )}
+                            {isCompilation && hasCandidates && (
+                              <td className="cd-col-lock">
+                                <button
+                                  className={`cd-lock-btn${artistLocked ? " cd-lock-btn-active" : ""}`}
+                                  onClick={() =>
+                                    setLockedArtistIds((prev) => {
+                                      const s = new Set(prev);
+                                      if (s.has(track.id)) s.delete(track.id);
+                                      else s.add(track.id);
+                                      return s;
+                                    })
+                                  }
+                                >
+                                  {artistLocked ? "✓" : "Lock"}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
