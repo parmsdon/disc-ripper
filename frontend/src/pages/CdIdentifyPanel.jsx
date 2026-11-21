@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { stripDiscSuffix } from "../utils/multiDiscSuffix.js";
 
 export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const [loading, setLoading] = useState(true);
@@ -94,6 +95,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     let localTracks = [];
     let discHasAlbum = false;
     let discLoadDone = false;
+    let discMbReleaseId = null;
 
     api.disc(disc.id)
       .then((discData) => {
@@ -104,15 +106,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         setPhysicalTracks(sorted);
 
         if (discData.album_title) {
-          // Already identified — pre-fill from saved data
+          // Already identified — pre-fill from saved data, all fields locked.
+          // Nothing changes on candidate navigation unless the user unlocks a field.
           discHasAlbum = true;
+          discMbReleaseId = discData.mb_release_id || null;
           setAlbumTitle(discData.album_title || "");
+          setAlbumTitleLocked(true);
           const artist = discData.album_artist || "";
           const various = ["various", "various artists"].includes(artist.trim().toLowerCase());
           setAlbumArtist(various ? "Various" : artist);
           setIsCompilation(various);
           setPreCompilationArtist("");
-          if (various) setAlbumArtistLocked(true);
+          setAlbumArtistLocked(true);
+          const ids = new Set(sorted.map((t) => t.id));
           const titles = new Map();
           const artists = new Map();
           for (const t of sorted) {
@@ -121,6 +127,8 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
           }
           setTrackTitles(titles);
           setTrackArtists(artists);
+          setLockedTitleIds(ids);
+          setLockedArtistIds(new Set(sorted.map((t) => t.id)));
         } else {
           // Empty maps — will be filled when candidates arrive
           const titles = new Map();
@@ -158,6 +166,17 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
           }
           setTrackTitles(titles);
           setTrackArtists(artists);
+        } else if (discHasAlbum && cands.length > 0) {
+          // Re-identify — fields are already locked. Find the previously selected
+          // candidate (or one matching disc.mb_release_id) and lock the cover to it.
+          setCandidateIndex(0);
+          const savedCand = cands.find((c) => c.selected)
+            ?? (discMbReleaseId ? cands.find((c) => c.mb_release_id === discMbReleaseId) : null);
+          if (savedCand) {
+            setSelectedCandidateId(savedCand.id);
+            setCoverLocked(true);
+            setCoverLockedCandidateId(savedCand.id);
+          }
         }
         setCandidatesLoading(false);
       })
@@ -268,22 +287,30 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         ? candidates.find((c) => c.id === selectedCandidateId)
         : null;
       const isDiscogs = selectedCandidate?.source === "discogs";
-      let albumTitleToSave = albumTitle;
-      let tempNameToSave = disc.temp_name;
       const multiDiscCount = isDiscogs
         ? selectedCandidate?.medium_count
         : disc.mb_medium_count;
+
+      // Strip any existing disc suffix before re-adding, so re-identification
+      // never double-appends "(Disc N of M)" or a medium title.
+      const bareAlbumTitle = stripDiscSuffix(albumTitle, disc.mb_medium_title);
+      let albumTitleToSave = bareAlbumTitle;
+      let tempNameToSave = disc.temp_name;
+
       if (multiDiscCount > 1) {
         const discSuffix = (!isDiscogs && disc.mb_medium_title)
           ? disc.mb_medium_title
           : `Disc ${(isDiscogs ? selectedCandidate?.medium_position : disc.mb_medium_position) ?? "?"} of ${multiDiscCount}`;
         const suffixTag = `(${discSuffix})`;
         const suffixTagLower = suffixTag.toLowerCase();
-        if (!albumTitle.toLowerCase().includes(suffixTagLower)) {
-          albumTitleToSave = `${albumTitle} ${suffixTag}`;
+        if (!bareAlbumTitle.toLowerCase().includes(suffixTagLower)) {
+          albumTitleToSave = `${bareAlbumTitle} ${suffixTag}`;
         }
         if (!isDiscogs) {
-          const baseTempName = disc.temp_name ?? albumTitle;
+          const baseTempName = stripDiscSuffix(
+            disc.temp_name ?? albumTitle,
+            disc.mb_medium_title,
+          );
           if (!baseTempName.toLowerCase().includes(suffixTagLower)) {
             tempNameToSave = `${baseTempName} ${suffixTag}`;
           } else {
