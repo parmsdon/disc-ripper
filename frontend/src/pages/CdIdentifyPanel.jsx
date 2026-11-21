@@ -287,11 +287,11 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                 <div className="cd-album-row">
                   <span className="cd-album-label">Artist</span>
                   <input
-                    type=”text”
-                    className=”cd-album-input”
+                    type="text"
+                    className="cd-album-input"
                     value={albumArtist}
                     onChange={(e) => setAlbumArtist(e.target.value)}
-                    placeholder=”Album artist”
+                    placeholder="Album artist"
                   />
                 </div>
 
