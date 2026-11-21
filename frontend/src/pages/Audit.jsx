@@ -181,9 +181,19 @@ export default function Audit() {
             <span className={`audit-summary-item${summary.job_issues > 0 ? " has-issues" : " clean"}`}>
               Jobs: {summary.job_issues} issue{summary.job_issues !== 1 ? "s" : ""}
             </span>
-            {summary.catalog_issues > 0 && (
-              <span className="audit-summary-item has-issues">
-                Catalog: {summary.catalog_issues} issue{summary.catalog_issues !== 1 ? "s" : ""}
+            <span className={`audit-summary-item${summary.catalog_issues > 0 ? " has-issues" : " clean"}`}>
+              Catalog: {summary.catalog_issues} issue{summary.catalog_issues !== 1 ? "s" : ""}
+            </span>
+            {imp && (
+              <span className={`audit-summary-item${imp.imported_unlinked > 0 ? " has-issues" : " clean"}`}
+                style={imp.imported_unlinked > 0 ? {
+                  color: "var(--warn)",
+                  background: "rgba(217,161,60,0.1)",
+                  borderColor: "rgba(217,161,60,0.3)",
+                } : undefined}>
+                {imp.imported_unlinked > 0
+                  ? `Import: ${imp.imported_unlinked} unlinked`
+                  : "Import: all linked"}
               </span>
             )}
           </div>
