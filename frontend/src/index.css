@@ -1541,40 +1541,25 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.cd-mb-cell {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cd-locked-cell {
-  flex: 1;
-  min-width: 0;
-}
-
 .cd-album-input {
-  width: 100%;
+  flex: 1;
   min-width: 0;
   height: 28px;
   font-size: 13px;
   padding: 2px 8px;
 }
 
-.cd-not-locked {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-style: italic;
+.cd-album-toggles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 58px;
 }
 
 .cd-compilation-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 58px;
   font-size: 12px;
   color: var(--text-dim);
   cursor: pointer;
@@ -1588,39 +1573,6 @@ button:disabled {
   height: 13px;
 }
 
-.cd-lock-btn {
-  flex-shrink: 0;
-  font-size: 11px;
-  padding: 3px 8px;
-}
-
-/* Album rows have enough space for a labelled lock button */
-.cd-album-row .cd-lock-btn {
-  min-width: 64px;
-}
-
-/* Table lock buttons must fit their fixed-width column */
-.cd-track-table .cd-lock-btn {
-  min-width: 0;
-  width: 100%;
-  padding: 3px 4px;
-}
-
-.cd-lock-btn-active {
-  color: var(--good);
-  border-color: var(--good);
-}
-
-.cd-lock-btn-save {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.cd-input-dirty {
-  border-color: var(--accent) !important;
-  outline: none;
-}
-
 /* Track section */
 
 .cd-track-section {
@@ -1628,19 +1580,6 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.cd-lock-all-row {
-  display: flex;
-  justify-content: flex-end;
-  padding: 5px 16px 4px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.cd-lock-all-btn {
-  font-size: 12px;
-  padding: 3px 10px;
 }
 
 .cd-track-wrap {
@@ -1677,9 +1616,8 @@ button:disabled {
   text-align: right;
 }
 
-/* Fixed-width lock button column — buttons use width:100% to fill it */
-.cd-col-lock {
-  width: 54px;
+.cd-col-artist {
+  width: 38%;
 }
 
 .cd-track-row {
@@ -1688,10 +1626,6 @@ button:disabled {
 
 .cd-track-row:nth-child(even) {
   background: rgba(0, 0, 0, 0.08);
-}
-
-.cd-track-locked {
-  background: rgba(76, 175, 109, 0.05) !important;
 }
 
 .cd-track-table td {
@@ -1703,10 +1637,6 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
   text-align: right;
-}
-
-.cd-mb-dimmed {
-  opacity: 0.4;
 }
 
 .cd-track-input {
@@ -1725,17 +1655,6 @@ button:disabled {
 .cd-track-input:focus {
   outline: none;
   border-color: var(--accent);
-}
-
-.cd-track-not-locked {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.cd-lock-progress {
-  flex: 1;
-  font-size: 12px;
-  color: var(--text-dim);
 }
 
 .cd-confirm-error {
