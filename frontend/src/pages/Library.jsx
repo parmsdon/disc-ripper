@@ -153,6 +153,9 @@ export default function Library() {
               <StatCard value={status.last_stats.dvd_iphone} label="DVD iPhone symlinks" />
               <StatCard value={status.last_stats.cd_flac}   label="CD FLAC symlinks" />
               <StatCard value={status.last_stats.cd_mp3}    label="CD MP3 symlinks" />
+              <StatCard value={status.last_stats.cd_files_tagged ?? 0}    label="CD files tagged" />
+              <StatCard value={status.last_stats.cd_covers_embedded ?? 0} label="CD covers embedded" />
+              <StatCard value={status.last_stats.cd_albums_no_cover ?? 0} label="CD albums no cover" />
               <StatCard value={status.last_stats.errors}    label="Errors" />
             </div>
           )}

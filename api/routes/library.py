@@ -17,6 +17,7 @@ from flask import Blueprint, jsonify, current_app
 from sqlalchemy import func, select
 
 from common.catalog_dups import load_dup_roles
+from common.cd_tagger import fetch_cover, tag_flac, tag_mp3
 from common.models import (
     Catalog, CDTrack, Disc, DiscStatus, DiscType, EncodeJob, EncodeProfile,
     JobStatus, Setting, naive_utcnow,
@@ -151,12 +152,16 @@ def generate_library():
     library_root = store_root / "library"
 
     t_start = time.monotonic()
+    covers_dir = store_root / "cd_store" / "covers"
     stats = {
         "dvd_iso": 0,
         "dvd_plex": 0,
         "dvd_iphone": 0,
         "cd_flac": 0,
         "cd_mp3": 0,
+        "cd_files_tagged": 0,
+        "cd_covers_embedded": 0,
+        "cd_albums_no_cover": 0,
         "errors": 0,
         "duration_seconds": 0.0,
     }
@@ -333,8 +338,36 @@ def generate_library():
             artist_folder = _sanitize(artist_raw or "Unknown Artist")
         album_folder = _sanitize(disc.album_title)
         is_various = artist_folder == "Various"
+        track_total = len(trackable)
 
+        # ── Year from selected candidate ──────────────────────────────────────
+        selected_cand = next((c for c in disc.lookup_candidates if c.selected), None)
+        year = None
+        if selected_cand and selected_cand.candidate_data:
+            year = selected_cand.candidate_data.get("year")
+
+        # ── Cover art ─────────────────────────────────────────────────────────
+        cover_data = None
+        if disc.mb_release_id:
+            cover_data = fetch_cover(disc.id, disc.mb_release_id, covers_dir)
+        if cover_data is None:
+            stats["cd_albums_no_cover"] += 1
+
+        # ── Tag and symlink each track ────────────────────────────────────────
         for track in trackable:
+            track_artist = track.artist if is_various else (disc.album_artist or "")
+            tag_dict = {
+                "title": track.title or "",
+                "artist": track_artist or "",
+                "album": disc.album_title or "",
+                "albumartist": disc.album_artist or "",
+                "tracknumber": track.track_number,
+                "tracktotal": track_total,
+                "discnumber": disc.mb_medium_position,
+                "disctotal": disc.mb_medium_count,
+                "year": year,
+            }
+
             prefix = f"{track.track_number:02d}"
             if is_various:
                 track_name = f"{prefix} - {_sanitize(track.title or 'Unknown')} [{_sanitize(track.artist or '')}]"
@@ -343,9 +376,22 @@ def generate_library():
 
             track_stem = f"track{track.track_number:02d}"
 
-            # FLAC symlink
+            # FLAC: tag then symlink
             if flac_profile:
                 flac_src = store_root / flac_profile.output_folder / str(disc.id) / f"{track_stem}.flac"
+                if flac_src.exists():
+                    try:
+                        modified = tag_flac(flac_src, tag_dict, cover_data)
+                        if modified:
+                            stats["cd_files_tagged"] += 1
+                            if cover_data:
+                                stats["cd_covers_embedded"] += 1
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "FLAC tag error disc=%s track=%s: %s", disc.id, track.track_number, e
+                        )
+                        stats["errors"] += 1
                 symlink = library_root / "cd" / "flac" / artist_folder / album_folder / f"{track_name}.flac"
                 try:
                     symlink.parent.mkdir(parents=True, exist_ok=True)
@@ -355,9 +401,22 @@ def generate_library():
                 except Exception:
                     stats["errors"] += 1
 
-            # MP3 symlink
+            # MP3: tag then symlink
             if mp3_profile:
                 mp3_src = store_root / mp3_profile.output_folder / str(disc.id) / f"{track_stem}.mp3"
+                if mp3_src.exists():
+                    try:
+                        modified = tag_mp3(mp3_src, tag_dict, cover_data)
+                        if modified:
+                            stats["cd_files_tagged"] += 1
+                            if cover_data:
+                                stats["cd_covers_embedded"] += 1
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "MP3 tag error disc=%s track=%s: %s", disc.id, track.track_number, e
+                        )
+                        stats["errors"] += 1
                 symlink = library_root / "cd" / "mp3" / artist_folder / album_folder / f"{track_name}.mp3"
                 try:
                     symlink.parent.mkdir(parents=True, exist_ok=True)
@@ -366,6 +425,19 @@ def generate_library():
                     stats["cd_mp3"] += 1
                 except Exception:
                     stats["errors"] += 1
+
+        # ── cover.jpg in library album folders ────────────────────────────────
+        if cover_data is not None:
+            cover_src = covers_dir / f"{disc.id}.jpg"
+            for view in ("flac", "mp3"):
+                cover_dest = library_root / "cd" / view / artist_folder / album_folder / "cover.jpg"
+                try:
+                    cover_dest.parent.mkdir(parents=True, exist_ok=True)
+                    if not cover_dest.exists():
+                        rel = os.path.relpath(cover_src, cover_dest.parent)
+                        os.symlink(rel, cover_dest)
+                except Exception:
+                    pass
 
     # ── Persist results ───────────────────────────────────────────────────────
     stats["duration_seconds"] = round(time.monotonic() - t_start, 2)

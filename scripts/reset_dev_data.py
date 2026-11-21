@@ -127,6 +127,7 @@ def main(env: str) -> None:
         get_store_path(cfg, "cd_store", "raw"),
         get_store_path(cfg, "cd_store", "flac"),
         get_store_path(cfg, "cd_store", "mp3_320"),
+        get_store_path(cfg, "cd_store", "covers"),
     ]
     library_dir = datastore_root / "library"
 
@@ -138,7 +139,7 @@ def main(env: str) -> None:
     print("Will clear filesystem:")
     print(f"  - Return {imported_count} imported ISO(s) to dvd_store/legacy/ (preserved)")
     print("  - dvd_store/raw/, extract/, plex/, iphone/")
-    print("  - cd_store/raw/, flac/, mp3_320/")
+    print("  - cd_store/raw/, flac/, mp3_320/, covers/")
     print("  - library/ (entire directory, recreated on next generation)")
     print("Will reset settings: library_last_generated, library_last_stats, "
           "encoder_service_status, encoder_service_heartbeat")
