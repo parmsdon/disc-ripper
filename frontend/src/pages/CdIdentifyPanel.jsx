@@ -190,13 +190,26 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     physicalTracks.every((t) => lockedTitleIds.has(t.id)) &&
     (!isCompilation || physicalTracks.every((t) => lockedArtistIds.has(t.id)));
 
+  const lockedTitleCount = physicalTracks.filter((t) => lockedTitleIds.has(t.id)).length;
+
+  // With candidates: all fields must be locked (and non-empty) to confirm.
+  // Without candidates: no lock buttons exist, so only non-empty is required.
   const canConfirm =
     !confirming &&
     albumTitle.trim() !== "" &&
+    (!hasCandidates || albumTitleLocked) &&
+    albumArtist.trim() !== "" &&
+    (!hasCandidates || albumArtistLocked) &&
     physicalTracks.length > 0 &&
-    physicalTracks.every((t) => (trackTitles.get(t.id) || "").trim() !== "") &&
+    physicalTracks.every((t) =>
+      (trackTitles.get(t.id) || "").trim() !== "" &&
+      (!hasCandidates || lockedTitleIds.has(t.id))
+    ) &&
     (!isCompilation ||
-      physicalTracks.every((t) => (trackArtists.get(t.id) || "").trim() !== ""));
+      physicalTracks.every((t) =>
+        (trackArtists.get(t.id) || "").trim() !== "" &&
+        (!hasCandidates || lockedArtistIds.has(t.id))
+      ));
 
   async function handleConfirm() {
     if (!canConfirm) return;
@@ -346,13 +359,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
                 <div className="cd-album-row">
                   <span className="cd-album-label">Album</span>
-                  <input
-                    type="text"
-                    className="cd-album-input"
-                    value={albumTitle}
-                    onChange={(e) => handleAlbumTitleChange(e.target.value)}
-                    placeholder="Album title"
-                  />
+                  <div className="cd-field-col">
+                    <input
+                      type="text"
+                      className="cd-album-input"
+                      value={albumTitle}
+                      onChange={(e) => handleAlbumTitleChange(e.target.value)}
+                      placeholder="Album title"
+                    />
+                    {hasCandidates && albumTitleLocked &&
+                      currentCandidate?.title && currentCandidate.title !== albumTitle && (
+                      <div className="cd-cand-hint">{currentCandidate.title}</div>
+                    )}
+                  </div>
                   {hasCandidates && (
                     <button
                       className={`cd-lock-btn${albumTitleLocked ? " cd-lock-btn-active" : ""}`}
@@ -365,13 +384,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
 
                 <div className="cd-album-row">
                   <span className="cd-album-label">Artist</span>
-                  <input
-                    type="text"
-                    className="cd-album-input"
-                    value={albumArtist}
-                    onChange={(e) => handleAlbumArtistChange(e.target.value)}
-                    placeholder="Album artist"
-                  />
+                  <div className="cd-field-col">
+                    <input
+                      type="text"
+                      className="cd-album-input"
+                      value={albumArtist}
+                      onChange={(e) => handleAlbumArtistChange(e.target.value)}
+                      placeholder="Album artist"
+                    />
+                    {hasCandidates && albumArtistLocked && !isCompilation &&
+                      currentCandidate?.artist && currentCandidate.artist !== albumArtist && (
+                      <div className="cd-cand-hint">{currentCandidate.artist}</div>
+                    )}
+                  </div>
                   {hasCandidates && !isCompilation && (
                     <button
                       className={`cd-lock-btn${albumArtistLocked ? " cd-lock-btn-active" : ""}`}
@@ -436,6 +461,15 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                       {physicalTracks.map((track) => {
                         const titleLocked = lockedTitleIds.has(track.id);
                         const artistLocked = lockedArtistIds.has(track.id);
+                        const mbTrack = currentCandidate?.tracks?.find(
+                          (t) => parseInt(t.number, 10) === track.track_number
+                        );
+                        const titleHint = hasCandidates && titleLocked &&
+                          mbTrack?.title && mbTrack.title !== (trackTitles.get(track.id) || "")
+                          ? mbTrack.title : null;
+                        const artistHint = hasCandidates && artistLocked &&
+                          mbTrack?.artist && mbTrack.artist !== (trackArtists.get(track.id) || "")
+                          ? mbTrack.artist : null;
                         return (
                           <tr
                             key={track.id}
@@ -451,6 +485,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                                 value={trackTitles.get(track.id) || ""}
                                 onChange={(e) => setTitle(track.id, e.target.value)}
                               />
+                              {titleHint && <div className="cd-cand-hint">{titleHint}</div>}
                             </td>
                             {hasCandidates && (
                               <td className="cd-col-lock">
@@ -477,6 +512,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                                   value={trackArtists.get(track.id) || ""}
                                   onChange={(e) => setArtist(track.id, e.target.value)}
                                 />
+                                {artistHint && <div className="cd-cand-hint">{artistHint}</div>}
                               </td>
                             )}
                             {isCompilation && hasCandidates && (
@@ -508,9 +544,13 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         </div>
 
         <div className="identify-panel-footer">
-          {confirmError && (
+          {confirmError ? (
             <span className="identify-error cd-confirm-error">{confirmError}</span>
-          )}
+          ) : hasCandidates ? (
+            <span className="cd-lock-progress">
+              {lockedTitleCount} / {physicalTracks.length} locked
+            </span>
+          ) : null}
           <button onClick={onSkip} disabled={confirming}>Skip</button>
           <button onClick={handleConfirm} disabled={!canConfirm}>
             {confirming ? "Confirming…" : "Confirm"}
