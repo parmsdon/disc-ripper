@@ -118,7 +118,7 @@ def normalize_discogs_release(release: dict, mb_medium_count: int) -> list[dict]
     images = release.get("images") or []
     primary_img = next((i for i in images if i.get("type") == "primary"), None)
     img = primary_img or (images[0] if images else None)
-    image_url = img.get("uri150") if img else None
+    image_url = img.get("uri") if img else None
 
     candidates = []
     for disc_num in range(1, total_discs + 1):

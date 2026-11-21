@@ -210,14 +210,14 @@ def identify_cd(disc_id):
 
     session.commit()
 
-    # Kick off a background cover download for the confirmed MB release.
-    # Uses force=True so re-identification replaces any previously cached cover.
+    # Kick off a background cover download. Uses force=True so re-identification
+    # replaces any previously cached cover.
     _mb_release_id = disc.mb_release_id
     _disc_id = disc.id
-    if _mb_release_id:
-        _cfg = current_app.config["DISCRIPPER_CFG"]
-        _covers_dir = Path(_cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+    _cfg = current_app.config["DISCRIPPER_CFG"]
+    _covers_dir = Path(_cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
 
+    if _mb_release_id:
         def _dl_cover(did, mbid, cdir):
             from common.cd_tagger import fetch_cover
             fetch_cover(did, mbid, cdir, force=True)
@@ -227,6 +227,22 @@ def identify_cd(disc_id):
             args=(_disc_id, _mb_release_id, _covers_dir),
             daemon=True,
         ).start()
+    elif selected_candidate_id is not None:
+        # Discogs candidate — download the full-size image stored in candidate_data.
+        _selected = next(
+            (c for c in disc.lookup_candidates if c.id == selected_candidate_id), None
+        )
+        _image_url = (_selected.candidate_data or {}).get("image_url") if _selected else None
+        if _image_url:
+            def _dl_discogs_cover(did, iurl, cdir):
+                from common.cd_tagger import fetch_cover_from_url
+                fetch_cover_from_url(did, iurl, cdir, force=True)
+
+            threading.Thread(
+                target=_dl_discogs_cover,
+                args=(_disc_id, _image_url, _covers_dir),
+                daemon=True,
+            ).start()
 
     return jsonify({"status": "ok"})
 

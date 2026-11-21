@@ -26,6 +26,27 @@ _JPEG_MIME = "image/jpeg"
 _FRONT_COVER = 3  # ID3/FLAC picture type for front cover
 
 
+def fetch_cover_from_url(disc_id: int, url: str, covers_dir: Path, force: bool = False) -> Optional[bytes]:
+    """
+    Return front-cover bytes, downloading from an arbitrary URL when not cached.
+    Saves to covers_dir/<disc_id>.jpg. Returns None when unavailable.
+    Pass force=True to re-download even if the file already exists.
+    """
+    covers_dir.mkdir(parents=True, exist_ok=True)
+    dest = covers_dir / f"{disc_id}.jpg"
+    if dest.exists() and not force:
+        return dest.read_bytes()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _CAA_UA})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = resp.read()
+        dest.write_bytes(data)
+        return data
+    except Exception as e:
+        log.warning("Cover art fetch failed for url %s: %s", url, e)
+        return None
+
+
 def fetch_cover(disc_id: int, mb_release_id: str, covers_dir: Path, force: bool = False) -> Optional[bytes]:
     """
     Return front-cover bytes, downloading from Cover Art Archive when not cached.
