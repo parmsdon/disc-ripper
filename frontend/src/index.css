@@ -151,26 +151,25 @@ body {
 }
 
 .grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .stat {
   background: var(--bg);
   border: 1px solid var(--panel-border);
   border-radius: 4px;
-  padding: 6px 10px;
-  min-width: 80px;
+  padding: 12px;
 }
 
 .stat .value {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .stat .label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2409,26 +2408,73 @@ button:disabled {
   margin: 0;
 }
 
-/* ── Health tab: responsive panel grid ─────────────────────────────────────── */
+/* ── Health tab: table layout ─────────────────────────────────────────────── */
 
-.health-panels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 10px;
-  align-items: start;
+.health-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.health-panels-grid .panel {
-  margin-bottom: 0;
-  padding: 10px 14px;
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 14px;
 }
 
-.health-panels-grid .panel h2 {
-  margin-bottom: 8px;
+.health-row-label {
+  width: 160px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.health-panels-grid .panel-heading-row {
-  margin-bottom: 8px;
+.health-row-tiles {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.health-row-suffix {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Tile overrides scoped to health rows */
+.health-row-tiles .stat {
+  width: 150px;
+  height: 60px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.health-row-tiles .stat .value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.health-row-tiles .stat .label {
+  font-size: 11px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Duplicate-role badges ──────────────────────────────────────────────────── */

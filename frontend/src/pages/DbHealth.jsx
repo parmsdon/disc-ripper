@@ -143,35 +143,33 @@ export default function DbHealth() {
         </Modal>
       )}
 
-      <div className="health-panels-grid">
-        <div className="panel">
-          <h2>Library</h2>
-          <div className="grid">
+      <div className="health-table">
+        <div className="health-row">
+          <div className="health-row-label">Library</div>
+          <div className="health-row-tiles">
             <Stat value={lib.dvd_count}      label="DVDs" />
             <Stat value={lib.cd_count}       label="CDs" />
             <Stat value={lib.cd_track_count} label="CD Tracks" />
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-heading-row">
-            <h2>My Movies</h2>
-            <span className="panel-subtitle">
-              {mm.last_sync
-                ? `Last synced: ${new Date(mm.last_sync).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
-                : "Never synced"}
-            </span>
-          </div>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">My Movies</div>
+          <div className="health-row-tiles">
             <Stat value={mm.catalog_count}     label="Catalog Entries" />
             <Stat value={mm.matched_to_ripped} label="Matched to Ripped Disc" tone={t(mm.matched_to_ripped, "good")} />
             <Stat value={mm.never_ripped}      label="Never Ripped" />
           </div>
+          <span className="health-row-suffix">
+            {mm.last_sync
+              ? `Last synced: ${new Date(mm.last_sync).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+              : "Never synced"}
+          </span>
         </div>
 
-        <div className="panel">
-          <h2>Identification</h2>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">Identification</div>
+          <div className="health-row-tiles">
             <Stat value={id.dvds_matched}       label="DVDs Matched"        tone={t(id.dvds_matched, "good")} />
             <Stat value={id.dvds_unmatched}     label="DVDs Unmatched"      tone={t(id.dvds_unmatched, "warn", "good")} />
             <Stat value={id.cds_identified}     label="CDs Identified"      tone={t(id.cds_identified, "good")} />
@@ -181,18 +179,18 @@ export default function DbHealth() {
           </div>
         </div>
 
-        <div className="panel">
-          <h2>Quality</h2>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">Quality</div>
+          <div className="health-row-tiles">
             <Stat value={qual.discs_needing_rerip} label="Needs Re-rip"      tone={t(qual.discs_needing_rerip, "warn", "good")} />
             <Stat value={qual.dirty_rips}          label="Dirty Rips"        tone={t(qual.dirty_rips, "warn", "good")} />
             <Stat value={qual.imperfect_tracks}    label="Imperfect Tracks"  tone={t(qual.imperfect_tracks, "warn", "good")} />
           </div>
         </div>
 
-        <div className="panel">
-          <h2>MusicBrainz</h2>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">MusicBrainz</div>
+          <div className="health-row-tiles">
             <Stat value={mb.cds_mb_found}     label="MB Found"     tone={t(mb.cds_mb_found, "good")} />
             <Stat
               value={mb.cds_mb_not_found}
@@ -211,11 +209,11 @@ export default function DbHealth() {
         </div>
 
         {pipelineActive && (
-          <div className="panel">
-            <h2>Pipeline</h2>
-            <div className="grid">
-              <Stat value={pipeline.currently_ripping}  label="Ripping"    tone={t(pipeline.currently_ripping, "info")} />
-              <Stat value={pipeline.currently_building} label="Building"   tone={t(pipeline.currently_building, "info")} />
+          <div className="health-row">
+            <div className="health-row-label">Pipeline</div>
+            <div className="health-row-tiles">
+              <Stat value={pipeline.currently_ripping}  label="Ripping"       tone={t(pipeline.currently_ripping, "info")} />
+              <Stat value={pipeline.currently_building} label="Building"      tone={t(pipeline.currently_building, "info")} />
               <Stat
                 value={pipeline.currently_identifying}
                 label="Identifying"
@@ -238,9 +236,9 @@ export default function DbHealth() {
           </div>
         )}
 
-        <div className="panel">
-          <h2>DVD Encodes</h2>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">DVD Encodes</div>
+          <div className="health-row-tiles">
             <Stat value={dvd_encodes.queued}   label="Queued" />
             <Stat value={dvd_encodes.running}  label="Running"  tone={t(dvd_encodes.running, "info")} />
             <Stat value={dvd_encodes.complete} label="Complete" tone={t(dvd_encodes.complete, "good")} />
@@ -248,9 +246,9 @@ export default function DbHealth() {
           </div>
         </div>
 
-        <div className="panel">
-          <h2>CD Encodes</h2>
-          <div className="grid">
+        <div className="health-row">
+          <div className="health-row-label">CD Encodes</div>
+          <div className="health-row-tiles">
             <Stat value={cd_encodes.queued}   label="Queued" />
             <Stat value={cd_encodes.running}  label="Running"  tone={t(cd_encodes.running, "info")} />
             <Stat value={cd_encodes.complete} label="Complete" tone={t(cd_encodes.complete, "good")} />
