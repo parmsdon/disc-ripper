@@ -26,14 +26,15 @@ _JPEG_MIME = "image/jpeg"
 _FRONT_COVER = 3  # ID3/FLAC picture type for front cover
 
 
-def fetch_cover(disc_id: int, mb_release_id: str, covers_dir: Path) -> Optional[bytes]:
+def fetch_cover(disc_id: int, mb_release_id: str, covers_dir: Path, force: bool = False) -> Optional[bytes]:
     """
     Return front-cover bytes, downloading from Cover Art Archive when not cached.
     Saves to covers_dir/<disc_id>.jpg. Returns None when unavailable.
+    Pass force=True to re-download even if the file already exists (e.g. after re-identification).
     """
     covers_dir.mkdir(parents=True, exist_ok=True)
     dest = covers_dir / f"{disc_id}.jpg"
-    if dest.exists():
+    if dest.exists() and not force:
         return dest.read_bytes()
     url = _CAA_URL.format(mbid=mb_release_id)
     try:

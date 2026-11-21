@@ -1457,6 +1457,35 @@ button:disabled {
   text-align: center;
 }
 
+/* Cover art thumbnail shown while browsing candidates */
+
+.cd-cover-row {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 2px;
+}
+
+.cd-cover-thumb {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  display: block;
+}
+
+.cd-cover-placeholder {
+  width: 120px;
+  height: 120px;
+  border-radius: 4px;
+  border: 1px dashed var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .cd-disc-position {
   font-size: 11px;
   color: var(--text-dim);
@@ -2169,6 +2198,60 @@ button:disabled {
 
 .stat-error {
   color: var(--error);
+}
+
+/* ── Library progress view ────────────────────────────────────────────────── */
+
+.lib-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.lib-progress-track {
+  height: 6px;
+  background: var(--panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lib-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.lib-progress-counts {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lib-progress-step {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-progress-elapsed {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.lib-error-msg {
+  font-size: 13px;
+  color: var(--error);
+  margin: 0 0 6px;
+}
+
+.lib-error-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
 }
 
 /* ── Duplicate-role badges ──────────────────────────────────────────────────── */

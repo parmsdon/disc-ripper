@@ -6,6 +6,7 @@ metadata editing endpoints will be expanded in later phases.
 """
 
 import os
+import threading
 import shutil
 from pathlib import Path
 
@@ -208,6 +209,25 @@ def identify_cd(disc_id):
             disc.mb_medium_count = cdata.get("medium_count")
 
     session.commit()
+
+    # Kick off a background cover download for the confirmed MB release.
+    # Uses force=True so re-identification replaces any previously cached cover.
+    _mb_release_id = disc.mb_release_id
+    _disc_id = disc.id
+    if _mb_release_id:
+        _cfg = current_app.config["DISCRIPPER_CFG"]
+        _covers_dir = Path(_cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+
+        def _dl_cover(did, mbid, cdir):
+            from common.cd_tagger import fetch_cover
+            fetch_cover(did, mbid, cdir, force=True)
+
+        threading.Thread(
+            target=_dl_cover,
+            args=(_disc_id, _mb_release_id, _covers_dir),
+            daemon=True,
+        ).start()
+
     return jsonify({"status": "ok"})
 
 
@@ -337,6 +357,7 @@ def get_disc_candidates(disc_id):
             "medium_title": data.get("medium_title"),
             "track_count": data.get("track_count"),
             "tracks": data.get("tracks", []),
+            "image_url": data.get("image_url"),
         })
     return jsonify(result)
 

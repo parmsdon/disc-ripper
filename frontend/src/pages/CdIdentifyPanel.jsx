@@ -38,6 +38,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   }
 
   useEffect(() => {
+    setCoverError(false);
     setLoading(true);
     Promise.all([
       api.getDiscCandidates(disc.id),
@@ -89,8 +90,18 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
   const hasCandidates = candidates.length > 0;
   const currentCandidate = hasCandidates ? candidates[candidateIndex] : null;
 
+  // Thumbnail URL for the current candidate
+  const coverThumbUrl = currentCandidate
+    ? currentCandidate.source === "musicbrainz" && currentCandidate.mb_release_id
+      ? `https://coverartarchive.org/release/${currentCandidate.mb_release_id}/front-250`
+      : currentCandidate.image_url || null
+    : null;
+
+  const [coverError, setCoverError] = useState(false);
+
   function navToCandidate(idx) {
     setCandidateIndex(idx);
+    setCoverError(false);
     applyCandidate(candidates[idx], physicalTracks);
   }
 
@@ -226,6 +237,22 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
                     >
                       Next →
                     </button>
+                  </div>
+                )}
+
+                {hasCandidates && (
+                  <div className="cd-cover-row">
+                    {coverThumbUrl && !coverError ? (
+                      <img
+                        key={coverThumbUrl}
+                        src={coverThumbUrl}
+                        className="cd-cover-thumb"
+                        alt="Album cover"
+                        onError={() => setCoverError(true)}
+                      />
+                    ) : (
+                      <div className="cd-cover-placeholder">No cover</div>
+                    )}
                   </div>
                 )}
 

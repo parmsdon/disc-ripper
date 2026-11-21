@@ -114,6 +114,12 @@ def normalize_discogs_release(release: dict, mb_medium_count: int) -> list[dict]
         return []  # No "N-T" positions found — single disc or unrecognised format
 
     total_discs = max(discs.keys())
+    # Extract primary image URL (uri150 ≈ 150px thumbnail)
+    images = release.get("images") or []
+    primary_img = next((i for i in images if i.get("type") == "primary"), None)
+    img = primary_img or (images[0] if images else None)
+    image_url = img.get("uri150") if img else None
+
     candidates = []
     for disc_num in range(1, total_discs + 1):
         raw_tracks = discs.get(disc_num, [])
@@ -132,6 +138,7 @@ def normalize_discogs_release(release: dict, mb_medium_count: int) -> list[dict]
             "medium_count": total_discs,
             "track_count": len(tracks),
             "tracks": tracks,
+            "image_url": image_url,
         })
 
     return candidates
