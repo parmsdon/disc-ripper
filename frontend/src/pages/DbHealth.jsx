@@ -157,7 +157,7 @@ export default function DbHealth() {
           <div className="health-row-label">My Movies</div>
           <div className="health-row-tiles">
             <Stat value={mm.catalog_count}     label="Catalog Entries" />
-            <Stat value={mm.matched_to_ripped} label="Matched to Ripped Disc" tone={t(mm.matched_to_ripped, "good")} />
+            <Stat value={mm.matched_to_ripped} label="Matches Ripped" tone={t(mm.matched_to_ripped, "good")} />
             <Stat value={mm.never_ripped}      label="Never Ripped" />
           </div>
           <span className="health-row-suffix">
