@@ -54,6 +54,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       setAlbumArtist(various ? "Various" : artist);
       setIsCompilation(various);
       setPreCompilationArtist("");
+      if (various) setAlbumArtistLocked(true);
     }
     setSelectedCandidateId(cand.id);
     const newTitles = new Map(trackTitles);
@@ -89,6 +90,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         setAlbumArtist(various ? "Various" : artist);
         setIsCompilation(various);
         setPreCompilationArtist("");
+        if (various) setAlbumArtistLocked(true);
         const titles = new Map();
         const artists = new Map();
         for (const t of sorted) {
@@ -106,6 +108,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         setAlbumArtist(various ? "Various" : artist);
         setIsCompilation(various);
         setPreCompilationArtist("");
+        if (various) setAlbumArtistLocked(true);
         setSelectedCandidateId(first.id);
         setCandidateIndex(0);
         const titles = new Map();
@@ -199,7 +202,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
     albumTitle.trim() !== "" &&
     (!hasCandidates || albumTitleLocked) &&
     albumArtist.trim() !== "" &&
-    (!hasCandidates || albumArtistLocked) &&
+    (!hasCandidates || albumArtistLocked || isCompilation) &&
     physicalTracks.length > 0 &&
     physicalTracks.every((t) =>
       (trackTitles.get(t.id) || "").trim() !== "" &&
