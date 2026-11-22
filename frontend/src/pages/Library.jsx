@@ -200,11 +200,11 @@ export default function Library() {
           <p className="library-last-generated">{formatDatetime(status.last_generated)}</p>
           {status.last_stats && (
             <div className="library-stats">
-              <StatCard value={status.last_stats.dvd_iso}    label="DVD ISO symlinks" />
-              <StatCard value={status.last_stats.dvd_plex}   label="DVD Plex symlinks" />
-              <StatCard value={status.last_stats.dvd_iphone} label="DVD iPhone symlinks" />
-              <StatCard value={status.last_stats.cd_flac}    label="CD FLAC symlinks" />
-              <StatCard value={status.last_stats.cd_mp3}     label="CD MP3 symlinks" />
+              <StatCard value={status.last_stats.dvd_iso}    label="DVD ISO links" />
+              <StatCard value={status.last_stats.dvd_plex}   label="DVD Plex links" />
+              <StatCard value={status.last_stats.dvd_iphone} label="DVD iPhone links" />
+              <StatCard value={status.last_stats.cd_flac}    label="CD FLAC links" />
+              <StatCard value={status.last_stats.cd_mp3}     label="CD MP3 links" />
               <StatCard value={status.last_stats.cd_albums_with_cover ?? 0} label="CD albums with cover" />
               <StatCard value={status.last_stats.cd_albums_no_cover ?? 0}   label="CD albums no cover" />
               <StatCard value={status.last_stats.cd_tracks_total ?? 0}      label="CD tracks total" />

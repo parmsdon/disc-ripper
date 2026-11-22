@@ -1,10 +1,11 @@
 """
-Library API — symlink tree generation.
+Library API — hard-link tree generation.
 
 GET  /api/library/status   — prerequisite counts + current/last generation info
 POST /api/library/generate — start background generation (returns immediately)
 """
 
+import errno
 import json
 import logging
 import os
@@ -353,7 +354,7 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
         disc_count = 0
         _hb("Scanning discs", 0, total_discs)
 
-        # ── DVD symlinks ───────────────────────────────────────────────────────
+        # ── DVD hard links ─────────────────────────────────────────────────────
         for disc_id in dvd_disc_ids:
             with Session() as s:
                 disc = s.get(Disc, disc_id)
@@ -377,12 +378,13 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                 iso_candidates = sorted(raw_dir.glob("*.iso")) if raw_dir.exists() else []
                 if iso_candidates:
                     iso_path = iso_candidates[0]
-                    symlink = library_root / "dvd" / "iso" / f"{link_name}.iso"
+                    dest = library_root / "dvd" / "iso" / f"{link_name}.iso"
                     try:
-                        rel = os.path.relpath(iso_path, symlink.parent)
-                        os.symlink(rel, symlink)
+                        os.link(iso_path, dest)
                         stats["dvd_iso"] += 1
-                    except Exception:
+                    except OSError as e:
+                        log.error("Hard link failed %s: %s%s", dest.name, e,
+                                  " (cross-device)" if e.errno == errno.EXDEV else "")
                         stats["errors"] += 1
 
                 if plex_prof:
@@ -396,12 +398,13 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                     if plex_job and plex_job.output_path:
                         plex_path = Path(plex_job.output_path)
                         ext = plex_path.suffix or ".mp4"
-                        symlink = library_root / "dvd" / "plex" / f"{link_name}{ext}"
+                        dest = library_root / "dvd" / "plex" / f"{link_name}{ext}"
                         try:
-                            rel = os.path.relpath(plex_path, symlink.parent)
-                            os.symlink(rel, symlink)
+                            os.link(plex_path, dest)
                             stats["dvd_plex"] += 1
-                        except Exception:
+                        except OSError as e:
+                            log.error("Hard link failed %s: %s%s", dest.name, e,
+                                      " (cross-device)" if e.errno == errno.EXDEV else "")
                             stats["errors"] += 1
 
                 if iphone_prof:
@@ -415,15 +418,16 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                     if iphone_job and iphone_job.output_path:
                         iphone_path = Path(iphone_job.output_path)
                         ext = iphone_path.suffix or ".mp4"
-                        symlink = library_root / "dvd" / "iphone" / f"{link_name}{ext}"
+                        dest = library_root / "dvd" / "iphone" / f"{link_name}{ext}"
                         try:
-                            rel = os.path.relpath(iphone_path, symlink.parent)
-                            os.symlink(rel, symlink)
+                            os.link(iphone_path, dest)
                             stats["dvd_iphone"] += 1
-                        except Exception:
+                        except OSError as e:
+                            log.error("Hard link failed %s: %s%s", dest.name, e,
+                                      " (cross-device)" if e.errno == errno.EXDEV else "")
                             stats["errors"] += 1
 
-        # ── CD symlinks + tagging ──────────────────────────────────────────────
+        # ── CD hard links + tagging ───────────────────────────────────────────
         for disc_id in cd_disc_ids:
             with Session() as s:
                 disc = s.get(Disc, disc_id)
@@ -496,13 +500,14 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                             except Exception as e:
                                 log.warning("FLAC tag error disc=%s track=%s: %s", disc.id, track.track_number, e)
                                 stats["errors"] += 1
-                        symlink = library_root / "cd" / "flac" / artist_folder / album_folder / f"{track_name}.flac"
+                        dest = library_root / "cd" / "flac" / artist_folder / album_folder / f"{track_name}.flac"
                         try:
-                            symlink.parent.mkdir(parents=True, exist_ok=True)
-                            rel = os.path.relpath(flac_src, symlink.parent)
-                            os.symlink(rel, symlink)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            os.link(flac_src, dest)
                             stats["cd_flac"] += 1
-                        except Exception:
+                        except OSError as e:
+                            log.error("Hard link failed %s: %s%s", dest.name, e,
+                                      " (cross-device)" if e.errno == errno.EXDEV else "")
                             stats["errors"] += 1
 
                     if mp3_prof:
@@ -515,13 +520,14 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                             except Exception as e:
                                 log.warning("MP3 tag error disc=%s track=%s: %s", disc.id, track.track_number, e)
                                 stats["errors"] += 1
-                        symlink = library_root / "cd" / "mp3" / artist_folder / album_folder / f"{track_name}.mp3"
+                        dest = library_root / "cd" / "mp3" / artist_folder / album_folder / f"{track_name}.mp3"
                         try:
-                            symlink.parent.mkdir(parents=True, exist_ok=True)
-                            rel = os.path.relpath(mp3_src, symlink.parent)
-                            os.symlink(rel, symlink)
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            os.link(mp3_src, dest)
                             stats["cd_mp3"] += 1
-                        except Exception:
+                        except OSError as e:
+                            log.error("Hard link failed %s: %s%s", dest.name, e,
+                                      " (cross-device)" if e.errno == errno.EXDEV else "")
                             stats["errors"] += 1
 
                 # cover.jpg in library album folders
@@ -534,10 +540,11 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                         try:
                             cover_dest.parent.mkdir(parents=True, exist_ok=True)
                             if not cover_dest.exists():
-                                rel = os.path.relpath(cover_src, cover_dest.parent)
-                                os.symlink(rel, cover_dest)
-                        except Exception:
-                            pass
+                                os.link(cover_src, cover_dest)
+                        except OSError as e:
+                            log.error("Hard link failed %s: %s%s", cover_dest.name, e,
+                                      " (cross-device)" if e.errno == errno.EXDEV else "")
+                            stats["errors"] += 1
 
         # ── Persist final results ──────────────────────────────────────────────
         stats["duration_seconds"] = round(time.monotonic() - t_start, 2)
