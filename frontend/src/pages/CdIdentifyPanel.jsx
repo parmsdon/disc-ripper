@@ -298,9 +298,7 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
       let tempNameToSave = disc.temp_name;
 
       if (multiDiscCount > 1) {
-        const discSuffix = (!isDiscogs && disc.mb_medium_title)
-          ? disc.mb_medium_title
-          : `Disc ${(isDiscogs ? selectedCandidate?.medium_position : disc.mb_medium_position) ?? "?"} of ${multiDiscCount}`;
+        const discSuffix = `Disc ${(isDiscogs ? selectedCandidate?.medium_position : disc.mb_medium_position) ?? "?"} of ${multiDiscCount}`;
         const suffixTag = `(${discSuffix})`;
         const suffixTagLower = suffixTag.toLowerCase();
         if (!bareAlbumTitle.toLowerCase().includes(suffixTagLower)) {
