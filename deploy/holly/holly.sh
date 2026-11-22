@@ -58,16 +58,18 @@ validate_paths() {
 cmd_up() {
     validate_paths
 
-    # Build protocol args based on SAMBA_ALLOW_SMB1 (default: false = SMB2+, modern auth)
+    # Build protocol args based on SAMBA_ALLOW_SMB1 (default: false = SMB2+, modern auth).
+    # SAMBA_GLOBAL_CONFIG_<NAME>=<VALUE> → writes " NAME = VALUE" to [global] in smb.conf.
+    # Spaces in NAME are encoded as _SPACE_. VALUE is the value only, not "key = value".
     samba_protocol_args=()
     if [[ "${SAMBA_ALLOW_SMB1:-false}" == "true" ]]; then
         samba_protocol_args=(
-            -e "SAMBA_GLOBAL_CONFIG_server_min_protocol=server min protocol = NT1"
-            -e "SAMBA_GLOBAL_CONFIG_ntlm_auth=ntlm auth = ntlmv1-permitted"
+            -e "SAMBA_GLOBAL_CONFIG_server_SPACE_min_SPACE_protocol=NT1"
+            -e "SAMBA_GLOBAL_CONFIG_ntlm_SPACE_auth=ntlmv1-permitted"
         )
     else
         samba_protocol_args=(
-            -e "SAMBA_GLOBAL_CONFIG_server_min_protocol=server min protocol = SMB2"
+            -e "SAMBA_GLOBAL_CONFIG_server_SPACE_min_SPACE_protocol=SMB2"
         )
     fi
 
@@ -88,12 +90,33 @@ cmd_up() {
         -e "SAMBA_VOLUME_CONFIG_iso=[iso]; path=/mnt/library/dvd/iso; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
         -e "SAMBA_VOLUME_CONFIG_iphone=[iphone]; path=/mnt/library/dvd/iphone; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
         -e "SAMBA_VOLUME_CONFIG_plex=[plex]; path=/mnt/library/dvd/plex; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
-        -e "SAMBA_GLOBAL_CONFIG_oplocks=oplocks = no" \
-        -e "SAMBA_GLOBAL_CONFIG_l2oplocks=level2 oplocks = no" \
-        -e "SAMBA_GLOBAL_CONFIG_strictlocking=strict locking = no" \
         "${samba_protocol_args[@]}" \
         -v "${LIBRARY_PATH}:/mnt/library:ro" \
-        ghcr.io/servercontainers/samba
+        ghcr.io/servercontainers/samba:a3.24.4-s4.23.8-r0
+
+    # Verify smb.conf loaded cleanly (wait up to 15s for entrypoint to write it)
+    echo "Verifying Samba configuration ..."
+    samba_ok=0
+    for i in $(seq 1 15); do
+        if docker exec "$SAMBA_CONTAINER" test -f /etc/samba/smb.conf 2>/dev/null; then
+            samba_ok=1
+            break
+        fi
+        sleep 1
+    done
+    if [[ $samba_ok -eq 0 ]]; then
+        echo "Error: smb.conf was not written after 15s." >&2
+        docker logs --tail=30 "$SAMBA_CONTAINER" >&2
+        docker rm -f "$SAMBA_CONTAINER"
+        exit 1
+    fi
+    if ! docker exec "$SAMBA_CONTAINER" testparm -s >/dev/null; then
+        echo "Error: Samba configuration failed testparm validation." >&2
+        docker logs --tail=30 "$SAMBA_CONTAINER" >&2
+        docker rm -f "$SAMBA_CONTAINER"
+        exit 1
+    fi
+    echo "Samba config OK."
 
     echo "Starting $PLEX_CONTAINER ..."
     plex_claim_args=()
@@ -162,7 +185,7 @@ cmd_logs() {
 }
 
 cmd_pull() {
-    docker pull ghcr.io/servercontainers/samba
+    docker pull ghcr.io/servercontainers/samba:a3.24.4-s4.23.8-r0
     docker pull plexinc/pms-docker
 }
 

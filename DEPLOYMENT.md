@@ -563,11 +563,12 @@ All containers use the existing `staticnet` Docker network with static IPs:
 | dev  | discripper-plex-dev   | 192.168.0.241   |
 
 **Container images:**
-- **Samba:** `ghcr.io/servercontainers/samba` — actively maintained (last
-  update 2026-07-11); configuration is entirely via environment variables so
-  no separate smb.conf file is needed, and the Samba password is passed via
-  `--env-file` rather than on the command line (not visible in `ps` or in
-  the Docker command/args fields).
+- **Samba:** `ghcr.io/servercontainers/samba:a3.24.4-s4.23.8-r0` (Alpine
+  3.24.4, Samba 4.23.8; last changelog entry 2026-07-11). Configuration is
+  entirely via environment variables — no separate smb.conf needed. The Samba
+  password is passed via `--env-file` so it does not appear in `ps` or in
+  Docker's command/args fields. `up` runs `testparm -s` after start and
+  removes the container immediately if the config fails to load.
 - **Plex:** `plexinc/pms-docker` — the official Plex image.
 
 ---
