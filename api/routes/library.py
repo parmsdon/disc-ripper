@@ -144,7 +144,9 @@ def get_status():
         )
     ) or 0
 
-    cd_covers_fetching = cover_tracker.count()
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    covers_dir_status = Path(cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+    cd_covers_fetching = cover_tracker.count(covers_dir_status)
 
     prerequisites = {
         "dvds_unmatched": dvds_unmatched,
@@ -253,7 +255,8 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
         stats = {
             "dvd_iso": 0, "dvd_plex": 0, "dvd_iphone": 0,
             "cd_flac": 0, "cd_mp3": 0,
-            "cd_files_tagged": 0, "cd_covers_embedded": 0, "cd_albums_no_cover": 0,
+            "cd_albums_with_cover": 0, "cd_albums_no_cover": 0,
+            "cd_tracks_total": 0, "cd_files_updated": 0,
             "errors": 0, "duration_seconds": 0.0,
         }
 
@@ -459,6 +462,8 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                     cover_data = fetch_cover(disc.id, disc.mb_release_id, covers_dir)
                 if cover_data is None:
                     stats["cd_albums_no_cover"] += 1
+                else:
+                    stats["cd_albums_with_cover"] += 1
 
                 for track in trackable:
                     track_artist = track.artist if is_various else (disc.album_artist or "")
@@ -484,12 +489,10 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                     if flac_prof:
                         flac_src = store_root / flac_prof[1] / str(disc.id) / f"{track_stem}.flac"
                         if flac_src.exists():
+                            stats["cd_tracks_total"] += 1
                             try:
-                                modified = tag_flac(flac_src, tag_dict, cover_data)
-                                if modified:
-                                    stats["cd_files_tagged"] += 1
-                                    if cover_data:
-                                        stats["cd_covers_embedded"] += 1
+                                if tag_flac(flac_src, tag_dict, cover_data):
+                                    stats["cd_files_updated"] += 1
                             except Exception as e:
                                 log.warning("FLAC tag error disc=%s track=%s: %s", disc.id, track.track_number, e)
                                 stats["errors"] += 1
@@ -505,12 +508,10 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                     if mp3_prof:
                         mp3_src = store_root / mp3_prof[1] / str(disc.id) / f"{track_stem}.mp3"
                         if mp3_src.exists():
+                            stats["cd_tracks_total"] += 1
                             try:
-                                modified = tag_mp3(mp3_src, tag_dict, cover_data)
-                                if modified:
-                                    stats["cd_files_tagged"] += 1
-                                    if cover_data:
-                                        stats["cd_covers_embedded"] += 1
+                                if tag_mp3(mp3_src, tag_dict, cover_data):
+                                    stats["cd_files_updated"] += 1
                             except Exception as e:
                                 log.warning("MP3 tag error disc=%s track=%s: %s", disc.id, track.track_number, e)
                                 stats["errors"] += 1

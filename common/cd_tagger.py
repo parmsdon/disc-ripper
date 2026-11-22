@@ -6,6 +6,7 @@ in-place. Only modifies files whose tags differ from the desired values,
 so repeat library generations are fast. Never touches audio data.
 """
 
+import hashlib
 import logging
 import urllib.request
 import urllib.error
@@ -21,6 +22,10 @@ from mutagen.id3 import (
 log = logging.getLogger(__name__)
 
 _CAA_URL = "https://coverartarchive.org/release/{mbid}/front-500"
+
+
+def _cover_hash(data: bytes) -> bytes:
+    return hashlib.md5(data, usedforsecurity=False).digest()
 _CAA_UA = "discripper/1.0"
 _JPEG_MIME = "image/jpeg"
 _FRONT_COVER = 3  # ID3/FLAC picture type for front cover
@@ -107,7 +112,7 @@ def tag_flac(path: Path, tags: dict, cover: Optional[bytes]) -> bool:
 
     if cover is not None:
         existing = [p for p in audio.pictures if p.type == _FRONT_COVER]
-        if not existing or existing[0].data != cover:
+        if not existing or _cover_hash(existing[0].data) != _cover_hash(cover):
             audio.clear_pictures()
             pic = Picture()
             pic.type = _FRONT_COVER
@@ -167,7 +172,7 @@ def tag_mp3(path: Path, tags: dict, cover: Optional[bytes]) -> bool:
     if cover is not None:
         # APIC key includes the description field.
         existing = audio.get("APIC:cover") or audio.get("APIC:")
-        if existing is None or existing.data != cover:
+        if existing is None or _cover_hash(existing.data) != _cover_hash(cover):
             audio["APIC:cover"] = APIC(
                 encoding=3,
                 mime=_JPEG_MIME,
