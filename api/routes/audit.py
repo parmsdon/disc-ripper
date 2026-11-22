@@ -451,6 +451,28 @@ def run_audit():
                 "affected_tracks": len(affected_track_ids),
             })
 
+    # ── CD: missing artwork (informational — not counted in cd_issues) ──────────
+    covers_dir = store_root / "cd_store" / "covers"
+    cover_ids: set[int] = set()
+    if covers_dir.exists():
+        for f in covers_dir.iterdir():
+            if f.suffix == ".jpg" and f.stem.isdigit():
+                cover_ids.add(int(f.stem))
+
+    missing_artwork = []
+    for disc in session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.cd,
+            Disc.album_title.isnot(None),
+        ).order_by(func.lower(Disc.album_title))
+    ).all():
+        if disc.id not in cover_ids:
+            missing_artwork.append({
+                "disc_id": disc.id,
+                "title": disc.album_title or disc.temp_name or f"Disc #{disc.id}",
+                "artist": disc.album_artist,
+            })
+
     # ── Jobs: stuck in running state ─────────────────────────────────────────
     stuck_running_jobs = []
     for job in session.scalars(
@@ -547,6 +569,7 @@ def run_audit():
             "stale_drive_associations": stale_cd_associations,
             "tracks_missing_wav_filename": tracks_missing_wav_filename,
             "missing_encode_jobs": missing_cd_encode_jobs,
+            "missing_artwork": missing_artwork,
         },
         "jobs": {
             "stuck_running_jobs": stuck_running_jobs,

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
+import CdIdentifyPanel from "./CdIdentifyPanel.jsx";
 
 function IssueTable({ columns, rows }) {
   return (
@@ -57,7 +58,7 @@ function useAction(apiFn) {
   return { loading, result, run };
 }
 
-function CheckRow({ groupLabel, name, count, open, onToggle, action, groupStart = false, children }) {
+function CheckRow({ groupLabel, name, count, open, onToggle, action, groupStart = false, issueLabel = "issue", children }) {
   const isPending = count === undefined;
   const hasIssues = !isPending && count > 0;
 
@@ -81,7 +82,7 @@ function CheckRow({ groupLabel, name, count, open, onToggle, action, groupStart 
             <span className="audit-check-pill audit-check-pill--clear">All clear ✓</span>
           ) : (
             <span className="audit-check-pill audit-check-pill--issues">
-              {count} issue{count !== 1 ? "s" : ""}
+              {count} {count === 1 ? issueLabel : `${issueLabel}s`}
             </span>
           )}
         </div>
@@ -101,6 +102,8 @@ export default function Audit() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [openChecks, setOpenChecks] = useState(new Set());
+  const [artworkReidentifyDisc, setArtworkReidentifyDisc] = useState(null);
+  const [artworkReidentifyLoadingId, setArtworkReidentifyLoadingId] = useState(null);
 
   const dvdJobs      = useAction(api.createMissingDvdEncodeJobs);
   const cdJobs       = useAction(api.createMissingCdEncodeJobs);
@@ -154,6 +157,16 @@ export default function Audit() {
   async function handleFixDvdAssoc()  { await fixDvdAssoc.run();  runAudit(); }
   async function handleFixCdAssoc()   { await fixCdAssoc.run();   runAudit(); }
   async function handleCleanWavDirs() { await cleanWavDirs.run(); runAudit(); }
+
+  async function handleArtworkReidentify(discId) {
+    setArtworkReidentifyLoadingId(discId);
+    try {
+      const disc = await api.disc(discId);
+      setArtworkReidentifyDisc(disc);
+    } finally {
+      setArtworkReidentifyLoadingId(null);
+    }
+  }
 
   const o   = (key) => openChecks.has(key);
   const tog = (key) => () => toggle(key);
@@ -364,6 +377,26 @@ export default function Audit() {
             ])} />
         </CheckRow>
 
+        <CheckRow groupLabel="" name="Missing artwork"
+          count={cd?.missing_artwork?.length}
+          issueLabel="missing"
+          open={o("cd-missing-artwork")} onToggle={tog("cd-missing-artwork")}>
+          <IssueTable columns={["Disc ID", "Album", "Artist", "Action"]}
+            rows={(cd?.missing_artwork ?? []).map((r) => [
+              r.disc_id,
+              r.title,
+              r.artist || "—",
+              <button
+                key={r.disc_id}
+                className="catalogue-reidentify-btn"
+                onClick={() => handleArtworkReidentify(r.disc_id)}
+                disabled={artworkReidentifyLoadingId === r.disc_id}
+              >
+                {artworkReidentifyLoadingId === r.disc_id ? "…" : "Re-identify"}
+              </button>,
+            ])} />
+        </CheckRow>
+
         {/* ── Jobs ── */}
         <CheckRow groupLabel="Jobs" name="Stuck in running state"
           groupStart count={jobs?.stuck_running_jobs?.length}
@@ -436,6 +469,14 @@ export default function Audit() {
           </div>
         )}
       </div>
+
+      {artworkReidentifyDisc && (
+        <CdIdentifyPanel
+          disc={artworkReidentifyDisc}
+          onConfirm={() => { setArtworkReidentifyDisc(null); runAudit(); }}
+          onSkip={() => setArtworkReidentifyDisc(null)}
+        />
+      )}
     </div>
   );
 }

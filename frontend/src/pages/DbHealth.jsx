@@ -89,7 +89,7 @@ export default function DbHealth() {
     return <div className="panel"><h2>Health</h2><div className="empty-state">Loading…</div></div>;
   }
 
-  const { library: lib, my_movies: mm, identification: id, quality: qual, musicbrainz: mb, pipeline, dvd_encodes, cd_encodes } = health;
+  const { library: lib, my_movies: mm, identification: id, quality: qual, musicbrainz: mb, pipeline, artwork, dvd_encodes, cd_encodes } = health;
 
   const pipelineActive =
     pipeline.currently_ripping > 0 ||
@@ -178,6 +178,16 @@ export default function DbHealth() {
             <Stat value={id.cd_tracks_untitled} label="CD Tracks Untitled"  tone={t(id.cd_tracks_untitled, "warn", "good")} />
           </div>
         </div>
+
+        {artwork && (
+          <div className="health-row">
+            <div className="health-row-label">Artwork</div>
+            <div className="health-row-tiles">
+              <Stat value={artwork.cds_with_cover}    label="With Artwork"  tone={t(artwork.cds_with_cover, "good")} />
+              <Stat value={artwork.cds_without_cover} label="No Artwork"    tone={t(artwork.cds_without_cover, "warn", "good")} />
+            </div>
+          </div>
+        )}
 
         <div className="health-row">
           <div className="health-row-label">Quality</div>

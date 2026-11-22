@@ -2,6 +2,8 @@
 Health endpoints — library statistics dashboard.
 """
 
+from pathlib import Path
+
 from flask import Blueprint, jsonify, current_app
 from sqlalchemy import exists, select, func
 
@@ -33,6 +35,19 @@ def health():
     catalog_total = count(Catalog)
     last_sync_dt = session.scalar(select(func.max(Catalog.synced_at)))
     last_sync = last_sync_dt.isoformat() if last_sync_dt else None
+
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    covers_dir = Path(cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+    cover_ids: set[int] = set()
+    if covers_dir.exists():
+        for f in covers_dir.iterdir():
+            if f.suffix == ".jpg" and f.stem.isdigit():
+                cover_ids.add(int(f.stem))
+    identified_cd_ids = set(session.scalars(
+        select(Disc.id).where(Disc.type == DiscType.cd, Disc.album_title.isnot(None))
+    ).all())
+    cds_with_cover    = len(identified_cd_ids & cover_ids)
+    cds_without_cover = len(identified_cd_ids - cover_ids)
 
     def _encode_counts(media_type):
         rows = session.execute(
@@ -100,6 +115,10 @@ def health():
             "currently_identifying": count(Disc, Disc.status == DiscStatus.identifying),
             "error_discs": count(Disc, Disc.status == DiscStatus.error),
             "dvds_protected": count(Disc, Disc.type == DiscType.dvd, Disc.status == DiscStatus.protected),
+        },
+        "artwork": {
+            "cds_with_cover":    cds_with_cover,
+            "cds_without_cover": cds_without_cover,
         },
         "dvd_encodes": _encode_counts("dvd"),
         "cd_encodes": _encode_counts("cd"),

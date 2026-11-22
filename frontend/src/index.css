@@ -851,6 +851,25 @@ button:disabled {
   align-items: center;
 }
 
+.cd-cover-cell {
+  padding: 4px 6px !important;
+  vertical-align: middle !important;
+}
+
+.cd-cover-thumb {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cd-cover-thumb--empty {
+  background: var(--panel-border);
+  border-radius: 3px;
+}
+
 .catalogue-reidentify-btn {
   background: transparent;
   border: 1px solid var(--panel-border);

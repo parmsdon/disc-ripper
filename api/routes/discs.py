@@ -13,7 +13,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-from flask import Blueprint, jsonify, current_app, request
+from flask import Blueprint, jsonify, current_app, request, send_file, abort
 from sqlalchemy import and_, case, func, or_, select, update
 
 from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, RipJob, LookupCandidate, naive_utcnow
@@ -417,6 +417,14 @@ def cd_catalogue():
     filter_param = request.args.get("filter", "all")
     search = request.args.get("search", "").strip()
 
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    covers_dir = Path(cfg["storage"]["datastore_root"]) / "cd_store" / "covers"
+    cover_ids: set[int] = set()
+    if covers_dir.exists():
+        for f in covers_dir.iterdir():
+            if f.suffix == ".jpg" and f.stem.isdigit():
+                cover_ids.add(int(f.stem))
+
     # Pre-fetch track counts and candidate counts in two GROUP BY queries
     # to avoid N+1 queries when building the response.
     track_rows = session.execute(
@@ -444,6 +452,8 @@ def cd_catalogue():
         q = q.where(Disc.mb_lookup_status == "not_found")
     elif filter_param == "mb_pending_error":
         q = q.where(Disc.mb_lookup_status.in_(["pending", "error"]))
+    elif filter_param == "no_artwork":
+        q = q.where(Disc.album_title.isnot(None))
 
     dirty = request.args.get("dirty", "").strip().lower() == "true"
     if dirty:
@@ -463,6 +473,9 @@ def cd_catalogue():
     discs = session.scalars(q).all()
     result = []
     for disc in discs:
+        has_cover = disc.id in cover_ids
+        if filter_param == "no_artwork" and has_cover:
+            continue
         total, titled = track_counts.get(disc.id, (0, 0))
         result.append({
             "disc_id": disc.id,
@@ -478,8 +491,18 @@ def cd_catalogue():
             "mb_lookup_status": disc.mb_lookup_status,
             "mb_candidate_count": cand_counts.get(disc.id, 0),
             "identified": disc.album_title is not None,
+            "has_cover": has_cover,
         })
     return jsonify(result)
+
+
+@discs_bp.route("/<int:disc_id>/cover", methods=["GET"])
+def get_cover(disc_id):
+    cfg = current_app.config["DISCRIPPER_CFG"]
+    cover_path = Path(cfg["storage"]["datastore_root"]) / "cd_store" / "covers" / f"{disc_id}.jpg"
+    if not cover_path.exists():
+        abort(404)
+    return send_file(str(cover_path), mimetype="image/jpeg")
 
 
 @discs_bp.route("/<int:disc_id>/retry-rip", methods=["POST"])
