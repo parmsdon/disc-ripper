@@ -4,11 +4,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/holly.env"
+ENV_FILE="${SCRIPT_DIR}/holly.env"
+SECRETS_FILE="${SCRIPT_DIR}/holly.secrets"
 
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "Error: $ENV_FILE not found." >&2
-    echo "  cp $SCRIPT_DIR/holly.env.example $ENV_FILE  # then edit it" >&2
+    echo "  cp ${SCRIPT_DIR}/holly.env.example $ENV_FILE  # then edit it" >&2
     exit 1
 fi
 
@@ -20,7 +21,7 @@ source "$ENV_FILE"
 : "${SAMBA_IP:?SAMBA_IP not set in holly.env}"
 : "${PLEX_IP:?PLEX_IP not set in holly.env}"
 : "${SAMBA_USER:?SAMBA_USER not set in holly.env}"
-: "${SAMBA_PASS:?SAMBA_PASS not set in holly.env}"
+: "${SAMBA_UID:?SAMBA_UID not set in holly.env}"
 : "${PLEX_CONFIG_PATH:?PLEX_CONFIG_PATH not set in holly.env}"
 : "${PLEX_TRANSCODE_PATH:?PLEX_TRANSCODE_PATH not set in holly.env}"
 : "${TZ:?TZ not set in holly.env}"
@@ -44,42 +45,55 @@ validate_paths() {
         echo "  mkdir -p $PLEX_CONFIG_PATH" >&2
         exit 1
     fi
+    if [[ ! -f "$SECRETS_FILE" ]]; then
+        echo "Error: $SECRETS_FILE not found." >&2
+        echo "  cp ${SCRIPT_DIR}/holly.secrets.example $SECRETS_FILE" >&2
+        echo "  # Edit it, set the real password, then:" >&2
+        echo "  chmod 600 $SECRETS_FILE" >&2
+        exit 1
+    fi
     mkdir -p "$PLEX_TRANSCODE_PATH"
 }
 
 cmd_up() {
     validate_paths
 
+    # Build protocol args based on SAMBA_ALLOW_SMB1 (default: false = SMB2+, modern auth)
+    samba_protocol_args=()
+    if [[ "${SAMBA_ALLOW_SMB1:-false}" == "true" ]]; then
+        samba_protocol_args=(
+            -e "SAMBA_GLOBAL_CONFIG_server_min_protocol=server min protocol = NT1"
+            -e "SAMBA_GLOBAL_CONFIG_ntlm_auth=ntlm auth = ntlmv1-permitted"
+        )
+    else
+        samba_protocol_args=(
+            -e "SAMBA_GLOBAL_CONFIG_server_min_protocol=server min protocol = SMB2"
+        )
+    fi
+
     echo "Starting $SAMBA_CONTAINER ..."
-    # dperson/samba flags:
-    #   -u "user;pass"           create samba user + set password
-    #   -s "name;path;browsable;readonly;guest;validusers"
-    #   -g "smb.conf global option"
-    #
-    # Global options:
-    #   server min protocol = NT1   -- SMB1 for older Sonos hardware (S1 app)
-    #   ntlm auth = ntlmv1-permitted -- required by some Sonos firmware versions
-    #   oplocks / strict locking     -- improve reliability for media shares
+    # Samba image: ghcr.io/servercontainers/samba (last changelog: 2026-07-11)
+    # Configuration is entirely via environment variables; no separate config file needed.
+    # ACCOUNT_* (password) is passed via --env-file so it does not appear in process
+    # listings or docker inspect's command/args fields.
     docker run -d \
         --name "$SAMBA_CONTAINER" \
         --net=staticnet \
         --ip="$SAMBA_IP" \
         --restart="$RESTART_POLICY" \
-        -e USERID=1001 \
-        -e GROUPID=1001 \
+        --env-file "$SECRETS_FILE" \
+        -e "UID_${SAMBA_USER}=${SAMBA_UID}" \
+        -e "SAMBA_VOLUME_CONFIG_flac=[flac]; path=/mnt/library/cd/flac; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
+        -e "SAMBA_VOLUME_CONFIG_mp3=[mp3]; path=/mnt/library/cd/mp3; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
+        -e "SAMBA_VOLUME_CONFIG_iso=[iso]; path=/mnt/library/dvd/iso; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
+        -e "SAMBA_VOLUME_CONFIG_iphone=[iphone]; path=/mnt/library/dvd/iphone; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
+        -e "SAMBA_VOLUME_CONFIG_plex=[plex]; path=/mnt/library/dvd/plex; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
+        -e "SAMBA_GLOBAL_CONFIG_oplocks=oplocks = no" \
+        -e "SAMBA_GLOBAL_CONFIG_l2oplocks=level2 oplocks = no" \
+        -e "SAMBA_GLOBAL_CONFIG_strictlocking=strict locking = no" \
+        "${samba_protocol_args[@]}" \
         -v "${LIBRARY_PATH}:/mnt/library:ro" \
-        dperson/samba \
-        -u "${SAMBA_USER};${SAMBA_PASS}" \
-        -s "flac;/mnt/library/cd/flac;yes;yes;no;${SAMBA_USER}" \
-        -s "mp3;/mnt/library/cd/mp3;yes;yes;no;${SAMBA_USER}" \
-        -s "iso;/mnt/library/dvd/iso;yes;yes;no;${SAMBA_USER}" \
-        -s "iphone;/mnt/library/dvd/iphone;yes;yes;no;${SAMBA_USER}" \
-        -s "plex;/mnt/library/dvd/plex;yes;yes;no;${SAMBA_USER}" \
-        -g "server min protocol = NT1" \
-        -g "ntlm auth = ntlmv1-permitted" \
-        -g "oplocks = no" \
-        -g "level2 oplocks = no" \
-        -g "strict locking = no"
+        ghcr.io/servercontainers/samba
 
     echo "Starting $PLEX_CONTAINER ..."
     plex_claim_args=()
@@ -148,7 +162,7 @@ cmd_logs() {
 }
 
 cmd_pull() {
-    docker pull dperson/samba
+    docker pull ghcr.io/servercontainers/samba
     docker pull plexinc/pms-docker
 }
 

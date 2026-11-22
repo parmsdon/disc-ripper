@@ -563,12 +563,11 @@ All containers use the existing `staticnet` Docker network with static IPs:
 | dev  | discripper-plex-dev   | 192.168.0.241   |
 
 **Container images:**
-- **Samba:** `dperson/samba` — chosen for its concise command-line share
-  configuration (no separate config file) and battle-tested use with home
-  media players. Global SMB settings are injected via `-g` flags. The Samba
-  version it ships is stable enough for a local LAN file server; if you later
-  need a more frequently updated image, `ghcr.io/servercontainers/samba` is
-  the maintained alternative.
+- **Samba:** `ghcr.io/servercontainers/samba` — actively maintained (last
+  update 2026-07-11); configuration is entirely via environment variables so
+  no separate smb.conf file is needed, and the Samba password is passed via
+  `--env-file` rather than on the command line (not visible in `ps` or in
+  the Docker command/args fields).
 - **Plex:** `plexinc/pms-docker` — the official Plex image.
 
 ---
@@ -595,9 +594,12 @@ mkdir -p /data3/projects/ripperdev/config
 
 ---
 
-### 5.2 holly.env
+### 5.2 holly.env and holly.secrets
 
-Each checkout needs a `deploy/holly/holly.env` (gitignored — never committed):
+Each checkout needs two gitignored files. The env file holds all configuration;
+the secrets file holds only the Samba password, with restricted permissions.
+
+**holly.env:**
 
 ```bash
 # Prod (in /projects/ripper)
@@ -610,13 +612,26 @@ cp deploy/holly/holly.env.example deploy/holly/holly.env
 #   PLEX_CONFIG_PATH=/data3/projects/ripper/config
 #   PLEX_TRANSCODE_PATH=/data3/projects/ripper/transcode
 #   PLEX_NAME=Discripper
-#   SAMBA_USER=discripper
-#   SAMBA_PASS=<real password>
 
 # Dev (in /projects/ripperdev)
 cp deploy/holly/holly.env.example deploy/holly/holly.env
 # Defaults in the example are already set for dev — adjust as needed.
 ```
+
+**holly.secrets** (Samba password — never committed):
+
+```bash
+cp deploy/holly/holly.secrets.example deploy/holly/holly.secrets
+# Edit: set the real Samba password on the ACCOUNT_discripper line.
+# Then restrict permissions:
+chmod 600 deploy/holly/holly.secrets
+# If Docker runs as root, also: sudo chown root deploy/holly/holly.secrets
+```
+
+The `ACCOUNT_<username>` variable name must match `SAMBA_USER` in holly.env.
+If you change the Samba username, update both files. The secrets file is passed
+to the Samba container via `--env-file` so the password is never part of the
+container's command line.
 
 ---
 
@@ -659,12 +674,13 @@ Five read-only shares are served from the library, all requiring credentials:
 | iphone  | dvd/iphone            | iPhone-compatible MP4s      |
 | plex    | dvd/plex              | Plex-optimised MP4s/MKVs    |
 
-Username and password come from `SAMBA_USER`/`SAMBA_PASS` in holly.env.
+Username comes from `SAMBA_USER` in holly.env; password from holly.secrets.
 
-The global SMB settings enable SMBv1 (`server min protocol = NT1`) and
-NTLMv1 authentication, which are required by older Sonos hardware. Modern
-Sonos S2 firmware, Dune players, and Windows clients all negotiate upward
-to SMB2/3 and NTLMv2 automatically.
+By default (`SAMBA_ALLOW_SMB1=false`) the server requires SMB2 or later with
+modern authentication. If older Sonos hardware cannot connect, set
+`SAMBA_ALLOW_SMB1=true` in holly.env and restart — this lowers the minimum to
+SMB1 and permits NTLMv1. Dune players and Windows clients negotiate upward
+to SMB2/3 and NTLMv2 regardless of this setting.
 
 ---
 
@@ -678,14 +694,14 @@ Sonos discovers music libraries as SMB shares:
 4. The app should list the available shares. Add **flac** for lossless or
    **mp3** for compressed (Sonos transcodes FLAC to PCM internally — either
    works, FLAC is higher quality).
-5. Enter the Samba username and password from holly.env when prompted.
+5. Enter the Samba username (`SAMBA_USER` from holly.env) and the password
+   from holly.secrets when prompted.
 6. Sonos will index the library. Large collections take a few minutes.
 
-> **Tip:** If Sonos shows "Cannot connect" despite the container running,
-> check that `server min protocol = NT1` and `ntlm auth = ntlmv1-permitted`
-> are present in `./deploy/holly/holly.sh logs samba` output (look for the
-> smb.conf section). These settings are required for some Sonos firmware
-> versions.
+> **If Sonos cannot connect:** older Sonos S1 hardware requires SMB1 and
+> NTLMv1 authentication. Set `SAMBA_ALLOW_SMB1=true` in holly.env and run
+> `./deploy/holly/holly.sh restart`. Check the logs afterwards to confirm
+> `server min protocol = NT1` appears in the generated smb.conf section.
 
 ---
 
@@ -699,7 +715,7 @@ Dune HD players browse SMB shares natively:
 3. Enter:
    - Server: `192.168.0.230` (or `.240` for dev)
    - Share: one of `flac`, `mp3`, `iso`, `iphone`, `plex`
-   - Username / Password: from holly.env
+   - Username: `SAMBA_USER` from holly.env / Password: from holly.secrets
 4. Confirm and save. Repeat for each share you want to browse.
 
 The Dune supports SMB2/NTLMv2, so no special settings are required beyond

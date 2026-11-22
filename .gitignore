@@ -33,6 +33,7 @@ scratch/
 
 # Holly container config (contains credentials)
 deploy/holly/holly.env
+deploy/holly/holly.secrets
 
 # Filesystem
 lost+found/
