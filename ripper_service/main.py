@@ -25,7 +25,6 @@ import logging
 import os
 import shutil
 import sys
-import threading
 import time
 from datetime import datetime, timezone
 
@@ -34,7 +33,8 @@ from sqlalchemy import select, update
 from common.config import load_config
 from common.models import CDTrack, Disc, DiscStatus, DiscType, Drive, JobStatus, RipJob, Setting
 from ripper_service.cd_toc import read_table_of_contents
-from ripper_service.mb_lookup import compute_mb_disc_id, lookup_musicbrainz
+from ripper_service.lookup_queue import submit_lookup
+from ripper_service.mb_lookup import compute_mb_disc_id, init_useragent, lookup_musicbrainz
 from ripper_service.db import get_session_factory
 from ripper_service.disc_label import read_volume_info
 from ripper_service.drive_registry import sync_physical_drives
@@ -160,6 +160,8 @@ def run(cfg: dict) -> None:
     media_present_by_device = {}
     tray_open_by_device = {}
 
+    init_useragent(cfg.get("musicbrainz", {}).get("contact_email", "discripper@example.com"))
+
     _check_datastore_mount(cfg["storage"]["datastore_root"])
 
     # /tmp-based scratch space may not survive a reboot - make sure it
@@ -201,6 +203,8 @@ def run(cfg: dict) -> None:
     logger.info("service_status set to running")
 
     logger.info("Ripper service started (env=%s)", cfg["environment"])
+
+    _last_mb_error_retry: float = 0.0
 
     while True:
         try:
@@ -369,23 +373,31 @@ def run(cfg: dict) -> None:
                                             "resuming existing record",
                                             disc_fingerprint, existing_active_disc.id, label,
                                         )
-                                        # Re-trigger MB lookup if status was cleared (e.g. manual
-                                        # reset or a future --keep-discs mode of reset_dev_data.py).
-                                        if existing_active_disc.mb_lookup_status is None:
-                                            mb_result = compute_mb_disc_id(device_path)
-                                            if mb_result.get("disc_id"):
-                                                existing_active_disc.mb_disc_id = mb_result["disc_id"]
-                                                existing_active_disc.mb_toc = mb_result["toc"]
+                                        # Re-trigger MB lookup if status was cleared or errored.
+                                        if existing_active_disc.mb_lookup_status in (None, "error"):
+                                            if existing_active_disc.mb_disc_id:
+                                                # Disc ID already known from previous attempt
                                                 existing_active_disc.mb_lookup_status = "pending"
-                                                pending_mb_lookups.append(
-                                                    (mb_result["disc_id"], mb_result["toc"], existing_active_disc.id)
-                                                )
+                                                pending_mb_lookups.append((
+                                                    existing_active_disc.mb_disc_id,
+                                                    existing_active_disc.mb_toc,
+                                                    existing_active_disc.id,
+                                                ))
                                             else:
-                                                existing_active_disc.mb_lookup_status = "error"
-                                                logger.warning(
-                                                    "Failed to compute MB disc ID for existing disc #%s: %s",
-                                                    existing_active_disc.id, mb_result.get("error"),
-                                                )
+                                                mb_result = compute_mb_disc_id(device_path)
+                                                if mb_result.get("disc_id"):
+                                                    existing_active_disc.mb_disc_id = mb_result["disc_id"]
+                                                    existing_active_disc.mb_toc = mb_result["toc"]
+                                                    existing_active_disc.mb_lookup_status = "pending"
+                                                    pending_mb_lookups.append(
+                                                        (mb_result["disc_id"], mb_result["toc"], existing_active_disc.id)
+                                                    )
+                                                else:
+                                                    existing_active_disc.mb_lookup_status = "error"
+                                                    logger.warning(
+                                                        "Failed to compute MB disc ID for existing disc #%s: %s",
+                                                        existing_active_disc.id, mb_result.get("error"),
+                                                    )
                                     elif existing_completed_disc is not None and (
                                         existing_completed_disc.status == DiscStatus.error
                                         or existing_completed_disc.rip_quality == "dirty"
@@ -396,6 +408,16 @@ def run(cfg: dict) -> None:
                                             "Drive %s, awaiting user action",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
+                                        if (
+                                            existing_completed_disc.mb_lookup_status in (None, "error")
+                                            and existing_completed_disc.mb_disc_id
+                                        ):
+                                            existing_completed_disc.mb_lookup_status = "pending"
+                                            pending_mb_lookups.append((
+                                                existing_completed_disc.mb_disc_id,
+                                                existing_completed_disc.mb_toc,
+                                                existing_completed_disc.id,
+                                            ))
                                     elif existing_completed_disc is not None:
                                         existing_completed_disc.drive_id = drive_id
                                         logger.info(
@@ -403,6 +425,16 @@ def run(cfg: dict) -> None:
                                             "ignoring reinsertion",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
+                                        if (
+                                            existing_completed_disc.mb_lookup_status in (None, "error")
+                                            and existing_completed_disc.mb_disc_id
+                                        ):
+                                            existing_completed_disc.mb_lookup_status = "pending"
+                                            pending_mb_lookups.append((
+                                                existing_completed_disc.mb_disc_id,
+                                                existing_completed_disc.mb_toc,
+                                                existing_completed_disc.id,
+                                            ))
                                     else:
                                         disc = Disc(
                                             type=DiscType.cd,
@@ -534,17 +566,70 @@ def run(cfg: dict) -> None:
 
             _discogs_token = cfg.get("discogs", {}).get("token")
             for mb_disc_id, mb_toc, db_disc_id in pending_mb_lookups:
-                t = threading.Thread(
-                    target=lookup_musicbrainz,
-                    args=(mb_disc_id, mb_toc, db_disc_id, Session),
-                    kwargs={"discogs_token": _discogs_token},
-                    daemon=True,
+                submitted = submit_lookup(
+                    ("mb", db_disc_id),
+                    lookup_musicbrainz,
+                    mb_disc_id, mb_toc, db_disc_id, Session,
+                    discogs_token=_discogs_token,
                 )
-                t.start()
-                logger.info(
-                    "MusicBrainz lookup started for disc #%s (MB disc ID: %s)",
-                    db_disc_id, mb_disc_id,
-                )
+                if submitted:
+                    logger.info(
+                        "MusicBrainz lookup queued for disc #%s (MB disc ID: %s)",
+                        db_disc_id, mb_disc_id,
+                    )
+
+            # Pick up discs set to "pending" by the API retry endpoint
+            # (not detected this poll, so absent from pending_mb_lookups).
+            with Session() as session:
+                api_pending = session.scalars(
+                    select(Disc)
+                    .where(
+                        Disc.type == DiscType.cd,
+                        Disc.mb_lookup_status == "pending",
+                        Disc.mb_disc_id.isnot(None),
+                    )
+                ).all()
+                for disc in api_pending:
+                    submitted = submit_lookup(
+                        ("mb", disc.id),
+                        lookup_musicbrainz,
+                        disc.mb_disc_id, disc.mb_toc, disc.id, Session,
+                        discogs_token=_discogs_token,
+                    )
+                    if submitted:
+                        logger.info(
+                            "MusicBrainz lookup queued for pending disc #%s (MB disc ID: %s)",
+                            disc.id, disc.mb_disc_id,
+                        )
+
+            # Periodic background retry of discs stuck in "error" state
+            _now = time.monotonic()
+            if _now - _last_mb_error_retry >= 300.0:
+                _last_mb_error_retry = _now
+                with Session() as session:
+                    error_discs = session.scalars(
+                        select(Disc)
+                        .where(
+                            Disc.type == DiscType.cd,
+                            Disc.mb_lookup_status == "error",
+                            Disc.mb_disc_id.isnot(None),
+                        )
+                    ).all()
+                    if error_discs:
+                        for disc in error_discs:
+                            disc.mb_lookup_status = "pending"
+                        session.commit()
+                        logger.info(
+                            "Periodic MB retry: %d disc(s) with error status re-queued",
+                            len(error_discs),
+                        )
+                        for disc in error_discs:
+                            submit_lookup(
+                                ("mb", disc.id),
+                                lookup_musicbrainz,
+                                disc.mb_disc_id, disc.mb_toc, disc.id, Session,
+                                discogs_token=_discogs_token,
+                            )
 
             for event_type, kwargs in pending_log_events:
                 write_log_event(Session, event_type, **kwargs)

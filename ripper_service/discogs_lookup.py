@@ -8,58 +8,108 @@ as lookup_musicbrainz; caller spawns a daemon thread, never awaits a result.
 """
 
 import logging
+import time
 
 import requests
 
 from common.models import LookupCandidate
+from ripper_service.lookup_queue import throttle
 
 logger = logging.getLogger(__name__)
 
 DISCOGS_API_BASE = "https://api.discogs.com"
 USER_AGENT = "DiscRipper/0.1 +https://github.com/parmsdon/disc-ripper"
 
+_DISCOGS_RETRY_DELAYS = (5, 15, 60)
+
 
 def search_discogs(title: str, token: str) -> list[dict]:
     """
     Search Discogs for CD releases matching title.
     Returns list of raw result dicts or [] on any error. Never raises.
+    Retries on HTTP 429/503 with increasing delays.
     """
-    try:
-        resp = requests.get(
-            f"{DISCOGS_API_BASE}/database/search",
-            headers={
-                "User-Agent": USER_AGENT,
-                "Authorization": f"Discogs token={token}",
-            },
-            params={"q": title, "type": "release", "format": "CD"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json().get("results", [])
-    except Exception:
-        logger.warning("Discogs search failed for %r", title, exc_info=True)
-        return []
+    delays = [0, *_DISCOGS_RETRY_DELAYS]
+    for attempt, delay in enumerate(delays):
+        if delay:
+            logger.warning(
+                "Discogs search retry in %ds for %r (attempt %d/%d)",
+                delay, title, attempt + 1, len(delays),
+            )
+            time.sleep(delay)
+        throttle()
+        try:
+            resp = requests.get(
+                f"{DISCOGS_API_BASE}/database/search",
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Authorization": f"Discogs token={token}",
+                },
+                params={"q": title, "type": "release", "format": "CD"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json().get("results", [])
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status in (429, 503):
+                logger.warning(
+                    "Discogs search HTTP %s for %r (attempt %d/%d)",
+                    status, title, attempt + 1, len(delays),
+                )
+                continue
+            logger.warning("Discogs search failed for %r: %s", title, e)
+            return []
+        except Exception:
+            logger.warning("Discogs search failed for %r", title, exc_info=True)
+            return []
+
+    logger.error("Discogs search for %r: exhausted all retries", title)
+    return []
 
 
 def get_release(release_id: int, token: str) -> dict | None:
     """
     Fetch full release details from Discogs.
     Returns the release dict or None on any error. Never raises.
+    Retries on HTTP 429/503 with increasing delays.
     """
-    try:
-        resp = requests.get(
-            f"{DISCOGS_API_BASE}/releases/{release_id}",
-            headers={
-                "User-Agent": USER_AGENT,
-                "Authorization": f"Discogs token={token}",
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        logger.warning("Discogs get_release failed for release_id=%s", release_id, exc_info=True)
-        return None
+    delays = [0, *_DISCOGS_RETRY_DELAYS]
+    for attempt, delay in enumerate(delays):
+        if delay:
+            logger.warning(
+                "Discogs get_release retry in %ds for release_id=%s (attempt %d/%d)",
+                delay, release_id, attempt + 1, len(delays),
+            )
+            time.sleep(delay)
+        throttle()
+        try:
+            resp = requests.get(
+                f"{DISCOGS_API_BASE}/releases/{release_id}",
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Authorization": f"Discogs token={token}",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status in (429, 503):
+                logger.warning(
+                    "Discogs get_release HTTP %s for release_id=%s (attempt %d/%d)",
+                    status, release_id, attempt + 1, len(delays),
+                )
+                continue
+            logger.warning("Discogs get_release failed for release_id=%s: %s", release_id, e)
+            return None
+        except Exception:
+            logger.warning("Discogs get_release failed for release_id=%s", release_id, exc_info=True)
+            return None
+
+    logger.error("Discogs get_release for release_id=%s: exhausted all retries", release_id)
+    return None
 
 
 def _join_artists(artists: list[dict]) -> str:

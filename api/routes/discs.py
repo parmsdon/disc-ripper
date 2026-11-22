@@ -543,6 +543,26 @@ def retry_rip(disc_id):
     return jsonify(_disc_to_dict(disc))
 
 
+@discs_bp.route("/<int:disc_id>/retry-lookup", methods=["POST"])
+def retry_lookup(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+    if disc.type != DiscType.cd:
+        return jsonify({"error": "Not a CD"}), 400
+    if disc.mb_lookup_status != "error":
+        return jsonify({"error": "MB lookup is not in error state"}), 400
+    if not disc.mb_disc_id:
+        return jsonify({"error": "No MB disc ID stored — cannot retry without reinserting the disc"}), 400
+
+    disc.mb_lookup_status = "pending"
+    session.commit()
+    return jsonify({"ok": True})
+
+
 @discs_bp.route("/<int:disc_id>/cancel-rip", methods=["POST"])
 def cancel_rip(disc_id):
     Session = current_app.config["DB_SESSION"]

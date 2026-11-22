@@ -49,6 +49,8 @@ export default function CdCatalogue() {
   const [search, setSearch] = useState("");
   const [reidentifyDisc, setReidentifyDisc] = useState(null);
   const [reidentifyLoadingId, setReidentifyLoadingId] = useState(null);
+  const [retryLookupLoadingId, setRetryLookupLoadingId] = useState(null);
+  const [retryLookupError, setRetryLookupError] = useState(null);
   const [artworkFetchingIds, setArtworkFetchingIds] = useState(new Set());
   const artworkFetchTimers = useRef(new Map());
 
@@ -71,6 +73,19 @@ export default function CdCatalogue() {
       fetchRows(filter, dirty, search);
     } catch (e) {
       setDeleteError(e.message);
+    }
+  }
+
+  async function handleRetryLookup(discId) {
+    setRetryLookupLoadingId(discId);
+    setRetryLookupError(null);
+    try {
+      await api.retryLookup(discId);
+      fetchRows(filter, dirty, search);
+    } catch (e) {
+      setRetryLookupError(e.message);
+    } finally {
+      setRetryLookupLoadingId(null);
     }
   }
 
@@ -152,6 +167,7 @@ export default function CdCatalogue() {
 
         {loadError && <div className="catalogue-empty">Error: {loadError}</div>}
         {deleteError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Delete failed: {deleteError}</div>}
+        {retryLookupError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Retry lookup failed: {retryLookupError}</div>}
         {!loadError && !loading && rows.length === 0 && (
           <div className="catalogue-empty">No discs found.</div>
         )}
@@ -231,6 +247,16 @@ export default function CdCatalogue() {
                           title="Re-open identification panel to change cover or correct names"
                         >
                           {reidentifyLoadingId === row.disc_id ? "…" : "Re-identify"}
+                        </button>
+                      )}
+                      {row.mb_lookup_status === "error" && (
+                        <button
+                          className="catalogue-reidentify-btn"
+                          onClick={() => handleRetryLookup(row.disc_id)}
+                          disabled={retryLookupLoadingId === row.disc_id}
+                          title="Retry MusicBrainz lookup for this disc"
+                        >
+                          {retryLookupLoadingId === row.disc_id ? "…" : "Retry lookup"}
                         </button>
                       )}
                       {row.disc_id && !row.disc_temp_name && !row.album_title && (

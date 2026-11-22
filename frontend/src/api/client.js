@@ -102,6 +102,7 @@ export const api = {
     request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}${dirty ? "&dirty=true" : ""}`),
   deleteDisc: (discId) => request(`/discs/${discId}`, { method: "DELETE" }),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
+  retryLookup: (discId) => request(`/discs/${discId}/retry-lookup`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
   getMbNotFound: () => request("/health/mb-not-found"),
   getMbError: () => request("/health/mb-error"),

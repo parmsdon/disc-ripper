@@ -8,16 +8,19 @@ compute_mb_disc_id(device_path) -> dict
     failure. Never raises.
 
 lookup_musicbrainz(disc_id, toc, disc_db_id, session_factory) -> None
-    Runs in a background thread. Queries MusicBrainz for releases matching
-    disc_id (falling back to fuzzy TOC match via toc), stores each result as
-    a LookupCandidate row, then sets disc.mb_lookup_status to "found" /
-    "not_found" / "error". musicbrainzngs enforces the 1 req/sec rate limit
-    automatically once set_useragent is called; no extra sleep needed for a
-    single lookup (only relevant for future batch operations).
+    Runs on the shared lookup-worker thread (via lookup_queue.submit_lookup).
+    Queries MusicBrainz for releases matching disc_id (falling back to fuzzy
+    TOC match via toc), stores each result as a LookupCandidate row, then
+    sets disc.mb_lookup_status to "found" / "not_found" / "error".
+    Retries on HTTP 503 and network errors with delays of 5s, 15s, 60s.
+
+init_useragent(email) -> None
+    Must be called once at process start before any MB requests are made.
+    Sets the User-Agent from the contact email in config.
 """
 
 import logging
-import threading
+import time
 
 logging.getLogger("musicbrainzngs").setLevel(logging.WARNING)
 
@@ -26,13 +29,16 @@ import musicbrainzngs
 
 from common.models import Disc, LookupCandidate
 from ripper_service.discogs_lookup import lookup_discogs_for_disc
+from ripper_service.lookup_queue import submit_lookup, throttle
 
 logger = logging.getLogger(__name__)
 
-musicbrainzngs.set_useragent(
-    "DiscRipper", "0.1",
-    "https://github.com/parmsdon/disc-ripper",
-)
+musicbrainzngs.set_rate_limit(limit_or_interval=False)
+_RETRY_DELAYS = (5, 15, 60)
+
+
+def init_useragent(email: str) -> None:
+    musicbrainzngs.set_useragent("DiscRipper", "0.1", email)
 
 
 def compute_mb_disc_id(device_path: str) -> dict:
@@ -204,11 +210,11 @@ def lookup_musicbrainz(
                     "(MB medium position unknown, %d-disc set)",
                     disc_db_id, disc.mb_medium_count,
                 )
-                threading.Thread(
-                    target=lookup_discogs_for_disc,
-                    args=(mb_title, disc.mb_medium_count, disc_db_id, discogs_token, session_factory),
-                    daemon=True,
-                ).start()
+                submit_lookup(
+                    ("discogs", disc_db_id),
+                    lookup_discogs_for_disc,
+                    mb_title, disc.mb_medium_count, disc_db_id, discogs_token, session_factory,
+                )
 
     except Exception:
         logger.exception("MusicBrainz lookup failed for disc #%d", disc_db_id)
@@ -222,32 +228,53 @@ def lookup_musicbrainz(
 
 def _fetch_releases(disc_id: str, toc: str, disc_db_id: int):
     """
-    Call the MB web service. Returns a list of release dicts (may be empty),
-    or None on network/server error (caller sets status="error").
-    On clean 404 (no results), returns [] so caller sets "not_found".
+    Call the MB web service with backoff retry on 503 / network errors.
+    Returns a list of release dicts (may be empty), or None on unrecoverable
+    error (caller sets status="error").
+    On clean 404, returns [] so caller sets "not_found".
     """
-    try:
-        result = musicbrainzngs.get_releases_by_discid(
-            disc_id,
-            toc=toc,
-            includes=["recordings", "artist-credits"],
-            cdstubs=False,
-        )
-    except musicbrainzngs.ResponseError as e:
-        cause = getattr(e, "cause", None)
-        if cause is not None and getattr(cause, "code", None) == 404:
-            return []
-        logger.error("MB ResponseError for disc #%d: %s", disc_db_id, e)
-        return None
-    except musicbrainzngs.NetworkError as e:
-        logger.error("MB NetworkError for disc #%d: %s", disc_db_id, e)
-        return None
+    delays = [0, *_RETRY_DELAYS]
+    for attempt, delay in enumerate(delays):
+        if delay:
+            logger.warning(
+                "MB lookup for disc #%d: retrying in %ds (attempt %d/%d)",
+                disc_db_id, delay, attempt + 1, len(delays),
+            )
+            time.sleep(delay)
+        throttle()
+        try:
+            result = musicbrainzngs.get_releases_by_discid(
+                disc_id,
+                toc=toc,
+                includes=["recordings", "artist-credits"],
+                cdstubs=False,
+            )
+            return (
+                result.get("disc", {}).get("release-list")
+                or result.get("release-list")
+                or []
+            )
+        except musicbrainzngs.ResponseError as e:
+            cause = getattr(e, "cause", None)
+            code = getattr(cause, "code", None) if cause is not None else None
+            if code == 404:
+                return []
+            if code == 503:
+                logger.warning(
+                    "MB 503 for disc #%d (attempt %d/%d)", disc_db_id, attempt + 1, len(delays)
+                )
+                continue
+            logger.error("MB ResponseError for disc #%d: %s", disc_db_id, e)
+            return None
+        except musicbrainzngs.NetworkError as e:
+            logger.warning(
+                "MB NetworkError for disc #%d: %s (attempt %d/%d)",
+                disc_db_id, e, attempt + 1, len(delays),
+            )
+            continue
 
-    return (
-        result.get("disc", {}).get("release-list")
-        or result.get("release-list")
-        or []
-    )
+    logger.error("MB lookup for disc #%d: exhausted all retries", disc_db_id)
+    return None
 
 
 def _set_status(session, disc_db_id: int, status: str) -> None:

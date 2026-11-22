@@ -70,3 +70,6 @@ mymovies:
 
 discogs:
   token: "your_discogs_token_here"
+
+musicbrainz:
+  contact_email: "your_email@example.com"
