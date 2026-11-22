@@ -292,33 +292,19 @@ export default function CdIdentifyPanel({ disc, onConfirm, onSkip }) {
         : disc.mb_medium_count;
 
       // Strip any existing disc suffix before re-adding, so re-identification
-      // never double-appends "(Disc N of M)" or a medium title.
+      // never double-appends "(Disc N of M)".
       const bareAlbumTitle = stripDiscSuffix(albumTitle, disc.mb_medium_title);
       let albumTitleToSave = bareAlbumTitle;
-      let tempNameToSave = disc.temp_name;
 
       if (multiDiscCount > 1) {
         const discSuffix = `Disc ${(isDiscogs ? selectedCandidate?.medium_position : disc.mb_medium_position) ?? "?"} of ${multiDiscCount}`;
         const suffixTag = `(${discSuffix})`;
-        const suffixTagLower = suffixTag.toLowerCase();
-        if (!bareAlbumTitle.toLowerCase().includes(suffixTagLower)) {
+        if (!bareAlbumTitle.toLowerCase().includes(suffixTag.toLowerCase())) {
           albumTitleToSave = `${bareAlbumTitle} ${suffixTag}`;
-        }
-        if (!isDiscogs) {
-          const baseTempName = stripDiscSuffix(
-            disc.temp_name ?? albumTitle,
-            disc.mb_medium_title,
-          );
-          if (!baseTempName.toLowerCase().includes(suffixTagLower)) {
-            tempNameToSave = `${baseTempName} ${suffixTag}`;
-          } else {
-            tempNameToSave = baseTempName;
-          }
         }
       }
       await api.identifyCd(disc.id, {
         album_title: albumTitleToSave,
-        temp_name: tempNameToSave,
         album_artist: albumArtist || null,
         mb_release_id: selectedCandidate?.mb_release_id ?? null,
         tracks: physicalTracks.map((t) => ({
