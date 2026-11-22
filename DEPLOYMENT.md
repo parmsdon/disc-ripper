@@ -542,6 +542,219 @@ sudo journalctl -u discripper-ripper -f
 
 ---
 
+## 5. Holly (Samba + Plex)
+
+Holly is a separate Fedora machine with Docker installed. It hosts two containers
+per environment — a Samba file server and a Plex Media Server — serving the
+read-only generated library that Discripper writes to its NFS datastore.
+
+**Machines and repos:**
+- `holly` — this machine; `/projects/ripper` (prod), `/projects/ripperdev` (dev)
+- Library paths: prod `/data2/datastore/library`, dev `/data1/datastoredev/library`
+- Plex state on SSD: prod `/data3/projects/ripper`, dev `/data3/projects/ripperdev`
+
+All containers use the existing `staticnet` Docker network with static IPs:
+
+| Env  | Container             | IP              |
+|------|-----------------------|-----------------|
+| prod | discripper-samba-prod | 192.168.0.230   |
+| prod | discripper-plex-prod  | 192.168.0.231   |
+| dev  | discripper-samba-dev  | 192.168.0.240   |
+| dev  | discripper-plex-dev   | 192.168.0.241   |
+
+**Container images:**
+- **Samba:** `dperson/samba` — chosen for its concise command-line share
+  configuration (no separate config file) and battle-tested use with home
+  media players. Global SMB settings are injected via `-g` flags. The Samba
+  version it ships is stable enough for a local LAN file server; if you later
+  need a more frequently updated image, `ghcr.io/servercontainers/samba` is
+  the maintained alternative.
+- **Plex:** `plexinc/pms-docker` — the official Plex image.
+
+---
+
+### 5.1 Prerequisites
+
+Verify the `staticnet` network exists before starting containers:
+
+```bash
+docker network inspect staticnet
+# If absent: docker network create --driver=bridge --subnet=192.168.0.0/24 staticnet
+# (Confirm the subnet with whoever manages holly's Docker setup first.)
+```
+
+Create the Plex config directory on holly's SSD (do this for each environment
+you plan to run). The transcode directory is created automatically by holly.sh.
+
+```bash
+# Prod
+mkdir -p /data3/projects/ripper/config
+# Dev
+mkdir -p /data3/projects/ripperdev/config
+```
+
+---
+
+### 5.2 holly.env
+
+Each checkout needs a `deploy/holly/holly.env` (gitignored — never committed):
+
+```bash
+# Prod (in /projects/ripper)
+cp deploy/holly/holly.env.example deploy/holly/holly.env
+# Edit:
+#   ENV=prod
+#   LIBRARY_PATH=/data2/datastore/library
+#   SAMBA_IP=192.168.0.230
+#   PLEX_IP=192.168.0.231
+#   PLEX_CONFIG_PATH=/data3/projects/ripper/config
+#   PLEX_TRANSCODE_PATH=/data3/projects/ripper/transcode
+#   PLEX_NAME=Discripper
+#   SAMBA_USER=discripper
+#   SAMBA_PASS=<real password>
+
+# Dev (in /projects/ripperdev)
+cp deploy/holly/holly.env.example deploy/holly/holly.env
+# Defaults in the example are already set for dev — adjust as needed.
+```
+
+---
+
+### 5.3 First start and Plex claim token
+
+The Plex claim token registers the new server to your Plex account. It is
+**single-use and expires in roughly 4 minutes**, so fetch it immediately
+before running `up`.
+
+1. Open https://www.plex.tv/claim/ in a browser — copy the `claim-XXXX` token.
+2. Put it in holly.env: `PLEX_CLAIM=claim-XXXX`
+3. Start the containers:
+
+```bash
+cd /projects/ripper          # or /projects/ripperdev for dev
+./deploy/holly/holly.sh up
+```
+
+4. Open `http://192.168.0.231:32400/web` (prod) or `http://192.168.0.241:32400/web`
+   (dev) in a browser on the same LAN.
+5. Plex will walk you through setup. When it asks for a server name, use
+   **Discripper** (prod) or **Discripper Dev** (dev) — this is what appears
+   in Plex clients.
+6. Add a **Movies** library, source: `/data/plex` (this is the container path
+   for `dvd/plex`).
+7. After setup, clear `PLEX_CLAIM=` in holly.env — it is ignored on subsequent
+   starts but leaving a used token there is harmless.
+
+---
+
+### 5.4 Samba shares
+
+Five read-only shares are served from the library, all requiring credentials:
+
+| Share   | Library path          | Use                         |
+|---------|-----------------------|-----------------------------|
+| flac    | cd/flac               | Lossless audio (Sonos, Dune)|
+| mp3     | cd/mp3                | Compressed audio (Sonos)    |
+| iso     | dvd/iso               | Full DVD ISO images          |
+| iphone  | dvd/iphone            | iPhone-compatible MP4s      |
+| plex    | dvd/plex              | Plex-optimised MP4s/MKVs    |
+
+Username and password come from `SAMBA_USER`/`SAMBA_PASS` in holly.env.
+
+The global SMB settings enable SMBv1 (`server min protocol = NT1`) and
+NTLMv1 authentication, which are required by older Sonos hardware. Modern
+Sonos S2 firmware, Dune players, and Windows clients all negotiate upward
+to SMB2/3 and NTLMv2 automatically.
+
+---
+
+### 5.5 Connecting Sonos
+
+Sonos discovers music libraries as SMB shares:
+
+1. Open the Sonos app → **Settings** → **System** → **Music Library**.
+2. Tap **Add Music Library** (or the `+` icon).
+3. Enter the server address: `192.168.0.230` (prod) or `192.168.0.240` (dev).
+4. The app should list the available shares. Add **flac** for lossless or
+   **mp3** for compressed (Sonos transcodes FLAC to PCM internally — either
+   works, FLAC is higher quality).
+5. Enter the Samba username and password from holly.env when prompted.
+6. Sonos will index the library. Large collections take a few minutes.
+
+> **Tip:** If Sonos shows "Cannot connect" despite the container running,
+> check that `server min protocol = NT1` and `ntlm auth = ntlmv1-permitted`
+> are present in `./deploy/holly/holly.sh logs samba` output (look for the
+> smb.conf section). These settings are required for some Sonos firmware
+> versions.
+
+---
+
+### 5.6 Connecting the Dune HD player
+
+Dune HD players browse SMB shares natively:
+
+1. On the Dune remote, navigate to **Network Storage** (or **Files** →
+   **Network**).
+2. Select **Add network storage** → **Windows network (SMB)**.
+3. Enter:
+   - Server: `192.168.0.230` (or `.240` for dev)
+   - Share: one of `flac`, `mp3`, `iso`, `iphone`, `plex`
+   - Username / Password: from holly.env
+4. Confirm and save. Repeat for each share you want to browse.
+
+The Dune supports SMB2/NTLMv2, so no special settings are required beyond
+what the container already provides.
+
+---
+
+### 5.7 Connecting the Xbox
+
+The Xbox has an official Plex app in the Microsoft Store:
+
+1. Install **Plex** from the Xbox store (search "Plex").
+2. Sign in with your Plex account — the Discripper server should appear
+   automatically if the Xbox is on the same LAN. If it does not appear, tap
+   **More** → **Connect manually** and enter `192.168.0.231:32400` (prod).
+3. Browse the Movies library.
+
+---
+
+### 5.8 Day-to-day management
+
+```bash
+cd /projects/ripper    # or /projects/ripperdev for dev
+
+./deploy/holly/holly.sh status           # running / stopped / image
+./deploy/holly/holly.sh logs             # last 50 lines from both containers
+./deploy/holly/holly.sh logs samba       # tail samba logs
+./deploy/holly/holly.sh logs plex        # tail plex logs
+./deploy/holly/holly.sh pull             # pull latest image versions
+./deploy/holly/holly.sh restart          # down then up (re-reads holly.env)
+```
+
+The script only touches `discripper-samba-<env>` and `discripper-plex-<env>`
+where `<env>` comes from holly.env — it never touches containers from the
+other environment.
+
+---
+
+### 5.9 Dev containers
+
+Dev containers are started and stopped by hand — they carry no restart policy
+and do not come up after a reboot.
+
+```bash
+cd /projects/ripperdev
+
+# Start when you need them
+./deploy/holly/holly.sh up
+
+# Stop when done (frees the IPs and ports)
+./deploy/holly/holly.sh down
+```
+
+---
+
 ## Notes
 
 - **Discogs API token**: A personal access token is required for Discogs

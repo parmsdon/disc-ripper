@@ -31,5 +31,8 @@ logs/
 /tmp/
 scratch/
 
+# Holly container config (contains credentials)
+deploy/holly/holly.env
+
 # Filesystem
 lost+found/
