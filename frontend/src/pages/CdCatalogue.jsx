@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import CdIdentifyPanel from "./CdIdentifyPanel.jsx";
 
@@ -49,6 +49,8 @@ export default function CdCatalogue() {
   const [search, setSearch] = useState("");
   const [reidentifyDisc, setReidentifyDisc] = useState(null);
   const [reidentifyLoadingId, setReidentifyLoadingId] = useState(null);
+  const [artworkFetchingIds, setArtworkFetchingIds] = useState(new Set());
+  const artworkFetchTimers = useRef(new Map());
 
   const fetchRows = useCallback((f, d, s) => {
     api.getCdCatalogue(f, s, d)
@@ -81,6 +83,35 @@ export default function CdCatalogue() {
       setReidentifyLoadingId(null);
     }
   }
+
+  function startArtworkPoll(discId) {
+    setArtworkFetchingIds((prev) => { const s = new Set(prev); s.add(discId); return s; });
+    if (artworkFetchTimers.current.has(discId)) {
+      clearTimeout(artworkFetchTimers.current.get(discId));
+    }
+    artworkFetchTimers.current.set(discId, setTimeout(() => {
+      setArtworkFetchingIds((prev) => { const s = new Set(prev); s.delete(discId); return s; });
+      artworkFetchTimers.current.delete(discId);
+    }, 60000));
+  }
+
+  useEffect(() => {
+    if (artworkFetchingIds.size === 0) return;
+    const timer = setInterval(async () => {
+      for (const discId of artworkFetchingIds) {
+        try {
+          const r = await fetch(`/api/discs/${discId}/cover`);
+          if (r.ok) {
+            clearTimeout(artworkFetchTimers.current.get(discId));
+            artworkFetchTimers.current.delete(discId);
+            setArtworkFetchingIds((prev) => { const s = new Set(prev); s.delete(discId); return s; });
+            fetchRows(filter, dirty, search);
+          }
+        } catch (_) { /* ignore transient errors */ }
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [artworkFetchingIds, fetchRows, filter, dirty, search]);
 
   return (
     <div>
@@ -145,7 +176,10 @@ export default function CdCatalogue() {
                   <tr key={row.disc_id} className="catalogue-row">
                     <td>
                       <CdStatusBadge row={row} />
-                      {row.identified && !row.has_cover && (
+                      {row.identified && artworkFetchingIds.has(row.disc_id) && (
+                        <span className="cd-no-artwork-badge cd-artwork-fetching-badge">Fetching artwork…</span>
+                      )}
+                      {row.identified && !row.has_cover && !artworkFetchingIds.has(row.disc_id) && (
                         <span className="cd-no-artwork-badge">No artwork</span>
                       )}
                     </td>
@@ -221,7 +255,9 @@ export default function CdCatalogue() {
         <CdIdentifyPanel
           disc={reidentifyDisc}
           onConfirm={() => {
+            const discId = reidentifyDisc?.id;
             setReidentifyDisc(null);
+            if (discId) startArtworkPoll(discId);
             fetchRows(filter, dirty, search);
           }}
           onSkip={() => setReidentifyDisc(null)}

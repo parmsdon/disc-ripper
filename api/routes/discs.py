@@ -223,11 +223,21 @@ def identify_cd(disc_id):
 
         def _dl_cover(did, mbid, cdir):
             from common.cd_tagger import fetch_cover
-            fetch_cover(did, mbid, cdir, force=True)
+            from common import cover_tracker
+            cover_tracker.add(did)
+            try:
+                fetch_cover(did, mbid, cdir, force=True)
+            finally:
+                cover_tracker.remove(did)
 
         def _dl_discogs_cover(did, iurl, cdir):
             from common.cd_tagger import fetch_cover_from_url
-            fetch_cover_from_url(did, iurl, cdir, force=True)
+            from common import cover_tracker
+            cover_tracker.add(did)
+            try:
+                fetch_cover_from_url(did, iurl, cdir, force=True)
+            finally:
+                cover_tracker.remove(did)
 
         cover_candidate_id = body.get("cover_candidate_id")
         _cover_cand = None

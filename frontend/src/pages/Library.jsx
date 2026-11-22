@@ -56,6 +56,7 @@ export default function Library() {
   const [status, setStatus] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [startError, setStartError] = useState(null);
+  const [generating, setGenerating] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const fetchStatus = useCallback(() => {
@@ -81,12 +82,21 @@ export default function Library() {
   }, [status?.gen_status]);
 
   async function handleGenerate() {
+    if (generating) return;
+    setGenerating(true);
     setStartError(null);
     try {
       await api.generateLibrary();
       fetchStatus();
     } catch (e) {
-      setStartError(e.message);
+      if (e.message.includes("already_running")) {
+        // Another request beat us — just show its progress
+        fetchStatus();
+      } else {
+        setStartError(e.message);
+      }
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -97,6 +107,7 @@ export default function Library() {
   const ready = status?.ready ?? false;
   const genStatus = status?.gen_status ?? "idle";
   const isRunning = genStatus === "running";
+  const isBusy = isRunning || generating;
   const prog = status?.gen_progress;
 
   return (
@@ -120,17 +131,18 @@ export default function Library() {
           <PrereqRow label="CD encodes pending" count={prereqs?.cd_encodes_pending} />
           <PrereqRow label="DVDs still ripping" count={prereqs?.dvds_not_ripped} />
           <PrereqRow label="CDs still ripping" count={prereqs?.cds_not_ripped} />
+          <PrereqRow label="Cover art downloads in progress" count={prereqs?.cd_covers_fetching} warnNotError />
         </div>
 
         <div className="library-generate-zone">
           <button
             className={`library-generate-btn${ready ? " ready" : ""}`}
             onClick={handleGenerate}
-            disabled={!ready || isRunning}
+            disabled={!ready || isBusy}
           >
-            {isRunning ? "Running…" : "Generate Library"}
+            {isBusy ? "Running…" : "Generate Library"}
           </button>
-          {!ready && blockingCount !== null && !isRunning && (
+          {!ready && blockingCount !== null && !isBusy && (
             <span className="library-blocked-hint">
               {blockingCount} {blockingCount === 1 ? "item" : "items"} blocking generation
             </span>

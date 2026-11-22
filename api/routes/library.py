@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from common.catalog_dups import load_dup_roles
 from common.cd_tagger import fetch_cover, tag_flac, tag_mp3
 from common.config import get_db_url
+from common import cover_tracker
 from common.models import (
     Catalog, CDTrack, Disc, DiscStatus, DiscType, EncodeJob, EncodeProfile,
     JobStatus, Setting, naive_utcnow,
@@ -143,6 +144,8 @@ def get_status():
         )
     ) or 0
 
+    cd_covers_fetching = cover_tracker.count()
+
     prerequisites = {
         "dvds_unmatched": dvds_unmatched,
         "cds_unidentified": cds_unidentified,
@@ -151,6 +154,7 @@ def get_status():
         "cd_encodes_pending": cd_encodes_pending,
         "dvds_not_ripped": dvds_not_ripped,
         "cds_not_ripped": cds_not_ripped,
+        "cd_covers_fetching": cd_covers_fetching,
     }
     ready = all(v == 0 for v in prerequisites.values())
 
@@ -446,9 +450,12 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                 if selected_cand and selected_cand.candidate_data:
                     year = selected_cand.candidate_data.get("year")
 
-                # Cover art
+                # Cover art — check filesystem first (same as catalogue's has_cover)
                 cover_data = None
-                if disc.mb_release_id:
+                cover_path = covers_dir / f"{disc.id}.jpg"
+                if cover_path.exists():
+                    cover_data = cover_path.read_bytes()
+                elif disc.mb_release_id:
                     cover_data = fetch_cover(disc.id, disc.mb_release_id, covers_dir)
                 if cover_data is None:
                     stats["cd_albums_no_cover"] += 1
