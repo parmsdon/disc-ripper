@@ -13,20 +13,6 @@ const FILTERS = [
   { key: "no_artwork", label: "No artwork" },
 ];
 
-function CoverThumb({ discId, hasCover }) {
-  const [failed, setFailed] = React.useState(false);
-  if (!hasCover || failed) {
-    return <div className="cd-cover-thumb cd-cover-thumb--empty" />;
-  }
-  return (
-    <img
-      className="cd-cover-thumb"
-      src={`/api/discs/${discId}/cover`}
-      alt=""
-      onError={() => setFailed(true)}
-    />
-  );
-}
 
 function formatDate(isoStr) {
   if (!isoStr) return null;
@@ -140,20 +126,8 @@ export default function CdCatalogue() {
         )}
         {!loadError && rows.length > 0 && (
           <table className="catalogue-table">
-            <colgroup>
-              <col style={{ width: "52px" }} />
-              <col style={{ width: "90px" }} />
-              <col />
-              <col />
-              <col style={{ width: "90px" }} />
-              <col style={{ width: "90px" }} />
-              <col style={{ width: "70px" }} />
-              <col style={{ width: "72px" }} />
-              <col style={{ width: "36px" }} />
-            </colgroup>
             <thead>
               <tr>
-                <th></th>
                 <th>Status</th>
                 <th>CD</th>
                 <th>Album</th>
@@ -169,10 +143,12 @@ export default function CdCatalogue() {
                 const tracksMissing = row.track_count > 0 && row.titled_tracks < row.track_count;
                 return (
                   <tr key={row.disc_id} className="catalogue-row">
-                    <td className="cd-cover-cell">
-                      <CoverThumb discId={row.disc_id} hasCover={row.has_cover} />
+                    <td>
+                      <CdStatusBadge row={row} />
+                      {row.identified && !row.has_cover && (
+                        <span className="cd-no-artwork-badge">No artwork</span>
+                      )}
                     </td>
-                    <td><CdStatusBadge row={row} /></td>
                     <td>
                       {row.disc_temp_name && <div>{row.disc_temp_name}</div>}
                       {row.disc_fingerprint && (
