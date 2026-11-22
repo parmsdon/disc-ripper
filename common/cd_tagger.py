@@ -144,7 +144,9 @@ def tag_mp3(path: Path, tags: dict, cover: Optional[bytes]) -> bool:
 
     def _text(frame_id: str) -> str:
         f = audio.get(frame_id)
-        return f.text[0] if f and f.text else ""
+        # str() is required: TDRC stores ID3TimeStamp objects whose __eq__
+        # does not compare equal to plain Python strings.
+        return str(f.text[0]) if f and f.text else ""
 
     def _set(frame_id: str, cls, text: str) -> None:
         nonlocal changed
