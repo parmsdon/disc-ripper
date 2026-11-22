@@ -24,6 +24,7 @@ source "$ENV_FILE"
 : "${SAMBA_UID:?SAMBA_UID not set in holly.env}"
 : "${PLEX_CONFIG_PATH:?PLEX_CONFIG_PATH not set in holly.env}"
 : "${PLEX_TRANSCODE_PATH:?PLEX_TRANSCODE_PATH not set in holly.env}"
+: "${PLEX_ALLOWED_NETWORKS:?PLEX_ALLOWED_NETWORKS not set in holly.env}"
 : "${TZ:?TZ not set in holly.env}"
 
 SAMBA_CONTAINER="discripper-samba-${ENV}"
@@ -131,6 +132,8 @@ cmd_up() {
         -e TZ="$TZ" \
         -e PLEX_UID=1001 \
         -e PLEX_GID=1001 \
+        -e "ADVERTISE_IP=http://${PLEX_IP}:32400" \
+        -e "ALLOWED_NETWORKS=${PLEX_ALLOWED_NETWORKS}" \
         "${plex_claim_args[@]}" \
         -v "${PLEX_CONFIG_PATH}:/config" \
         -v "${PLEX_TRANSCODE_PATH}:/transcode" \

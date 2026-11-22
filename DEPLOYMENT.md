@@ -734,6 +734,13 @@ The Xbox has an official Plex app in the Microsoft Store:
    **More** → **Connect manually** and enter `192.168.0.231:32400` (prod).
 3. Browse the Movies library.
 
+> **Required:** `ADVERTISE_IP` and `ALLOWED_NETWORKS` must be set (they are,
+> via holly.env) for the Xbox app to connect. Without them the server
+> advertises no reachable address and the Xbox app shows **"This server is
+> currently unavailable"** even though the container is running. If you see
+> that message, confirm `PLEX_ALLOWED_NETWORKS` in holly.env covers your LAN
+> subnet and restart with `./deploy/holly/holly.sh restart`.
+
 ---
 
 ### 5.8 Day-to-day management
