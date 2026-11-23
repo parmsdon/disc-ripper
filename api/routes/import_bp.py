@@ -528,6 +528,7 @@ def _run_import_job(db_url: str, datastore_root: str) -> None:
                     "imported": imported,
                     "skipped": skipped,
                     "already_imported": already_imported,
+                    "current_file": filename,
                 }))
                 _set_setting(session, _HEARTBEAT_KEY, naive_utcnow().isoformat())
                 session.commit()

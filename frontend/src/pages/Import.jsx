@@ -70,6 +70,18 @@ function fmtDatetime(iso) {
   });
 }
 
+function fmtElapsed(startIso, nowMs) {
+  if (!startIso) return "";
+  const secs = Math.round(
+    (nowMs - new Date(startIso + (startIso.includes("Z") || startIso.includes("+") ? "" : "Z")).getTime()) / 1000
+  );
+  if (secs < 0) return "";
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 function fmtDuration(startIso, endIso) {
   if (!startIso || !endIso) return null;
   const ms =
@@ -96,16 +108,55 @@ const OUTCOME_LABEL = {
   error: "Error",
 };
 
-function LastRunBanner({ lastRun }) {
+function LastRunBanner({ lastRun, totals, jobStatus }) {
+  const [tick, setTick] = useState(Date.now());
+  const isRunning = jobStatus === "running";
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isRunning]);
+
   if (!lastRun) return null;
-  const { started_at, finished_at, outcome, imported, skipped, already_imported, total } = lastRun;
+
+  if (isRunning) {
+    const processed = totals?.processed || 0;
+    const total = totals?.total || 0;
+    const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+    const currentFile = totals?.current_file || null;
+    return (
+      <div className="panel" style={{ marginBottom: "0.75rem", padding: "0.75rem 1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+          <span className="text-dim" style={{ fontSize: "0.82rem" }}>In progress</span>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+            {processed} of {total}
+          </span>
+          {lastRun.started_at && (
+            <span className="text-dim" style={{ fontSize: "0.82rem", marginLeft: "auto" }}>
+              {fmtElapsed(lastRun.started_at, tick)}
+            </span>
+          )}
+        </div>
+        {total > 0 && (
+          <div className="lib-progress-track" style={{ marginBottom: currentFile ? "0.4rem" : 0 }}>
+            <div className="lib-progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {currentFile && (
+          <div className="lib-progress-step">{currentFile}</div>
+        )}
+      </div>
+    );
+  }
+
+  const { started_at, finished_at, outcome, imported, skipped, already_imported } = lastRun;
   const dur = fmtDuration(started_at, finished_at);
   const pillClass = OUTCOME_PILL[outcome] || "idle";
   const parts = [];
   if (imported > 0) parts.push(`${imported} imported`);
   if (skipped > 0) parts.push(`${skipped} skipped`);
   if (already_imported > 0) parts.push(`${already_imported} already done`);
-  if (total > 0 && parts.length === 0) parts.push(`0 of ${total}`);
   return (
     <div className="panel" style={{ marginBottom: "0.75rem", padding: "0.55rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
       <span className="text-dim" style={{ fontSize: "0.82rem" }}>Last run</span>
@@ -116,9 +167,6 @@ function LastRunBanner({ lastRun }) {
           <span style={{ fontSize: "0.85rem" }}>{fmtDatetime(finished_at)}</span>
           {dur && <span className="text-dim" style={{ fontSize: "0.82rem" }}>({dur})</span>}
         </>
-      )}
-      {!finished_at && outcome == null && (
-        <span className="text-dim" style={{ fontSize: "0.82rem" }}>in progress</span>
       )}
       {parts.length > 0 && (
         <span className="text-dim" style={{ fontSize: "0.85rem" }}>· {parts.join(", ")}</span>
@@ -439,7 +487,7 @@ export default function Import() {
       )}
 
       {/* Last run banner */}
-      <LastRunBanner lastRun={lastRun} />
+      <LastRunBanner lastRun={lastRun} totals={totals} jobStatus={jobStatus} />
 
       {/* Live file table */}
       <div className="panel">
