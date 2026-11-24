@@ -1,7 +1,7 @@
 """add rip_method and rip_reason to discs
 
-Revision ID: 0022_add_disc_rip_method_reason
-Revises: fea31f65dd61
+Revision ID: 0024_add_disc_rip_method_reason
+Revises: 71cf0c26bae8
 Create Date: 2026-11-24 00:00:00.000000
 
 """
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = '0022_add_disc_rip_method_reason'
-down_revision: Union[str, None] = 'fea31f65dd61'
+revision: str = '0024_add_disc_rip_method_reason'
+down_revision: Union[str, None] = '71cf0c26bae8'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
