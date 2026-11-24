@@ -73,3 +73,13 @@ discogs:
 
 musicbrainz:
   contact_email: "your_email@example.com"
+
+dvd:
+  # Primary rip method: dvdbackup (default) or makemkv.
+  # dvdbackup uses a two-step copy+mkisofs pipeline with HandBrakeCLI pre-scan.
+  # makemkv skips dvdbackup entirely and uses MakeMKV for all DVDs.
+  rip_method: dvdbackup
+  # When rip_method is dvdbackup, automatically re-rip with MakeMKV if the
+  # disc is detected as copy-protected, dvdbackup fails, or the rip is dirty.
+  # Requires MakeMKV to be installed on the ripper machine (see DEPLOYMENT.md).
+  makemkv_fallback: false

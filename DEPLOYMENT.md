@@ -185,6 +185,68 @@ sudo dnf install -y libdvdcss
 sudo dnf install -y HandBrake
 ```
 
+### MakeMKV (optional — required for `makemkv_fallback: true` or `rip_method: makemkv`)
+
+MakeMKV handles copy-protected discs that dvdbackup cannot read. Build from
+source (no official Fedora package exists):
+
+**Build dependencies:**
+```bash
+sudo dnf install -y gcc gcc-c++ make pkgconf-pkg-config \
+  expat-devel ffmpeg-free-devel openssl-devel zlib-ng-compat-devel
+```
+
+**Build (replace 2.0.0 with the current version from https://www.makemkv.com/download/):**
+```bash
+cd /tmp
+wget https://www.makemkv.com/download/makemkv-oss-2.0.0.tar.gz
+wget https://www.makemkv.com/download/makemkv-bin-2.0.0.tar.gz
+
+# OSS portion (open-source backend library)
+tar xf makemkv-oss-2.0.0.tar.gz
+cd makemkv-oss-2.0.0
+./configure --disable-gui
+make -j$(nproc)
+sudo make install
+
+# Binary blob (makemkvcon CLI, links against the OSS portion)
+cd /tmp
+tar xf makemkv-bin-2.0.0.tar.gz
+cd makemkv-bin-2.0.0
+make -j$(nproc)
+sudo make install
+
+# Verify installation
+makemkvcon -r info disc:9999
+```
+
+**Disable the automatic online update check:**
+
+MakeMKV phones home on every run unless told otherwise. MakeMKV's settings
+are stored in `~/.MakeMKV/settings.conf`; add or update the one relevant key
+(this preserves any other settings you may have):
+
+```bash
+sudo -u ripper mkdir -p /home/ripper/.MakeMKV
+# Add the key if absent, or update it if already present:
+sudo -u ripper grep -q '^app_UpdateEnable' /home/ripper/.MakeMKV/settings.conf 2>/dev/null \
+  && sudo -u ripper sed -i 's/^app_UpdateEnable.*/app_UpdateEnable = "0"/' \
+       /home/ripper/.MakeMKV/settings.conf \
+  || echo 'app_UpdateEnable = "0"' \
+       | sudo -u ripper tee -a /home/ripper/.MakeMKV/settings.conf > /dev/null
+```
+
+**Note on udev symlinks:** `makemkvcon` accepts real device paths (`/dev/sr1`)
+but rejects the udev symlinks (`/dev/sr_drvNN`). The ripper service resolves
+symlinks automatically via `realpath` before passing the path to MakeMKV.
+
+**Enable in config (`config/dev.yaml` or `config/prod.yaml`):**
+```yaml
+dvd:
+  rip_method: dvdbackup      # keep dvdbackup as primary
+  makemkv_fallback: true     # MakeMKV takes over on protection, failure, or dirty rip
+```
+
 ### Get the code
 
 ```bash

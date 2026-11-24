@@ -203,6 +203,8 @@ class Disc(Base):
     # concept, distinct value set.
     rip_quality = Column(String, nullable=True)
     rip_attempt_count = Column(Integer, nullable=False, default=1, server_default="1")
+    rip_method = Column(String, nullable=True)   # "dvdbackup" or "makemkv"; None for legacy
+    rip_reason = Column(String, nullable=True)   # why MakeMKV was triggered; kept after success
 
     # MusicBrainz fields (CD only). mb_disc_id is a SHA-1-based ID computed
     # from the TOC by libdiscid (distinct from disc_fingerprint, which is the

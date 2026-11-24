@@ -366,7 +366,19 @@ function DiscStatusZone({ disc }) {
   const isDirty = disc.rip_quality === "dirty";
   const isRerip = disc.rip_attempt_count > 1;
   const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
-  const pillLabel = reripInProgress ? "re-ripping" : disc.status;
+  const makemkvInProgress = !!disc.rip_reason && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
+  const wasProtected = disc.rip_reason === "protected";
+
+  // Show "re-ripping" in the status pill for any active re-rip (MakeMKV or dvdbackup).
+  const pillLabel = (makemkvInProgress || reripInProgress) ? "re-ripping" : disc.status;
+
+  let makemkvHint = null;
+  if (makemkvInProgress) {
+    if (disc.rip_reason === "protected") makemkvHint = "Re-ripping with MakeMKV (copy-protected disc)";
+    else if (disc.rip_reason === "dirty") makemkvHint = "Re-ripping with MakeMKV (recovering dirty rip)";
+    else if (disc.rip_reason === "dvdbackup_failed") makemkvHint = "Re-ripping with MakeMKV (dvdbackup failed)";
+    else makemkvHint = "Re-ripping with MakeMKV";
+  }
 
   return (
     <div className="disc-status-zone">
@@ -392,16 +404,36 @@ function DiscStatusZone({ disc }) {
             ⚠ Dirty rip
           </span>
         )}
+        {(disc.status === "protected" || wasProtected) && (
+          <span
+            className="dirty-rip-badge"
+            title={disc.error_message || "Disc appears copy-protected"}
+            style={{ background: "var(--warn-bg, #3a2a00)", color: "var(--warn, #f4b942)" }}
+          >
+            🔒 Protected
+          </span>
+        )}
+        {disc.rip_method === "makemkv" && !_IN_PROGRESS_DISC_STATUSES.includes(disc.status) && (
+          <span
+            className="attempt-badge"
+            title={disc.rip_reason ? `MakeMKV rip (reason: ${disc.rip_reason})` : "Ripped with MakeMKV"}
+            style={{ background: "var(--accent-bg, #0a2a3a)", color: "var(--accent, #42a5f4)" }}
+          >
+            MakeMKV
+          </span>
+        )}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
       </div>
 
-      {disc.status === "error" && disc.error_message && (
+      {disc.status === "error" && disc.error_message && !wasProtected && (
         <p className="error-hint">{disc.error_message}</p>
       )}
 
-      {reripInProgress && (
+      {makemkvInProgress ? (
+        <p className="rerip-hint">{makemkvHint}</p>
+      ) : reripInProgress ? (
         <p className="rerip-hint">Re-ripping after a previous dirty/failed attempt</p>
-      )}
+      ) : null}
 
       {disc.status === "identifying" && (
         <p className="identifying-hint">Disc ripped — please identify before this drive can be reused</p>

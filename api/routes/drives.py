@@ -93,6 +93,9 @@ def list_drives():
                 "progress_percent": current_job.progress_percent if current_job else None,
                 "progress_stage": current_job.progress_stage if current_job else None,
                 "mb_lookup_status": current_disc_row.mb_lookup_status,
+                "error_message": current_disc_row.error_message,
+                "rip_method": current_disc_row.rip_method,
+                "rip_reason": current_disc_row.rip_reason,
             }
 
         drive_dict = _drive_summary(drive)

@@ -73,7 +73,7 @@ _ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.build
 # user-initiated retry rather than auto-creating a new row.
 _COMPLETED_DISC_STATUSES = (
     DiscStatus.ripped, DiscStatus.identifying, DiscStatus.encoding,
-    DiscStatus.done, DiscStatus.error,
+    DiscStatus.done, DiscStatus.error, DiscStatus.protected,
 )
 
 _SERVICE_STATUS_KEY = "service_status"
@@ -293,15 +293,36 @@ def run(cfg: dict) -> None:
                                         disc_fingerprint, existing_active_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None and (
-                                    existing_completed_disc.status == DiscStatus.error
+                                    existing_completed_disc.status in (DiscStatus.error, DiscStatus.protected)
                                     or existing_completed_disc.rip_quality == "dirty"
                                 ):
                                     existing_completed_disc.drive_id = drive_id
-                                    logger.info(
-                                        "Disc %s previously had errors/dirty rip - disc #%s on "
-                                        "Drive %s, awaiting user action",
-                                        disc_fingerprint, existing_completed_disc.id, label,
+                                    dvd_cfg = cfg.get("dvd", {})
+                                    makemkv_active = (
+                                        dvd_cfg.get("rip_method") == "makemkv"
+                                        or dvd_cfg.get("makemkv_fallback", False)
                                     )
+                                    if makemkv_active:
+                                        existing_completed_disc.status = DiscStatus.queued
+                                        existing_completed_disc.rip_attempt_count = (
+                                            existing_completed_disc.rip_attempt_count or 1
+                                        ) + 1
+                                        session.add(RipJob(
+                                            disc_id=existing_completed_disc.id,
+                                            drive_id=drive_id,
+                                            status=JobStatus.queued,
+                                        ))
+                                        logger.info(
+                                            "Re-inserted error/protected/dirty disc #%s — "
+                                            "queuing new rip job (MakeMKV fallback active)",
+                                            existing_completed_disc.id,
+                                        )
+                                    else:
+                                        logger.info(
+                                            "Disc %s previously had errors/dirty rip - disc #%s on "
+                                            "Drive %s, awaiting user action",
+                                            disc_fingerprint, existing_completed_disc.id, label,
+                                        )
                                 elif existing_completed_disc is not None:
                                     existing_completed_disc.drive_id = drive_id
                                     logger.info(
