@@ -29,6 +29,7 @@ CSS-protected discs and do not indicate a dirty rip.
 import logging
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -251,6 +252,14 @@ def run_makemkv(
         )
 
         if success:
+            # Remove any pre-existing raw output from a prior rip attempt.
+            # On re-rips, iso_path may be a file (dvdbackup ISO) or a
+            # non-empty directory (MakeMKV backup). os.rename fails with
+            # ENOTDIR or ENOTEMPTY in both cases on Linux.
+            if os.path.isdir(iso_path):
+                shutil.rmtree(iso_path)
+            elif os.path.exists(iso_path):
+                os.unlink(iso_path)
             os.rename(tmp_path, iso_path)
             dirty = detect_dirty_makemkv(full_log)
         else:
