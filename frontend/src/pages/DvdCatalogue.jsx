@@ -277,12 +277,22 @@ export default function DvdCatalogue() {
                   </td>
                   <td>
                     {row.disc_rip_method === "makemkv"
-                      ? <span className="makemkv-reason-badge">
-                          {row.disc_rip_reason === "protected" ? "🔒 Protected → MakeMKV" :
-                           row.disc_rip_reason === "dirty" ? "⚠ Dirty rip → MakeMKV" :
-                           row.disc_rip_reason === "dvdbackup_failed" ? "⚠ dvdbackup failed → MakeMKV" :
-                           "MakeMKV"}
-                        </span>
+                      ? (() => {
+                          const tooltipReason =
+                            row.disc_rip_reason === "protected" ? "disc was copy-protected; re-ripped with MakeMKV" :
+                            row.disc_rip_reason === "dirty" ? "dvdbackup reported a dirty rip; re-ripped with MakeMKV" :
+                            row.disc_rip_reason === "dvdbackup_failed" ? "dvdbackup failed; re-ripped with MakeMKV" :
+                            "ripped with MakeMKV";
+                          const isClean = row.disc_rip_quality !== "dirty";
+                          return (
+                            <span
+                              className={`makemkv-reason-badge ${isClean ? "clean" : "dirty"}`}
+                              title={tooltipReason}
+                            >
+                              {isClean ? "✓ Clean · MakeMKV" : "⚠ Dirty · MakeMKV"}
+                            </span>
+                          );
+                        })()
                       : row.disc_status === "protected"
                       ? <span className="status-pill protected">Protected</span>
                       : row.disc_rip_quality === "dirty"

@@ -369,9 +369,27 @@ body {
   flex-shrink: 0;
 }
 
+/* Outcome variants used on completed discs */
+.makemkv-reason-badge.clean {
+  background: rgba(76, 175, 109, 0.15);
+  color: var(--good);
+}
+.makemkv-reason-badge.dirty {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
 [data-theme="light"] .makemkv-reason-badge {
   background: rgba(37, 99, 235, 0.12);
   color: #1d4ed8;
+}
+[data-theme="light"] .makemkv-reason-badge.clean {
+  background: rgba(22, 101, 52, 0.12);
+  color: #15803d;
+}
+[data-theme="light"] .makemkv-reason-badge.dirty {
+  background: rgba(161, 98, 7, 0.12);
+  color: #b45309;
 }
 
 .dirty-rip-badge {

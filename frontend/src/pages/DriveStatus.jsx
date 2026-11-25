@@ -406,14 +406,22 @@ function DiscStatusZone({ disc }) {
             🔒 Protected
           </span>
         )}
-        {disc.rip_method === "makemkv" && !inProgress && (
-          <span className="makemkv-reason-badge">
-            {disc.rip_reason === "protected" ? "🔒 Protected → MakeMKV" :
-             disc.rip_reason === "dirty" ? "⚠ Dirty rip → MakeMKV" :
-             disc.rip_reason === "dvdbackup_failed" ? "⚠ dvdbackup failed → MakeMKV" :
-             "MakeMKV"}
-          </span>
-        )}
+        {disc.rip_method === "makemkv" && !inProgress && (() => {
+          const tooltipReason =
+            disc.rip_reason === "protected" ? "disc was copy-protected; re-ripped with MakeMKV" :
+            disc.rip_reason === "dirty" ? "dvdbackup reported a dirty rip; re-ripped with MakeMKV" :
+            disc.rip_reason === "dvdbackup_failed" ? "dvdbackup failed; re-ripped with MakeMKV" :
+            "ripped with MakeMKV";
+          const isClean = disc.rip_quality !== "dirty";
+          return (
+            <span
+              className={`makemkv-reason-badge ${isClean ? "clean" : "dirty"}`}
+              title={tooltipReason}
+            >
+              {isClean ? "✓ Clean · MakeMKV" : "⚠ Dirty · MakeMKV"}
+            </span>
+          );
+        })()}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
       </div>
 
