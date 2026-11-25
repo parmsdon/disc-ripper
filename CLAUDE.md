@@ -26,6 +26,8 @@ alembic downgrade -1          # roll back one migration
 alembic revision --autogenerate -m "description"   # generate new migration
 ```
 
+**Revision ID length**: `alembic_version.version_num` is `varchar(32)`. New revision IDs must be **32 characters or fewer** — Alembic uses the `revision:` string as the stored value. The convention `NNNN_short_description` is fine as long as the total stays within that limit.
+
 ### Seed reference data
 ```bash
 export DISCRIPPER_ENV=dev
