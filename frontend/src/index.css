@@ -338,7 +338,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 180px;
+  max-width: 320px;
 }
 
 .working-title-badge {
@@ -354,7 +354,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 160px;
+  max-width: 240px;
 }
 
 .makemkv-reason-badge {
@@ -363,10 +363,15 @@ body {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--accent, #42a5f4);
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--accent);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+[data-theme="light"] .makemkv-reason-badge {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
 }
 
 .dirty-rip-badge {
@@ -515,7 +520,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 140px 100px minmax(160px, 1fr) 480px 36px;
+  grid-template-columns: 140px 140px 100px minmax(160px, 1fr) 300px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
@@ -626,7 +631,7 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
   white-space: nowrap;
-  width: 150px;
+  width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

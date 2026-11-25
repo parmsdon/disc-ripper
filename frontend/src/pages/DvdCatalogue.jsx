@@ -276,7 +276,14 @@ export default function DvdCatalogue() {
                       : <span className="catalogue-dim">—</span>}
                   </td>
                   <td>
-                    {row.disc_status === "protected"
+                    {row.disc_rip_method === "makemkv"
+                      ? <span className="makemkv-reason-badge">
+                          {row.disc_rip_reason === "protected" ? "🔒 Protected → MakeMKV" :
+                           row.disc_rip_reason === "dirty" ? "⚠ Dirty rip → MakeMKV" :
+                           row.disc_rip_reason === "dvdbackup_failed" ? "⚠ dvdbackup failed → MakeMKV" :
+                           "MakeMKV"}
+                        </span>
+                      : row.disc_status === "protected"
                       ? <span className="status-pill protected">Protected</span>
                       : row.disc_rip_quality === "dirty"
                       ? <span className="dirty-rip-badge">⚠ dirty</span>

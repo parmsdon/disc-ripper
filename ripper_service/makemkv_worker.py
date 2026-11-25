@@ -191,7 +191,19 @@ def run_makemkv(
 
                 m = _PRGC_RE.match(line)
                 if m:
-                    current_stage = m.group(1)
+                    new_stage = m.group(1)
+                    if new_stage != current_stage:
+                        current_stage = new_stage
+                        # Write stage immediately on change so post-copy
+                        # finalization stages (e.g. "Saving backup result")
+                        # appear without waiting for the next PRGV line.
+                        rip_job = session.get(RipJob, rip_job_id)
+                        if rip_job is not None:
+                            rip_job.progress_stage = (
+                                f"MakeMKV: {current_stage}" if current_stage else "MakeMKV"
+                            )
+                            session.commit()
+                        last_progress_write = time.time()
                     continue
 
                 m = _PRGV_RE.match(line)

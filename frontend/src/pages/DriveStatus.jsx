@@ -407,12 +407,11 @@ function DiscStatusZone({ disc }) {
           </span>
         )}
         {disc.rip_method === "makemkv" && !inProgress && (
-          <span
-            className="attempt-badge"
-            title={disc.rip_reason ? `MakeMKV rip (reason: ${disc.rip_reason})` : "Ripped with MakeMKV"}
-            style={{ background: "var(--accent-bg, #0a2a3a)", color: "var(--accent, #42a5f4)" }}
-          >
-            MakeMKV
+          <span className="makemkv-reason-badge">
+            {disc.rip_reason === "protected" ? "🔒 Protected → MakeMKV" :
+             disc.rip_reason === "dirty" ? "⚠ Dirty rip → MakeMKV" :
+             disc.rip_reason === "dvdbackup_failed" ? "⚠ dvdbackup failed → MakeMKV" :
+             "MakeMKV"}
           </span>
         )}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}

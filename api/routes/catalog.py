@@ -191,6 +191,8 @@ def dvd_catalogue():
             "disc_ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
             "disc_rip_quality": disc.rip_quality,
             "disc_status": disc.status.value if disc.status else None,
+            "disc_rip_method": disc.rip_method,
+            "disc_rip_reason": disc.rip_reason,
         }
 
     def _catalog_fields(catalog):
