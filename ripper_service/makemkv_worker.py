@@ -196,21 +196,27 @@ def run_makemkv(
 
                 m = _PRGV_RE.match(line)
                 if m:
+                    step_val = int(m.group(1))
                     overall = int(m.group(2))
                     max_val = int(m.group(3))
-                    if max_val > 0:
+                    # Pre-copy stages (scanning, reading) leave overall near 0.
+                    # Use per-step progress until copying starts; switch to
+                    # overall once the stage name signals active file copy.
+                    is_copying = current_stage.lower().startswith("copying")
+                    if is_copying and max_val > 0:
                         pct = int(overall / max_val * 100)
-                        now = time.time()
-                        if now - last_progress_write >= _PROGRESS_THROTTLE_SECONDS:
-                            rip_job = session.get(RipJob, rip_job_id)
-                            if rip_job is not None:
-                                rip_job.progress_percent = pct
-                                rip_job.progress_stage = (
-                                    f"Re-ripping with MakeMKV: {current_stage}"
-                                    if current_stage else "Re-ripping with MakeMKV"
-                                )
-                                session.commit()
-                            last_progress_write = now
+                    else:
+                        pct = int(step_val / 65536 * 100)
+                    now = time.time()
+                    if now - last_progress_write >= _PROGRESS_THROTTLE_SECONDS:
+                        rip_job = session.get(RipJob, rip_job_id)
+                        if rip_job is not None:
+                            rip_job.progress_percent = pct
+                            rip_job.progress_stage = (
+                                f"MakeMKV: {current_stage}" if current_stage else "MakeMKV"
+                            )
+                            session.commit()
+                        last_progress_write = now
                     continue
 
                 # MSG lines captured via log_lines; no extra action needed.

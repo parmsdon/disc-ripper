@@ -3,12 +3,13 @@ import { api } from "../api/client";
 
 function ProgressBar({ percent, stage }) {
   const pct = percent ?? 0;
+  const labelText = stage ? `${stage} ${pct}%` : `${pct}%`;
   return (
     <div className="progress-bar-row">
       <div className="progress-bar-track">
         <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
       </div>
-      <span className="progress-bar-label">{stage ? `${stage}: ${pct}%` : `${pct}%`}</span>
+      <span className="progress-bar-label" title={labelText}>{labelText}</span>
     </div>
   );
 }
@@ -290,15 +291,14 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
       <button
         onClick={handleSave}
         disabled={saving || checking || !!conflict || !value.trim() || value.trim() === disc.temp_name}
+        title={
+          conflict ? "Already in use by another DVD" :
+          disc.status === "identifying" ? "This can't be changed once saved" :
+          undefined
+        }
       >
         {saving ? "Saving…" : "Save"}
       </button>
-      {disc.status === "identifying" && (
-        <span className="warning-hint">This can't be changed once saved</span>
-      )}
-      {conflict && (
-        <span className="warning-hint temp-name-conflict">Already in use by another DVD</span>
-      )}
     </div>
   );
 }
@@ -360,51 +360,44 @@ function RetryRipButton({ disc, onRefresh }) {
 }
 
 function DiscStatusZone({ disc }) {
-  // Not scoped to a particular status - dirty is now flagged live as
-  // soon as a read error streams in (see rip_worker._flag_dirty_rip_live),
-  // so this can be true while the disc is still "ripping"/"building".
   const isDirty = disc.rip_quality === "dirty";
   const isRerip = disc.rip_attempt_count > 1;
-  const reripInProgress = isRerip && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
-  const makemkvInProgress = !!disc.rip_reason && _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
+  const inProgress = _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
+  const makemkvInProgress = !!disc.rip_reason && inProgress;
   const wasProtected = disc.rip_reason === "protected";
 
-  // Show "re-ripping" in the status pill for any active re-rip (MakeMKV or dvdbackup).
-  const pillLabel = (makemkvInProgress || reripInProgress) ? "re-ripping" : disc.status;
+  const pillLabel = (makemkvInProgress || (isRerip && inProgress)) ? "re-ripping" : disc.status;
 
-  let makemkvHint = null;
+  let makemkvReasonText = null;
   if (makemkvInProgress) {
-    if (disc.rip_reason === "protected") makemkvHint = "Re-ripping with MakeMKV (copy-protected disc)";
-    else if (disc.rip_reason === "dirty") makemkvHint = "Re-ripping with MakeMKV (recovering dirty rip)";
-    else if (disc.rip_reason === "dvdbackup_failed") makemkvHint = "Re-ripping with MakeMKV (dvdbackup failed)";
-    else makemkvHint = "Re-ripping with MakeMKV";
+    if (disc.rip_reason === "protected") makemkvReasonText = "🔒 Protected → MakeMKV";
+    else if (disc.rip_reason === "dirty") makemkvReasonText = "⚠ Dirty rip → MakeMKV";
+    else if (disc.rip_reason === "dvdbackup_failed") makemkvReasonText = "⚠ dvdbackup failed → MakeMKV";
+    else makemkvReasonText = "→ MakeMKV";
   }
 
   return (
     <div className="disc-status-zone">
       <div className="disc-status-row">
         <span className={`status-pill ${disc.status}`}>{pillLabel}</span>
-        {disc.type ? (
+        {disc.type && (
           <span className={`queue-entry-type-badge ${disc.type}`}>{disc.type.toUpperCase()}</span>
-        ) : null}
-        <span className="disc-id-label">
-          #{disc.id}
-          {disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
+        )}
+        <span className="disc-id-label" title={disc.disc_fingerprint || undefined}>
+          #{disc.id}{disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
         </span>
         {disc.temp_name && (
-          <span className="working-title-badge" title="Working title">
-            Working title: {disc.temp_name}
-          </span>
+          <span className="working-title-badge" title={disc.temp_name}>{disc.temp_name}</span>
         )}
-        {isDirty && (
-          <span
-            className="dirty-rip-badge"
-            title="Rip completed with read errors — use Retry Rip to attempt again"
-          >
+        {makemkvReasonText && (
+          <span className="makemkv-reason-badge">{makemkvReasonText}</span>
+        )}
+        {!makemkvInProgress && isDirty && (
+          <span className="dirty-rip-badge" title="Rip completed with read errors — use Retry Rip to attempt again">
             ⚠ Dirty rip
           </span>
         )}
-        {(disc.status === "protected" || wasProtected) && (
+        {!makemkvInProgress && (disc.status === "protected" || wasProtected) && (
           <span
             className="dirty-rip-badge"
             title={disc.error_message || "Disc appears copy-protected"}
@@ -413,7 +406,7 @@ function DiscStatusZone({ disc }) {
             🔒 Protected
           </span>
         )}
-        {disc.rip_method === "makemkv" && !_IN_PROGRESS_DISC_STATUSES.includes(disc.status) && (
+        {disc.rip_method === "makemkv" && !inProgress && (
           <span
             className="attempt-badge"
             title={disc.rip_reason ? `MakeMKV rip (reason: ${disc.rip_reason})` : "Ripped with MakeMKV"}
@@ -428,13 +421,6 @@ function DiscStatusZone({ disc }) {
       {disc.status === "error" && disc.error_message && !wasProtected && (
         <p className="error-hint">{disc.error_message}</p>
       )}
-
-      {makemkvInProgress ? (
-        <p className="rerip-hint">{makemkvHint}</p>
-      ) : reripInProgress ? (
-        <p className="rerip-hint">Re-ripping after a previous dirty/failed attempt</p>
-      ) : null}
-
       {disc.status === "identifying" && (
         <p className="identifying-hint">Disc ripped — please identify before this drive can be reused</p>
       )}

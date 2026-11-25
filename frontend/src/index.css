@@ -333,6 +333,12 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 
 .working-title-badge {
@@ -343,6 +349,24 @@ body {
   font-weight: 600;
   background: rgba(76, 175, 109, 0.15);
   color: var(--good);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.makemkv-reason-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent, #42a5f4);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .dirty-rip-badge {
@@ -353,11 +377,15 @@ body {
   font-weight: 600;
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .attempt-badge {
   font-size: 11px;
   color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cancel-rip-btn {
@@ -494,10 +522,11 @@ button:disabled {
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   padding: 8px 14px;
-  /* Reserves room for the tallest region-cell state (status pill + Read
-     region/Re-read row) up front, so the row doesn't grow/shift when a
-     drive switches between region states. */
-  min-height: 68px;
+  /* Fixed height: all states (idle, ripping, error, protected, etc.) share
+     the same row height so 9 drives fit on a 1920×1080 screen without
+     scrolling. overflow hidden clips anything that exceeds the box. */
+  height: 80px;
+  overflow: hidden;
 }
 
 .drive-row-identity {
@@ -557,26 +586,29 @@ button:disabled {
 .disc-status-zone {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .disc-status-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .progress-bar-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .progress-bar-track {
-  flex: 1;
-  max-width: 240px;
+  width: 180px;
+  flex-shrink: 0;
   height: 6px;
   background: var(--bg);
   border: 1px solid var(--panel-border);
@@ -594,6 +626,9 @@ button:disabled {
   font-size: 11px;
   color: var(--text-dim);
   white-space: nowrap;
+  width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .drive-row-temp-name {
@@ -602,9 +637,10 @@ button:disabled {
 
 .temp-name-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
 }
 
 .temp-name-row input[type="text"] {

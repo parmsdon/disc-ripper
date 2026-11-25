@@ -197,7 +197,7 @@ def _set_rip_reason(rip_job_id: int, reason: str, session_factory) -> None:
         disc = rip_job.disc
         if disc is not None:
             disc.rip_reason = reason
-        rip_job.progress_stage = "Re-ripping with MakeMKV"
+        rip_job.progress_stage = "MakeMKV"
         session.commit()
     finally:
         session.close()
