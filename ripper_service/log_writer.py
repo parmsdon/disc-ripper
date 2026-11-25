@@ -23,6 +23,7 @@ def write_log_event(
     track_number: int = None,
     outcome: str = None,
     elapsed_seconds: float = None,
+    detail: str = None,
 ) -> None:
     session = session_factory()
     try:
@@ -35,6 +36,7 @@ def write_log_event(
             event_type=event_type,
             outcome=outcome,
             elapsed_seconds=elapsed_seconds,
+            detail=detail,
         ))
         session.commit()
     except Exception:

@@ -1072,6 +1072,17 @@ button:disabled {
   white-space: nowrap;
 }
 
+.log-detail {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono, monospace);
+}
+
 .log-empty {
   text-align: center;
   color: var(--text-dim);

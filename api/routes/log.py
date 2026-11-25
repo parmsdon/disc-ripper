@@ -32,6 +32,7 @@ def _event_to_dict(event: RipLogEvent) -> dict:
         "outcome": event.outcome,
         "elapsed_seconds": event.elapsed_seconds,
         "elapsed_display": _format_elapsed(event.elapsed_seconds),
+        "detail": event.detail,
     }
 
 

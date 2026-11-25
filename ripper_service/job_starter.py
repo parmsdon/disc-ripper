@@ -13,6 +13,7 @@ Disc.status that distinguishes "ripping" (copying disc content) from
 
 import logging
 import os
+import re
 import shutil
 import threading
 from pathlib import Path
@@ -269,6 +270,8 @@ def _finish_success_makemkv(
             logger.exception("Failed to create encode jobs for disc #%s — rip completion stands", disc_id)
 
         elapsed = (rip_job.completed_at - rip_job.started_at).total_seconds() if rip_job.started_at else None
+        write_log_event(session_factory, "makemkv_completed", drive_label=label, disc_id=disc_id,
+            working_title=disc.temp_name, outcome=disc.rip_quality)
         write_log_event(session_factory, "rip_completed", drive_label=label, disc_id=disc_id,
             working_title=disc.temp_name, outcome=disc.rip_quality, elapsed_seconds=elapsed)
     finally:
@@ -279,10 +282,13 @@ def _finish_success_makemkv(
 def _fail_job_both(
     rip_job_id: int, label: str, first_failure_summary: str,
     mkv_result: dict, scratch_dir: str, session_factory,
+    disc_id: int = None,
 ) -> None:
     """Fail a job after both dvdbackup and MakeMKV fallback failed."""
     mkv_error = _extract_error_message(mkv_result.get("log") or "MakeMKV failed")
     combined = f"dvdbackup: {first_failure_summary}; MakeMKV fallback: {mkv_error}"
+    write_log_event(session_factory, "makemkv_failed", drive_label=label,
+        disc_id=disc_id, outcome="error", detail=mkv_error[:300] if mkv_error else None)
     _fail_job(
         rip_job_id, label,
         {"log": mkv_result.get("log", ""), "return_code": mkv_result.get("return_code")},
@@ -325,6 +331,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
     # ── dvdbackup path ────────────────────────────────────────────────────────
     scan = scan_for_copy_protection(device_path, fake_rip_mode)
     if scan["protected"]:
+        write_log_event(session_factory, "dvdbackup_protected", drive_label=label,
+            disc_id=disc_id, outcome="protected", detail=scan["reason"])
         if makemkv_fallback:
             _append_to_log(
                 rip_job_id,
@@ -332,6 +340,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
                 session_factory,
             )
             _set_rip_reason(rip_job_id, "protected", session_factory)
+            write_log_event(session_factory, "makemkv_fallback", drive_label=label,
+                disc_id=disc_id, detail="copy protection detected")
             result = run_makemkv(device_path, iso_path, rip_job_id, session_factory)
             if active_jobs.was_rolled_back(rip_job_id):
                 logger.info("Rip job %s rolled back during MakeMKV protected fallback", rip_job_id)
@@ -340,7 +350,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, f"Protection detected: {scan['reason']}", result, scratch_dir, session_factory)
+                _fail_job_both(rip_job_id, label, f"Protection detected: {scan['reason']}", result, scratch_dir, session_factory, disc_id=disc_id)
         else:
             _mark_disc_protected(rip_job_id, scan["reason"], label, session_factory)
         active_jobs.unregister(rip_job_id)
@@ -361,6 +371,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         return
 
     if result.get("timed_out"):
+        write_log_event(session_factory, "dvdbackup_failed", drive_label=label,
+            disc_id=disc_id, outcome="error", detail="Timed out after 60 minutes")
         if makemkv_fallback:
             _append_to_log(
                 rip_job_id,
@@ -369,6 +381,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             )
             _set_rip_reason(rip_job_id, "dvdbackup_failed", session_factory)
             _cleanup_scratch_dir(scratch_dir)
+            write_log_event(session_factory, "makemkv_fallback", drive_label=label,
+                disc_id=disc_id, detail="dvdbackup timed out after 60 minutes")
             result_mkv = run_makemkv(device_path, iso_path, rip_job_id, session_factory)
             if active_jobs.was_rolled_back(rip_job_id):
                 active_jobs.unregister(rip_job_id)
@@ -376,7 +390,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result_mkv["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, "dvdbackup timed out after 60 minutes", result_mkv, scratch_dir, session_factory)
+                _fail_job_both(rip_job_id, label, "dvdbackup timed out after 60 minutes", result_mkv, scratch_dir, session_factory, disc_id=disc_id)
         else:
             _mark_disc_protected(
                 rip_job_id,
@@ -387,6 +401,10 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         return
 
     if not result["success"]:
+        dvdback_err = _extract_error_message(result.get("log") or "")
+        write_log_event(session_factory, "dvdbackup_failed", drive_label=label,
+            disc_id=disc_id, outcome="error",
+            detail=f"rc={result.get('return_code')}: {dvdback_err}"[:300])
         if makemkv_fallback:
             _append_to_log(
                 rip_job_id,
@@ -395,6 +413,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             )
             _set_rip_reason(rip_job_id, "dvdbackup_failed", session_factory)
             _cleanup_scratch_dir(scratch_dir)
+            write_log_event(session_factory, "makemkv_fallback", drive_label=label,
+                disc_id=disc_id, detail=f"dvdbackup failed (rc={result.get('return_code')})")
             result_mkv = run_makemkv(device_path, iso_path, rip_job_id, session_factory)
             if active_jobs.was_rolled_back(rip_job_id):
                 active_jobs.unregister(rip_job_id)
@@ -402,7 +422,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result_mkv["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, f"dvdbackup failed (rc={result.get('return_code')})", result_mkv, scratch_dir, session_factory)
+                _fail_job_both(rip_job_id, label, f"dvdbackup failed (rc={result.get('return_code')})", result_mkv, scratch_dir, session_factory, disc_id=disc_id)
         else:
             _fail_job(rip_job_id, label, result, scratch_dir, session_factory)
         active_jobs.unregister(rip_job_id)
@@ -411,12 +431,17 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
     dirty = result.get("dirty", False)
 
     if dirty and makemkv_fallback:
+        dirty_detail = _first_dirty_line(result.get("log") or "")
+        write_log_event(session_factory, "dvdbackup_dirty", drive_label=label,
+            disc_id=disc_id, outcome="dirty", detail=dirty_detail)
         _append_to_log(
             rip_job_id,
             "[dvdbackup] Completed with read errors (dirty)\n[MakeMKV] Falling back to MakeMKV for a clean rip",
             session_factory,
         )
         _set_rip_reason(rip_job_id, "dirty", session_factory)
+        write_log_event(session_factory, "makemkv_fallback", drive_label=label,
+            disc_id=disc_id, detail="dvdbackup reported read errors (dirty rip)")
         # Keep scratch_dir until we know if MakeMKV succeeds
         result_mkv = run_makemkv(device_path, iso_path, rip_job_id, session_factory)
         if active_jobs.was_rolled_back(rip_job_id):
@@ -428,6 +453,9 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
         else:
             # MakeMKV also failed — build ISO from dirty dvdbackup content anyway
+            mkv_err = _extract_error_message(result_mkv.get("log") or "MakeMKV failed")
+            write_log_event(session_factory, "makemkv_failed", drive_label=label,
+                disc_id=disc_id, outcome="error", detail=mkv_err[:300] if mkv_err else None)
             _append_to_log(
                 rip_job_id,
                 "[MakeMKV] Also failed — building ISO from dirty dvdbackup content",
@@ -898,6 +926,15 @@ def _fail_cd_job(rip_job_id, label, disc_id, result, session_factory) -> None:
             outcome="error", elapsed_seconds=elapsed)
     finally:
         session.close()
+
+
+def _first_dirty_line(log_text: str) -> str | None:
+    """Return the first dvdbackup output line that looks like a read error."""
+    _dirty_re = re.compile(r"error reading|padding\s+\d+\s+blocks", re.IGNORECASE)
+    for line in log_text.splitlines():
+        if _dirty_re.search(line):
+            return line.strip()[:200]
+    return None
 
 
 def _extract_error_message(log_text: str) -> str:

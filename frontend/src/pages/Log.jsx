@@ -4,12 +4,18 @@ import { api } from "../api/client";
 const REFRESH_MS = 5000;
 
 const EVENT_LABELS = {
-  disc_inserted:   "Disc Inserted",
-  disc_ejected:    "Disc Ejected",
-  rip_started:     "Rip Started",
-  rip_completed:   "Rip Completed",
-  rip_failed:      "Rip Failed",
-  track_started:   "Track Started",
+  disc_inserted:        "Disc Inserted",
+  disc_ejected:         "Disc Ejected",
+  rip_started:          "Rip Started",
+  dvdbackup_dirty:      "dvdbackup Dirty",
+  dvdbackup_protected:  "dvdbackup Protected",
+  dvdbackup_failed:     "dvdbackup Failed",
+  makemkv_fallback:     "→ MakeMKV Fallback",
+  makemkv_completed:    "MakeMKV Completed",
+  makemkv_failed:       "MakeMKV Failed",
+  rip_completed:        "Rip Completed",
+  rip_failed:           "Rip Failed",
+  track_started:        "Track Started",
   track_completed:      "Track Completed",
   encodes_invalidated:  "Encodes Invalidated",
 };
@@ -123,6 +129,7 @@ export default function Log() {
                   <th>Track #</th>
                   <th>Event</th>
                   <th>Outcome</th>
+                  <th>Detail</th>
                   <th>Elapsed</th>
                 </tr>
               </thead>
@@ -139,6 +146,11 @@ export default function Log() {
                     <td>{e.track_number ?? <span className="catalogue-dim">—</span>}</td>
                     <td>{EVENT_LABELS[e.event_type] ?? e.event_type}</td>
                     <td><OutcomeBadge outcome={e.outcome} /></td>
+                    <td>
+                      {e.detail
+                        ? <span className="log-detail" title={e.detail}>{e.detail}</span>
+                        : <span className="catalogue-dim">—</span>}
+                    </td>
                     <td>{e.elapsed_display ?? <span className="catalogue-dim">—</span>}</td>
                   </tr>
                 ))}

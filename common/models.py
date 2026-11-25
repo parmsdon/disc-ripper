@@ -367,11 +367,15 @@ class RipLogEvent(Base):
     working_title = Column(String, nullable=True)
     track_number = Column(Integer, nullable=True)
     # "disc_inserted", "rip_started", "rip_completed", "rip_failed",
+    # "dvdbackup_dirty", "dvdbackup_protected", "dvdbackup_failed",
+    # "makemkv_fallback", "makemkv_completed", "makemkv_failed",
     # "track_started", "track_completed", "disc_ejected"
     event_type = Column(String, nullable=False)
-    # "clean", "dirty", "error", "good", "imperfect", "failed"
+    # "clean", "dirty", "error", "protected", "good", "imperfect", "failed"
     outcome = Column(String, nullable=True)
     elapsed_seconds = Column(Float, nullable=True)
+    # Short human-readable detail: error snippet, reason, dirty line, etc.
+    detail = Column(String, nullable=True)
 
 
 class Setting(Base):
