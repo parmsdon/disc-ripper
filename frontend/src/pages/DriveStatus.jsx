@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
+import DiscDeleteDialog from "../components/DiscDeleteDialog";
 
 function ProgressBar({ percent, stage }) {
   const pct = percent ?? 0;
@@ -359,6 +360,28 @@ function RetryRipButton({ disc, onRefresh }) {
   );
 }
 
+function DeleteDiscButton({ disc, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="cancel-rip-btn delete-disc-drive-btn"
+        onClick={() => setOpen(true)}
+        title="Delete this disc record and its files"
+      >
+        Delete
+      </button>
+      {open && (
+        <DiscDeleteDialog
+          discId={disc.id}
+          onClose={() => setOpen(false)}
+          onDeleted={() => { setOpen(false); onRefresh(); }}
+        />
+      )}
+    </>
+  );
+}
+
 function DiscStatusZone({ disc }) {
   const isDirty = disc.rip_quality === "dirty";
   const isRerip = disc.rip_attempt_count > 1;
@@ -562,6 +585,9 @@ function DrivePanel({ drive, onRefresh }) {
           )
         ) && (
           <RetryRipButton disc={disc} onRefresh={onRefresh} />
+        )}
+        {disc && !_IN_PROGRESS_DISC_STATUSES.includes(disc.status) && (
+          <DeleteDiscButton disc={disc} onRefresh={onRefresh} />
         )}
       </div>
 

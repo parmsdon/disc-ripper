@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 from flask import Blueprint, jsonify, current_app, request, send_file, abort
 from sqlalchemy import and_, case, func, or_, select, update
 
-from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, JobStatus, RipJob, LookupCandidate, naive_utcnow
+from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, EncodeJob, JobStatus, RipJob, LookupCandidate, naive_utcnow
 
 discs_bp = Blueprint("discs", __name__)
 
@@ -596,42 +596,144 @@ def cancel_rip(disc_id):
     return jsonify({"status": "ok"})
 
 
-@discs_bp.route("/<int:disc_id>", methods=["DELETE"])
-def delete_disc(disc_id):
+def _dir_size_bytes(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+@discs_bp.route("/<int:disc_id>/delete-preview", methods=["GET"])
+def delete_preview(disc_id):
     Session = current_app.config["DB_SESSION"]
     session = Session()
+    cfg = current_app.config.get("DISCRIPPER_CFG") or {}
+    datastore_root = Path(cfg.get("storage", {}).get("datastore_root", "")) if cfg else Path("")
 
     disc = session.get(Disc, disc_id)
     if disc is None:
         return jsonify({"error": "Disc not found"}), 404
 
-    if disc.temp_name:
-        return jsonify({"error": "Cannot delete a named disc record"}), 400
+    blocking_rip = any(j.status in _ACTIVE_JOB_STATUSES for j in disc.rip_jobs)
+    blocking_encode = any(j.status == JobStatus.running for j in disc.encode_jobs)
 
-    for obj in (
-        list(disc.rip_jobs)
-        + list(disc.lookup_candidates)
-        + list(disc.tracks)
-        + list(disc.encode_jobs)
-    ):
-        session.delete(obj)
+    # Raw folder
+    raw_folder_mb = None
+    has_raw_folder = False
+    if disc.raw_path and datastore_root != Path(""):
+        raw_dir = datastore_root / disc.raw_path
+        if raw_dir.is_dir():
+            has_raw_folder = True
+            try:
+                raw_folder_mb = round(_dir_size_bytes(raw_dir) / 1_048_576, 1)
+            except OSError:
+                raw_folder_mb = None
+
+    # Encode outputs that exist on disk
+    encode_outputs = [j.output_path for j in disc.encode_jobs if j.output_path]
+    existing_outputs = [p for p in encode_outputs if os.path.exists(p)]
+    encode_output_mb = round(
+        sum(os.path.getsize(p) for p in existing_outputs) / 1_048_576, 1
+    ) if existing_outputs else 0.0
+
+    # Cover file (CD only)
+    has_cover = False
+    if disc.type == DiscType.cd and datastore_root != Path(""):
+        has_cover = (datastore_root / "cd_store" / "covers" / f"{disc_id}.jpg").exists()
+
+    disc_name = disc.temp_name or disc.disc_fingerprint or f"Disc #{disc_id}"
+
+    return jsonify({
+        "disc_id": disc_id,
+        "disc_name": disc_name,
+        "disc_type": disc.type.value if disc.type else None,
+        "imported": disc.imported,
+        "imported_filename": disc.imported_filename,
+        "blocking_rip": blocking_rip,
+        "blocking_encode": blocking_encode,
+        "has_raw_folder": has_raw_folder,
+        "raw_folder_mb": raw_folder_mb,
+        "encode_output_count": len(existing_outputs),
+        "encode_output_mb": encode_output_mb,
+        "has_cover": has_cover,
+        "rip_job_count": len(disc.rip_jobs),
+        "encode_job_count": len(disc.encode_jobs),
+        "cd_track_count": len(disc.tracks),
+        "lookup_candidate_count": len(disc.lookup_candidates),
+        "legacy_option": disc.imported_filename if disc.imported and disc.imported_filename else None,
+    })
+
+
+@discs_bp.route("/<int:disc_id>", methods=["DELETE"])
+def delete_disc(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    cfg = current_app.config.get("DISCRIPPER_CFG") or {}
+    datastore_root = Path(cfg.get("storage", {}).get("datastore_root", "")) if cfg else Path("")
+    move_to_legacy = request.args.get("move_to_legacy", "").lower() in ("1", "true")
+
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+
+    if any(j.status in _ACTIVE_JOB_STATUSES for j in disc.rip_jobs):
+        return jsonify({"error": "Disc is currently ripping; cancel the rip first"}), 409
+
+    # Snapshot file paths before rows are deleted
+    disc_type = disc.type
+    raw_path = disc.raw_path
+    imported = disc.imported
+    imported_filename = disc.imported_filename
+    encode_output_paths = [j.output_path for j in disc.encode_jobs if j.output_path]
+
+    # Mark any in-flight encode jobs as error so the encoder service won't
+    # persist results after the rows and files are gone.
+    for ej in disc.encode_jobs:
+        if ej.status == JobStatus.running:
+            ej.status = JobStatus.error
+            ej.error_message = "Disc deleted"
     session.flush()
+
+    # Delete disc row; cascade removes rip_jobs, encode_jobs, tracks, lookup_candidates.
+    # rip_log_events FK uses ondelete="SET NULL" so log entries are kept, unlinked.
     session.delete(disc)
     session.commit()
 
-    if disc.type == DiscType.cd:
-        cfg = current_app.config.get("DISCRIPPER_CFG")
-        if cfg:
-            store_root = Path(cfg["storage"]["datastore_root"])
-            cd_store = store_root / "cd_store"
+    # ── File cleanup ─────────────────────────────────────────────────────────
+    moved_to_legacy = False
+    if datastore_root != Path(""):
+        if disc_type == DiscType.dvd:
+            if raw_path:
+                raw_dir = datastore_root / raw_path
+                if move_to_legacy and imported and imported_filename:
+                    legacy_dir = datastore_root / "dvd_store" / "legacy"
+                    legacy_dir.mkdir(parents=True, exist_ok=True)
+                    isos = list(raw_dir.glob("*.iso")) if raw_dir.is_dir() else []
+                    if isos:
+                        shutil.move(str(isos[0]), str(legacy_dir / imported_filename))
+                        moved_to_legacy = True
+                if raw_dir.is_dir():
+                    shutil.rmtree(raw_dir, ignore_errors=True)
+
+            # DVD encode outputs are individual files; remove each and prune
+            # empty parent directories.
+            for op in encode_output_paths:
+                p = Path(op)
+                try:
+                    p.unlink(missing_ok=True)
+                    p.parent.rmdir()   # no-op unless directory is now empty
+                except OSError:
+                    pass
+
+        elif disc_type == DiscType.cd:
+            cd_store = datastore_root / "cd_store"
             if cd_store.exists():
                 for store_subdir in cd_store.iterdir():
                     if store_subdir.is_dir():
                         disc_dir = store_subdir / str(disc_id)
                         if disc_dir.is_dir():
                             shutil.rmtree(disc_dir, ignore_errors=True)
+            # Cover file
+            (datastore_root / "cd_store" / "covers" / f"{disc_id}.jpg").unlink(missing_ok=True)
 
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "moved_to_legacy": moved_to_legacy})
 
 
 @discs_bp.route("/<int:disc_id>/eject", methods=["POST"])

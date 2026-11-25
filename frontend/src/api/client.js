@@ -100,7 +100,9 @@ export const api = {
   },
   getCdCatalogue: (filter, search, dirty) =>
     request(`/discs/cd-catalogue?filter=${filter || "all"}${search ? `&search=${encodeURIComponent(search)}` : ""}${dirty ? "&dirty=true" : ""}`),
-  deleteDisc: (discId) => request(`/discs/${discId}`, { method: "DELETE" }),
+  discDeletePreview: (discId) => request(`/discs/${discId}/delete-preview`),
+  deleteDisc: (discId, moveToLegacy = false) =>
+    request(`/discs/${discId}${moveToLegacy ? "?move_to_legacy=1" : ""}`, { method: "DELETE" }),
   retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
   retryLookup: (discId) => request(`/discs/${discId}/retry-lookup`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),

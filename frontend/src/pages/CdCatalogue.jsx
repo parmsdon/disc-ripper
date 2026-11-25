@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import CdIdentifyPanel from "./CdIdentifyPanel.jsx";
+import DiscDeleteDialog from "../components/DiscDeleteDialog";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -43,7 +44,7 @@ export default function CdCatalogue() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [deleteError, setDeleteError] = useState(null);
+  const [deleteDiscId, setDeleteDiscId] = useState(null);
   const [filter, setFilter] = useState("all");
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
@@ -65,16 +66,6 @@ export default function CdCatalogue() {
     const handle = setTimeout(() => fetchRows(filter, dirty, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [filter, dirty, search, fetchRows]);
-
-  async function handleDelete(discId) {
-    setDeleteError(null);
-    try {
-      await api.deleteDisc(discId);
-      fetchRows(filter, dirty, search);
-    } catch (e) {
-      setDeleteError(e.message);
-    }
-  }
 
   async function handleRetryLookup(discId) {
     setRetryLookupLoadingId(discId);
@@ -166,8 +157,7 @@ export default function CdCatalogue() {
         </div>
 
         {loadError && <div className="catalogue-empty">Error: {loadError}</div>}
-        {deleteError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Delete failed: {deleteError}</div>}
-        {retryLookupError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Retry lookup failed: {retryLookupError}</div>}
+{retryLookupError && <div className="catalogue-empty" style={{ color: "var(--error)" }}>Retry lookup failed: {retryLookupError}</div>}
         {!loadError && !loading && rows.length === 0 && (
           <div className="catalogue-empty">No discs found.</div>
         )}
@@ -259,11 +249,11 @@ export default function CdCatalogue() {
                           {retryLookupLoadingId === row.disc_id ? "…" : "Retry lookup"}
                         </button>
                       )}
-                      {row.disc_id && !row.disc_temp_name && !row.album_title && (
+                      {row.disc_id && (
                         <button
                           className="catalogue-delete-btn"
-                          onClick={() => handleDelete(row.disc_id)}
-                          title="Delete this unidentified disc record"
+                          onClick={() => setDeleteDiscId(row.disc_id)}
+                          title="Delete this disc record"
                         >
                           ✕
                         </button>
@@ -276,6 +266,17 @@ export default function CdCatalogue() {
           </table>
         )}
       </div>
+
+      {deleteDiscId !== null && (
+        <DiscDeleteDialog
+          discId={deleteDiscId}
+          onClose={() => setDeleteDiscId(null)}
+          onDeleted={() => {
+            setDeleteDiscId(null);
+            fetchRows(filter, dirty, search);
+          }}
+        />
+      )}
 
       {reidentifyDisc && (
         <CdIdentifyPanel
