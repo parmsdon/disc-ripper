@@ -235,6 +235,11 @@ class Disc(Base):
     # "auto" = matched during bulk import; "manual" = set by user via Identification tab.
     catalog_match_source = Column(String, nullable=True)
 
+    # Set when this disc might be a duplicate of another (same fingerprint but
+    # created as a separate disc because the ID couldn't be read at insertion).
+    # FK uses SET NULL so deleting the referenced disc clears the pointer.
+    possible_duplicate_of_id = Column(Integer, ForeignKey("discs.id", ondelete="SET NULL"), nullable=True)
+
     drive = relationship("Drive", back_populates="discs")
     catalog = relationship("Catalog", back_populates="discs")
     tracks = relationship("CDTrack", back_populates="disc", cascade="all, delete-orphan")

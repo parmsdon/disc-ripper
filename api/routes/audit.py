@@ -140,6 +140,29 @@ def run_audit():
     dvd_raw = store_root / "dvd_store" / "raw"
     cd_raw = store_root / "cd_store" / "raw"
 
+    # ── DVD: possible duplicates (from post-rip fingerprint match or insertion label match) ─
+    possible_dup_discs = session.scalars(
+        select(Disc).where(Disc.possible_duplicate_of_id.isnot(None))
+    ).all()
+    possible_duplicates = []
+    seen_pairs: set[frozenset] = set()
+    for d in possible_dup_discs:
+        pair = frozenset([d.id, d.possible_duplicate_of_id])
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        other = session.get(Disc, d.possible_duplicate_of_id)
+        possible_duplicates.append({
+            "disc_id": d.id,
+            "disc_title": _disc_title(d),
+            "disc_status": d.status,
+            "disc_fingerprint": d.disc_fingerprint,
+            "other_id": d.possible_duplicate_of_id,
+            "other_title": _disc_title(other) if other else None,
+            "other_status": other.status if other else None,
+            "other_fingerprint": other.disc_fingerprint if other else None,
+        })
+
     # ── DVD: duplicate fingerprints ──────────────────────────────────────────
     dup_fp_rows = session.execute(
         select(Disc.disc_fingerprint, func.count(Disc.id).label("cnt"))
@@ -539,7 +562,7 @@ def run_audit():
 
     # ── Summary ──────────────────────────────────────────────────────────────
     dvd_issues = (
-        len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
+        len(possible_duplicates) + len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
         + len(null_raw_path) + len(stale_dvd_associations)
         + len(missing_dvd_encode_jobs) + len(duplicate_temp_names)
     )
@@ -554,6 +577,7 @@ def run_audit():
 
     return jsonify({
         "dvd": {
+            "possible_duplicates": possible_duplicates,
             "duplicate_discs": duplicate_dvd_discs,
             "missing_iso_files": missing_iso_files,
             "orphaned_iso_dirs": orphaned_iso_dirs,

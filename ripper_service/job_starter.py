@@ -28,6 +28,7 @@ from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.log_writer import write_log_event
 from ripper_service.region_patcher import patch_region_if_needed
+from ripper_service.disc_label import read_volume_info
 from ripper_service.makemkv_worker import run_makemkv
 from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs, scan_for_copy_protection
 
@@ -611,6 +612,29 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         original_region = patch_region_if_needed(iso_path, disc.id)
         if original_region is not None:
             disc.ripped_in_region = f"0x{original_region:02X}"
+
+        # When the DVD ID couldn't be read at insertion, compute it from the
+        # resulting ISO and check for duplicates (spec item #6).
+        if disc.disc_fingerprint is None and os.path.isfile(iso_path):
+            volume_info = read_volume_info(iso_path)
+            computed_fp = volume_info["volume_id"] or volume_info["volume_set_id"]
+            if computed_fp:
+                disc.disc_fingerprint = computed_fp
+                other = session.scalar(
+                    select(Disc).where(
+                        Disc.disc_fingerprint == computed_fp,
+                        Disc.id != disc_id,
+                    ).limit(1)
+                )
+                if other is not None:
+                    disc.possible_duplicate_of_id = other.id
+                    if other.possible_duplicate_of_id is None:
+                        other.possible_duplicate_of_id = disc_id
+                    logger.warning(
+                        "Post-rip fingerprint %r matches existing disc #%s — "
+                        "both flagged as possible duplicates (Audit tab)",
+                        computed_fp, other.id,
+                    )
 
         # dirty -> flag for a re-rip next time this disc is reinserted
         # (main.py's detection dedup checks needs_rerip). clean -> clear

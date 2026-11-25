@@ -113,6 +113,7 @@ export default function Audit() {
 
   function computeOpen(d) {
     const keys = new Set();
+    if (d.dvd?.possible_duplicates?.length > 0)         keys.add("dvd-possible-dups");
     if (d.dvd?.duplicate_discs?.length > 0)            keys.add("dvd-dup-fps");
     if (d.dvd?.missing_iso_files?.length > 0)          keys.add("dvd-missing-iso");
     if (d.dvd?.orphaned_iso_dirs?.length > 0)          keys.add("dvd-orphaned-iso");
@@ -216,7 +217,23 @@ export default function Audit() {
       <div className="audit-layout">
 
         {/* ── DVD ── */}
-        <CheckRow groupLabel="DVD" name="Duplicate disc fingerprints"
+        <CheckRow groupLabel="DVD" name="Possible duplicate discs"
+          count={dvd?.possible_duplicates?.length}
+          open={o("dvd-possible-dups")} onToggle={tog("dvd-possible-dups")}
+          issueLabel="pair">
+          <IssueTable columns={["Disc #", "Title", "Status", "Fingerprint", "Matches", "Other title", "Other status"]}
+            rows={(dvd?.possible_duplicates ?? []).map((r) => [
+              r.disc_id,
+              r.disc_title,
+              r.disc_status,
+              <code key="fp">{r.disc_fingerprint ?? "—"}</code>,
+              `#${r.other_id}`,
+              r.other_title ?? "—",
+              r.other_status ?? "—",
+            ])} />
+        </CheckRow>
+
+        <CheckRow groupLabel="" name="Duplicate disc fingerprints"
           count={dvd?.duplicate_discs?.length}
           open={o("dvd-dup-fps")} onToggle={tog("dvd-dup-fps")}>
           <IssueTable columns={["Fingerprint", "Disc IDs", "Titles", "Statuses"]}

@@ -343,6 +343,28 @@ def run(cfg: dict) -> None:
                                         disc_fingerprint=disc_fingerprint,
                                     )
                                     session.add(disc)
+
+                                    # When the DVD ID couldn't be read (fingerprint=None),
+                                    # check the kernel-cached label (ID_FS_LABEL from udevadm)
+                                    # for a soft match. If it matches an existing disc we show
+                                    # "possible duplicate of #N" on Drive Status while ripping.
+                                    # A label match alone never skips the rip.
+                                    if disc_fingerprint is None:
+                                        fs_label = info.get("fs_label")
+                                        if fs_label:
+                                            label_match = session.scalar(
+                                                select(Disc).where(
+                                                    Disc.disc_fingerprint == fs_label,
+                                                ).limit(1)
+                                            )
+                                            if label_match is not None:
+                                                disc.possible_duplicate_of_id = label_match.id
+                                                logger.info(
+                                                    "Drive %s: udevadm label %r matches disc #%s — "
+                                                    "flagging as possible duplicate (rip will proceed)",
+                                                    label, fs_label, label_match.id,
+                                                )
+
                                     session.flush()
                                     session.execute(
                                         update(Disc)

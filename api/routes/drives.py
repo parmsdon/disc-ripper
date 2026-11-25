@@ -96,6 +96,7 @@ def list_drives():
                 "error_message": current_disc_row.error_message,
                 "rip_method": current_disc_row.rip_method,
                 "rip_reason": current_disc_row.rip_reason,
+                "possible_duplicate_of_id": current_disc_row.possible_duplicate_of_id,
             }
 
         drive_dict = _drive_summary(drive)

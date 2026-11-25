@@ -445,6 +445,14 @@ function DiscStatusZone({ disc }) {
           );
         })()}
         {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
+        {disc.possible_duplicate_of_id != null && (
+          <span
+            className="possible-duplicate-badge"
+            title="This disc may already exist in the library — check the Audit tab once ripping completes"
+          >
+            Possible duplicate of #{disc.possible_duplicate_of_id}
+          </span>
+        )}
       </div>
 
       {disc.status === "error" && disc.error_message && !wasProtected && (

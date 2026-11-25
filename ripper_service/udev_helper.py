@@ -18,11 +18,12 @@ def get_drive_info(device_path: str) -> dict:
                             else device_path as a last resort)
         media_present: bool
         media_type: "dvd" | "cd" | None
+        fs_label: str | None  (ID_FS_LABEL - disc volume label cached by kernel)
 
     Never raises - if udevadm is missing, exits nonzero, or the device is
     gone, returns all None/False.
     """
-    result = {"hardware_id": None, "media_present": False, "media_type": None}
+    result = {"hardware_id": None, "media_present": False, "media_type": None, "fs_label": None}
 
     try:
         proc = subprocess.run(
@@ -67,5 +68,9 @@ def get_drive_info(device_path: str) -> dict:
             result["media_type"] = "dvd"
         elif props.get("ID_CDROM_MEDIA_CD") == "1":
             result["media_type"] = "cd"
+        # Kernel-cached volume label; available even when isoinfo times out on a
+        # slow or damaged disc. Used as a fallback for soft duplicate detection.
+        fs_label = props.get("ID_FS_LABEL") or None
+        result["fs_label"] = fs_label
 
     return result

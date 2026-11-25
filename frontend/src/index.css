@@ -540,6 +540,18 @@ body {
   flex-shrink: 0;
 }
 
+.possible-duplicate-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(100, 160, 220, 0.15);
+  color: var(--accent, #5ba3d9);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .cancel-rip-btn {
   font-size: 11px;
   padding: 2px 8px;
