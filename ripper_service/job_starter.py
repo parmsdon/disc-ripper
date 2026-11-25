@@ -33,6 +33,12 @@ from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs
 
 logger = logging.getLogger(__name__)
 
+# MakeMKV log parsing for error extraction
+_MKV_MSG_TEXT_RE = re.compile(r'^MSG:\d+,\d+,\d+,"([^"]*)"')
+_MKV_ERR_KW_RE   = re.compile(r'(fail|error|cannot|unable)', re.IGNORECASE)
+_MKV_HARMLESS_RE = re.compile(r'(AUTHENTICATION|work.{0,5}around|scrambled)', re.IGNORECASE)
+_MKV_BACKUP_FAILED_RE = re.compile(r'Backup failed', re.IGNORECASE)
+
 _MAX_RIPPERS_KEY = "max_rippers"
 _DEFAULT_MAX_RIPPERS = 1
 _FAKE_RIP_MODE_KEY = "fake_rip_mode"
@@ -244,6 +250,7 @@ def _finish_success_makemkv(
         # Keep disc.rip_reason (do not clear it — UI shows "protected → MakeMKV" etc.)
         disc.rip_quality = "dirty" if dirty else "clean"
         disc.needs_rerip = dirty
+        disc.error_message = None  # clear any error from a previous failed attempt
         disc.status = DiscStatus.ripped if disc.temp_name else DiscStatus.identifying
 
         rip_job.status = JobStatus.done
@@ -285,7 +292,7 @@ def _fail_job_both(
     disc_id: int = None,
 ) -> None:
     """Fail a job after both dvdbackup and MakeMKV fallback failed."""
-    mkv_error = _extract_error_message(mkv_result.get("log") or "MakeMKV failed")
+    mkv_error = _extract_mkv_error_message(mkv_result.get("log") or "MakeMKV failed", mkv_result.get("return_code"))
     combined = f"dvdbackup: {first_failure_summary}; MakeMKV fallback: {mkv_error}"
     write_log_event(session_factory, "makemkv_failed", drive_label=label,
         disc_id=disc_id, outcome="error", detail=mkv_error[:300] if mkv_error else None)
@@ -324,7 +331,8 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
         if result["success"]:
             _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result.get("dirty", False))
         else:
-            _fail_job(rip_job_id, label, result, scratch_dir, session_factory)
+            mkv_err = _extract_mkv_error_message(result.get("log") or "", result.get("return_code"))
+            _fail_job(rip_job_id, label, result, scratch_dir, session_factory, error_override=mkv_err)
         active_jobs.unregister(rip_job_id)
         return
 
@@ -350,7 +358,60 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, f"Protection detected: {scan['reason']}", result, scratch_dir, session_factory, disc_id=disc_id)
+                # MakeMKV failed on a protection-flagged disc — try dvdbackup as last resort.
+                # HandBrakeCLI protection scan has false positives; dvdbackup may still produce
+                # a (possibly dirty) rip that is usable.
+                mkv_err = _extract_mkv_error_message(result.get("log") or "MakeMKV failed", result.get("return_code"))
+                write_log_event(session_factory, "makemkv_failed", drive_label=label,
+                    disc_id=disc_id, outcome="error", detail=mkv_err[:300])
+                _append_to_log(
+                    rip_job_id,
+                    f"[MakeMKV] Failed ({mkv_err})\n[dvdbackup] Trying dvdbackup as last resort",
+                    session_factory,
+                )
+                try:
+                    db_result = run_dvdbackup(
+                        device_path, scratch_dir, disc_label, fake_rip_mode,
+                        rip_job_id, session_factory, inject_dirty=inject_dirty,
+                    )
+                except Exception:
+                    logger.exception("Unexpected error in dvdbackup last resort for rip job %s", rip_job_id)
+                    db_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
+                if active_jobs.was_rolled_back(rip_job_id):
+                    _cleanup_scratch_dir(scratch_dir)
+                    active_jobs.unregister(rip_job_id)
+                    return
+                if not db_result["success"]:
+                    db_err = _extract_error_message(db_result.get("log") or "")
+                    combined = f"Protection: {scan['reason']}; MakeMKV: {mkv_err}; dvdbackup: {db_err}"
+                    _fail_job(rip_job_id, label, {}, scratch_dir, session_factory, error_override=combined)
+                else:
+                    dirty_db = db_result.get("dirty", False)
+                    if dirty_db:
+                        write_log_event(session_factory, "dvdbackup_dirty", drive_label=label,
+                            disc_id=disc_id, outcome="dirty",
+                            detail=_first_dirty_line(db_result.get("log") or ""))
+                        _append_to_log(rip_job_id,
+                            "[dvdbackup] Completed with read errors (dirty) — building dirty ISO",
+                            session_factory)
+                    disc_id_from_building = _mark_building(rip_job_id, label, session_factory)
+                    if disc_id_from_building is None:
+                        _cleanup_scratch_dir(scratch_dir)
+                    else:
+                        video_ts_parent = str(Path(scratch_dir) / disc_label)
+                        try:
+                            mkiso_result = run_mkisofs(video_ts_parent, iso_path, fake_rip_mode, rip_job_id, session_factory)
+                        except Exception:
+                            logger.exception("Unexpected error in mkisofs last resort for rip job %s", rip_job_id)
+                            mkiso_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
+                        if active_jobs.was_rolled_back(rip_job_id):
+                            _cleanup_scratch_dir(scratch_dir)
+                            active_jobs.unregister(rip_job_id)
+                            return
+                        elif mkiso_result["success"]:
+                            _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=dirty_db)
+                        else:
+                            _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
         else:
             _mark_disc_protected(rip_job_id, scan["reason"], label, session_factory)
         active_jobs.unregister(rip_job_id)
@@ -453,7 +514,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
         else:
             # MakeMKV also failed — build ISO from dirty dvdbackup content anyway
-            mkv_err = _extract_error_message(result_mkv.get("log") or "MakeMKV failed")
+            mkv_err = _extract_mkv_error_message(result_mkv.get("log") or "MakeMKV failed", result_mkv.get("return_code"))
             write_log_event(session_factory, "makemkv_failed", drive_label=label,
                 disc_id=disc_id, outcome="error", detail=mkv_err[:300] if mkv_err else None)
             _append_to_log(
@@ -556,6 +617,7 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         # any prior dirty flag, e.g. this is a re-rip that's now succeeded.
         disc.rip_quality = "dirty" if dirty else "clean"
         disc.needs_rerip = dirty
+        disc.error_message = None  # clear any error from a previous failed attempt
 
         # A working title set before the rip finished (e.g. typed in while
         # ripping/building) goes straight to "ripped" - otherwise there's
@@ -935,6 +997,34 @@ def _first_dirty_line(log_text: str) -> str | None:
         if _dirty_re.search(line):
             return line.strip()[:200]
     return None
+
+
+def _extract_mkv_error_message(log_text: str, return_code) -> str:
+    """Extract the meaningful error from a MakeMKV log.
+
+    Skips harmless expected MSG lines (scrambled sector / authentication /
+    work-around).  Returns: "Backup failed; <last error msg>; rc=N".
+    """
+    backup_failed = bool(_MKV_BACKUP_FAILED_RE.search(log_text))
+    last_error_msg: str | None = None
+    for line in log_text.splitlines():
+        m = _MKV_MSG_TEXT_RE.match(line)
+        if not m:
+            continue
+        text = m.group(1)
+        if _MKV_ERR_KW_RE.search(text) and not _MKV_HARMLESS_RE.search(text):
+            last_error_msg = text
+    parts: list[str] = []
+    if backup_failed:
+        parts.append("Backup failed")
+    # avoid duplicating "Backup failed" if the last MSG is exactly that text
+    if last_error_msg and last_error_msg.lower().rstrip(". ") != "backup failed":
+        parts.append(last_error_msg)
+    if return_code is not None:
+        parts.append(f"rc={return_code}")
+    if parts:
+        return "; ".join(parts)
+    return log_text[-300:].strip() or "MakeMKV failed"
 
 
 def _extract_error_message(log_text: str) -> str:

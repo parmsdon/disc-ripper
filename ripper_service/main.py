@@ -302,7 +302,12 @@ def run(cfg: dict) -> None:
                                         dvd_cfg.get("rip_method") == "makemkv"
                                         or dvd_cfg.get("makemkv_fallback", False)
                                     )
-                                    if makemkv_active:
+                                    # Always re-rip dirty discs — dvdbackup alone may improve
+                                    # on a re-attempt, and MakeMKV fallback will fire if
+                                    # configured.  For error/protected discs, only re-rip when
+                                    # MakeMKV is active (dvdbackup can't overcome protection).
+                                    is_dirty = existing_completed_disc.rip_quality == "dirty"
+                                    if is_dirty or makemkv_active:
                                         existing_completed_disc.status = DiscStatus.queued
                                         existing_completed_disc.rip_attempt_count = (
                                             existing_completed_disc.rip_attempt_count or 1
@@ -313,13 +318,13 @@ def run(cfg: dict) -> None:
                                             status=JobStatus.queued,
                                         ))
                                         logger.info(
-                                            "Re-inserted error/protected/dirty disc #%s — "
-                                            "queuing new rip job (MakeMKV fallback active)",
+                                            "Re-inserted disc #%s (%s) — queuing new rip job",
                                             existing_completed_disc.id,
+                                            "dirty" if is_dirty else "error/protected, MakeMKV active",
                                         )
                                     else:
                                         logger.info(
-                                            "Disc %s previously had errors/dirty rip - disc #%s on "
+                                            "Disc %s previously had errors - disc #%s on "
                                             "Drive %s, awaiting user action",
                                             disc_fingerprint, existing_completed_disc.id, label,
                                         )
