@@ -286,13 +286,13 @@ body {
 }
 
 .status-pill.protected {
-  background: rgba(147, 112, 219, 0.18);
-  color: #a07be0;
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
 }
 
 [data-theme="light"] .status-pill.protected {
-  background: rgba(130, 90, 200, 0.12);
-  color: #7040b8;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
 }
 
 .region-cell {
