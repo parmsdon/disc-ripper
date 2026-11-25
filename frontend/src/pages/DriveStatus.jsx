@@ -399,9 +399,8 @@ function DiscStatusZone({ disc }) {
         )}
         {!makemkvInProgress && (disc.status === "protected" || wasProtected) && (
           <span
-            className="dirty-rip-badge"
+            className="status-pill protected"
             title={disc.error_message || "Disc appears copy-protected"}
-            style={{ background: "var(--warn-bg, #3a2a00)", color: "var(--warn, #f4b942)" }}
           >
             🔒 Protected
           </span>
