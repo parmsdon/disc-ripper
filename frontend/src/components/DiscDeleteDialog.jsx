@@ -76,11 +76,11 @@ export default function DiscDeleteDialog({ discId, onClose, onDeleted }) {
               )}
               {!preview.blocking_rip && preview.blocking_encode && (
                 <div className="delete-disc-blocked">
-                  An encode is in progress — it will be stopped and its output discarded.
+                  Encode in progress — wait for it to finish, then delete.
                 </div>
               )}
 
-              {!preview.blocking_rip && (
+              {!isBlocked && (
                 <>
                   <ul className="delete-disc-list">
                     {preview.rip_job_count > 0 && (
@@ -153,7 +153,7 @@ export default function DiscDeleteDialog({ discId, onClose, onDeleted }) {
                 </>
               )}
 
-              {preview.blocking_rip && (
+              {isBlocked && (
                 <div className="delete-disc-actions">
                   <button className="delete-disc-cancel-btn" onClick={onClose}>Close</button>
                 </div>

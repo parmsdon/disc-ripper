@@ -676,20 +676,15 @@ def delete_disc(disc_id):
     if any(j.status in _ACTIVE_JOB_STATUSES for j in disc.rip_jobs):
         return jsonify({"error": "Disc is currently ripping; cancel the rip first"}), 409
 
+    if any(j.status == JobStatus.running for j in disc.encode_jobs):
+        return jsonify({"error": "An encode is in progress; wait for it to finish first"}), 409
+
     # Snapshot file paths before rows are deleted
     disc_type = disc.type
     raw_path = disc.raw_path
     imported = disc.imported
     imported_filename = disc.imported_filename
     encode_output_paths = [j.output_path for j in disc.encode_jobs if j.output_path]
-
-    # Mark any in-flight encode jobs as error so the encoder service won't
-    # persist results after the rows and files are gone.
-    for ej in disc.encode_jobs:
-        if ej.status == JobStatus.running:
-            ej.status = JobStatus.error
-            ej.error_message = "Disc deleted"
-    session.flush()
 
     # Delete disc row; cascade removes rip_jobs, encode_jobs, tracks, lookup_candidates.
     # rip_log_events FK uses ondelete="SET NULL" so log entries are kept, unlinked.
