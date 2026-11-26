@@ -319,6 +319,8 @@ def run(cfg: dict) -> None:
                                     or existing_completed_disc.rip_quality == "dirty"
                                 ):
                                     existing_completed_disc.drive_id = drive_id
+                                    if not existing_completed_disc.volume_label and volume_label:
+                                        existing_completed_disc.volume_label = volume_label
                                     dvd_cfg = cfg.get("dvd", {})
                                     makemkv_active = (
                                         dvd_cfg.get("rip_method") == "makemkv"
