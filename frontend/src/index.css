@@ -424,6 +424,65 @@ body {
   color: #1d4ed8;
 }
 
+/* Spec-aligned terminal state pills */
+.status-pill.clean {
+  background: rgba(56, 178, 172, 0.15);
+  color: #4db6ac;
+}
+
+.status-pill.dirty {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
+[data-theme="light"] .status-pill.clean {
+  background: rgba(22, 101, 52, 0.12);
+  color: #15803d;
+}
+
+[data-theme="light"] .status-pill.dirty {
+  background: rgba(161, 98, 7, 0.12);
+  color: #b45309;
+}
+
+/* Method pill */
+.method-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(154, 163, 178, 0.12);
+  color: var(--text-dim);
+}
+
+.method-pill.makemkv-protected {
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.method-pill.makemkv-fallback {
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
+[data-theme="light"] .method-pill {
+  background: rgba(100, 100, 100, 0.08);
+  color: var(--text-dim);
+}
+
+[data-theme="light"] .method-pill.makemkv-protected {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .method-pill.makemkv-fallback {
+  background: rgba(161, 98, 7, 0.12);
+  color: #b45309;
+}
+
 .region-cell {
   display: flex;
   flex-direction: column;
@@ -679,7 +738,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 140px 100px minmax(160px, 1fr) 300px 36px;
+  grid-template-columns: 140px 100px minmax(160px, 1fr) 300px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
@@ -724,10 +783,6 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.drive-row-region {
-  min-width: 0;
 }
 
 .drive-row-action {

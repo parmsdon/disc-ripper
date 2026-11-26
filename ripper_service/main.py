@@ -317,37 +317,21 @@ def run(cfg: dict) -> None:
                                     existing_completed_disc.drive_id = drive_id
                                     if not existing_completed_disc.volume_label and volume_label:
                                         existing_completed_disc.volume_label = volume_label
-                                    dvd_cfg = cfg.get("dvd", {})
-                                    makemkv_active = (
-                                        dvd_cfg.get("rip_method") == "makemkv"
-                                        or dvd_cfg.get("makemkv_fallback", False)
+                                    existing_completed_disc.status = DiscStatus.queued
+                                    existing_completed_disc.rip_attempt_count = (
+                                        existing_completed_disc.rip_attempt_count or 1
+                                    ) + 1
+                                    session.add(RipJob(
+                                        disc_id=existing_completed_disc.id,
+                                        drive_id=drive_id,
+                                        status=JobStatus.queued,
+                                    ))
+                                    logger.info(
+                                        "Re-inserted disc #%s (status=%s, rip_quality=%s) — queuing new rip job",
+                                        existing_completed_disc.id,
+                                        existing_completed_disc.status.value,
+                                        existing_completed_disc.rip_quality,
                                     )
-                                    # Always re-rip dirty discs — dvdbackup alone may improve
-                                    # on a re-attempt, and MakeMKV fallback will fire if
-                                    # configured.  For error/protected discs, only re-rip when
-                                    # MakeMKV is active (dvdbackup can't overcome protection).
-                                    is_dirty = existing_completed_disc.rip_quality == "dirty"
-                                    if is_dirty or makemkv_active:
-                                        existing_completed_disc.status = DiscStatus.queued
-                                        existing_completed_disc.rip_attempt_count = (
-                                            existing_completed_disc.rip_attempt_count or 1
-                                        ) + 1
-                                        session.add(RipJob(
-                                            disc_id=existing_completed_disc.id,
-                                            drive_id=drive_id,
-                                            status=JobStatus.queued,
-                                        ))
-                                        logger.info(
-                                            "Re-inserted disc #%s (%s) — queuing new rip job",
-                                            existing_completed_disc.id,
-                                            "dirty" if is_dirty else "error/protected, MakeMKV active",
-                                        )
-                                    else:
-                                        logger.info(
-                                            "Disc %r previously had errors - disc #%s on "
-                                            "Drive %s, awaiting user action",
-                                            volume_label, existing_completed_disc.id, label,
-                                        )
                                 elif existing_completed_disc is not None:
                                     existing_completed_disc.drive_id = drive_id
                                     logger.info(

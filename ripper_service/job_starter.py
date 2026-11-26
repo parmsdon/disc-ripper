@@ -248,11 +248,11 @@ def _finish_success_makemkv(
             disc.ripped_in_region = f"0x{original_region:02X}"
 
         disc.rip_method = "makemkv"
-        # Keep disc.rip_reason (do not clear it — UI shows "protected → MakeMKV" etc.)
+        # Keep disc.rip_reason (do not clear it — UI shows "MakeMKV · protected" etc.)
         disc.rip_quality = "dirty" if dirty else "clean"
         disc.needs_rerip = dirty
         disc.error_message = None  # clear any error from a previous failed attempt
-        disc.status = DiscStatus.ripped if disc.temp_name else DiscStatus.identifying
+        disc.status = DiscStatus.ripped
 
         rip_job.status = JobStatus.done
         rip_job.completed_at = naive_utcnow()
@@ -291,6 +291,7 @@ def _fail_job_both(
     rip_job_id: int, label: str, first_failure_summary: str,
     mkv_result: dict, scratch_dir: str, session_factory,
     disc_id: int = None,
+    datastore_root: str | None = None,
 ) -> None:
     """Fail a job after both dvdbackup and MakeMKV fallback failed."""
     mkv_error = _extract_mkv_error_message(mkv_result.get("log") or "MakeMKV failed", mkv_result.get("return_code"))
@@ -302,6 +303,7 @@ def _fail_job_both(
         {"log": mkv_result.get("log", ""), "return_code": mkv_result.get("return_code")},
         scratch_dir, session_factory,
         error_override=combined,
+        datastore_root=datastore_root,
     )
 
 
@@ -359,60 +361,13 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result.get("dirty", False))
             else:
-                # MakeMKV failed on a protection-flagged disc — try dvdbackup as last resort.
-                # HandBrakeCLI protection scan has false positives; dvdbackup may still produce
-                # a (possibly dirty) rip that is usable.
                 mkv_err = _extract_mkv_error_message(result.get("log") or "MakeMKV failed", result.get("return_code"))
                 write_log_event(session_factory, "makemkv_failed", drive_label=label,
                     disc_id=disc_id, outcome="error", detail=mkv_err[:300])
-                _append_to_log(
-                    rip_job_id,
-                    f"[MakeMKV] Failed ({mkv_err})\n[dvdbackup] Trying dvdbackup as last resort",
-                    session_factory,
-                )
-                try:
-                    db_result = run_dvdbackup(
-                        device_path, scratch_dir, disc_label, fake_rip_mode,
-                        rip_job_id, session_factory, inject_dirty=inject_dirty,
-                    )
-                except Exception:
-                    logger.exception("Unexpected error in dvdbackup last resort for rip job %s", rip_job_id)
-                    db_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
-                if active_jobs.was_rolled_back(rip_job_id):
-                    _cleanup_scratch_dir(scratch_dir)
-                    active_jobs.unregister(rip_job_id)
-                    return
-                if not db_result["success"]:
-                    db_err = _extract_error_message(db_result.get("log") or "")
-                    combined = f"Protection: {scan['reason']}; MakeMKV: {mkv_err}; dvdbackup: {db_err}"
-                    _fail_job(rip_job_id, label, {}, scratch_dir, session_factory, error_override=combined)
-                else:
-                    dirty_db = db_result.get("dirty", False)
-                    if dirty_db:
-                        write_log_event(session_factory, "dvdbackup_dirty", drive_label=label,
-                            disc_id=disc_id, outcome="dirty",
-                            detail=_first_dirty_line(db_result.get("log") or ""))
-                        _append_to_log(rip_job_id,
-                            "[dvdbackup] Completed with read errors (dirty) — building dirty ISO",
-                            session_factory)
-                    disc_id_from_building = _mark_building(rip_job_id, label, session_factory)
-                    if disc_id_from_building is None:
-                        _cleanup_scratch_dir(scratch_dir)
-                    else:
-                        video_ts_parent = str(Path(scratch_dir) / disc_label)
-                        try:
-                            mkiso_result = run_mkisofs(video_ts_parent, iso_path, disc_label, fake_rip_mode, rip_job_id, session_factory)
-                        except Exception:
-                            logger.exception("Unexpected error in mkisofs last resort for rip job %s", rip_job_id)
-                            mkiso_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
-                        if active_jobs.was_rolled_back(rip_job_id):
-                            _cleanup_scratch_dir(scratch_dir)
-                            active_jobs.unregister(rip_job_id)
-                            return
-                        elif mkiso_result["success"]:
-                            _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=dirty_db)
-                        else:
-                            _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
+                _append_to_log(rip_job_id, f"[MakeMKV] Failed ({mkv_err})", session_factory)
+                _fail_job(rip_job_id, label, {}, scratch_dir, session_factory,
+                    error_override=f"Protected disc: MakeMKV failed — {mkv_err}",
+                    datastore_root=cfg["storage"]["datastore_root"])
         else:
             _mark_disc_protected(rip_job_id, scan["reason"], label, session_factory)
         active_jobs.unregister(rip_job_id)
@@ -452,7 +407,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result_mkv["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, "dvdbackup timed out after 60 minutes", result_mkv, scratch_dir, session_factory, disc_id=disc_id)
+                _fail_job_both(rip_job_id, label, "dvdbackup timed out after 60 minutes", result_mkv, scratch_dir, session_factory, disc_id=disc_id, datastore_root=cfg["storage"]["datastore_root"])
         else:
             _mark_disc_protected(
                 rip_job_id,
@@ -484,9 +439,9 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if result_mkv["success"]:
                 _finish_success_makemkv(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=result_mkv.get("dirty", False))
             else:
-                _fail_job_both(rip_job_id, label, f"dvdbackup failed (rc={result.get('return_code')})", result_mkv, scratch_dir, session_factory, disc_id=disc_id)
+                _fail_job_both(rip_job_id, label, f"dvdbackup failed (rc={result.get('return_code')})", result_mkv, scratch_dir, session_factory, disc_id=disc_id, datastore_root=cfg["storage"]["datastore_root"])
         else:
-            _fail_job(rip_job_id, label, result, scratch_dir, session_factory)
+            _fail_job(rip_job_id, label, result, scratch_dir, session_factory, datastore_root=cfg["storage"]["datastore_root"])
         active_jobs.unregister(rip_job_id)
         return
 
@@ -541,7 +496,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
             if mkiso_result["success"]:
                 _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty=True)
             else:
-                _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
+                _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory, datastore_root=cfg["storage"]["datastore_root"])
         active_jobs.unregister(rip_job_id)
         return
 
@@ -567,7 +522,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
     if mkiso_result["success"]:
         _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, session_factory, dirty)
     else:
-        _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory)
+        _fail_job(rip_job_id, label, mkiso_result, scratch_dir, session_factory, datastore_root=cfg["storage"]["datastore_root"])
 
     active_jobs.unregister(rip_job_id)
 
@@ -642,11 +597,7 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         disc.needs_rerip = dirty
         disc.error_message = None  # clear any error from a previous failed attempt
 
-        # A working title set before the rip finished (e.g. typed in while
-        # ripping/building) goes straight to "ripped" - otherwise there's
-        # nothing to identify it by yet, so it needs a stop in
-        # "identifying" until temp-name is set via the API.
-        disc.status = DiscStatus.ripped if disc.temp_name else DiscStatus.identifying
+        disc.status = DiscStatus.ripped
 
         rip_job.status = JobStatus.done
         rip_job.completed_at = naive_utcnow()
@@ -683,7 +634,19 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         _cleanup_scratch_dir(scratch_dir)
 
 
-def _fail_job(rip_job_id, label, result, scratch_dir, session_factory, error_override: str | None = None) -> None:
+def _dirty_iso_exists(disc, datastore_root: str) -> bool:
+    """Return True if the disc's ISO file is present on disk."""
+    disc_label = disc.volume_label or f"disc_{disc.id}"
+    from pathlib import Path as _Path
+    iso_path = _Path(datastore_root) / disc.raw_path / f"{disc_label}.iso"
+    return iso_path.is_file()
+
+
+def _fail_job(
+    rip_job_id, label, result, scratch_dir, session_factory,
+    error_override: str | None = None,
+    datastore_root: str | None = None,
+) -> None:
     session = session_factory()
     try:
         rip_job = session.get(RipJob, rip_job_id)
@@ -697,7 +660,22 @@ def _fail_job(rip_job_id, label, result, scratch_dir, session_factory, error_ove
         error_message = error_override or _extract_error_message(result.get("log") or "")
         rip_job.error_message = error_message
         if disc is not None:
-            disc.status = DiscStatus.error
+            # Keep dirty outcome if a valid ISO from a prior rip still exists on disk.
+            has_prior_iso = (
+                disc.rip_quality == "dirty"
+                and disc.raw_path is not None
+                and datastore_root is not None
+                and _dirty_iso_exists(disc, datastore_root)
+            )
+            if has_prior_iso:
+                logger.info(
+                    "Re-rip of disc #%s failed but prior dirty ISO exists — keeping Dirty status",
+                    disc.id,
+                )
+            else:
+                if disc.rip_quality == "dirty":
+                    disc.rip_quality = None  # no usable ISO; clear stale dirty flag
+                disc.status = DiscStatus.error
 
         session.commit()
         logger.warning("Rip job %s (%s) failed: %s", rip_job_id, label, error_message)

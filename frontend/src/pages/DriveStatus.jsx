@@ -133,16 +133,8 @@ function DirectEjectButton({ drive, onRefresh }) {
   const disc = drive.current_disc;
   const discStatus = disc?.status;
   const closingTray = !!drive.tray_open;
-  const waitingForId = discStatus === "identifying";
 
-  let idleTitle;
-  if (closingTray) {
-    idleTitle = "Close Tray";
-  } else if (waitingForId) {
-    idleTitle = "Eject to view disc";
-  } else {
-    idleTitle = "Eject";
-  }
+  const idleTitle = closingTray ? "Close Tray" : "Eject";
 
   let disabledReason = null;
   if (discStatus === "ripping") {
@@ -181,7 +173,7 @@ function DirectEjectButton({ drive, onRefresh }) {
   );
 }
 
-const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying"];
+const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying", "ripped"];
 
 // value/onChange are lifted to DrivePanel so the MB popover can pre-fill it.
 // mbLookupStatus/onOpenMbPopover drive the small indicator button
@@ -305,6 +297,7 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
 }
 
 const _IN_PROGRESS_DISC_STATUSES = ["queued", "ripping", "building"];
+const _TERMINAL_DISC_STATUSES = ["ripped", "encoding", "done", "error", "protected"];
 
 function CancelRipButton({ disc, onRefresh }) {
   const [cancelling, setCancelling] = useState(false);
@@ -383,26 +376,53 @@ function DeleteDiscButton({ disc, onRefresh }) {
 }
 
 function DiscStatusZone({ disc }) {
-  const isDirty = disc.rip_quality === "dirty";
-  const isRerip = disc.rip_attempt_count > 1;
   const inProgress = _IN_PROGRESS_DISC_STATUSES.includes(disc.status);
-  const makemkvInProgress = !!disc.rip_reason && inProgress;
-  const wasProtected = disc.rip_reason === "protected";
 
-  const pillLabel = (makemkvInProgress || (isRerip && inProgress)) ? "re-ripping" : disc.status;
+  // Status pill: spec states Reading → Ripping → Clean | Dirty | Failed
+  let statusClass, statusLabel;
+  if (disc.status === "queued") {
+    statusClass = "queued";
+    statusLabel = "Reading";
+  } else if (disc.status === "ripping" || disc.status === "building") {
+    statusClass = "ripping";
+    statusLabel = "Ripping";
+  } else if (disc.status === "error" || disc.status === "protected") {
+    statusClass = "failed";
+    statusLabel = "Failed";
+  } else if (disc.rip_quality === "dirty") {
+    statusClass = "dirty";
+    statusLabel = "Dirty";
+  } else {
+    statusClass = "clean";
+    statusLabel = "Clean";
+  }
 
-  let makemkvReasonText = null;
-  if (makemkvInProgress) {
-    if (disc.rip_reason === "protected") makemkvReasonText = "🔒 Protected → MakeMKV";
-    else if (disc.rip_reason === "dirty") makemkvReasonText = "⚠ Dirty rip → MakeMKV";
-    else if (disc.rip_reason === "dvdbackup_failed") makemkvReasonText = "⚠ dvdbackup failed → MakeMKV";
-    else makemkvReasonText = "→ MakeMKV";
+  // Method pill — not shown while queued (method not yet determined)
+  let methodClass, methodLabel, methodTooltip;
+  const makemkvActive = disc.rip_method === "makemkv" || (inProgress && !!disc.rip_reason);
+  if (makemkvActive) {
+    if (disc.rip_reason === "protected") {
+      methodClass = "makemkv-protected";
+      methodLabel = "MakeMKV · protected";
+      methodTooltip = "Disc is copy-protected; ripped with MakeMKV";
+    } else {
+      methodClass = "makemkv-fallback";
+      methodLabel = "MakeMKV · fallback";
+      methodTooltip =
+        disc.rip_reason === "dvdbackup_failed" ? "dvdbackup failed; re-ripped with MakeMKV" :
+        disc.rip_reason === "dirty" ? "dvdbackup reported read errors; re-ripped with MakeMKV" :
+        "Re-ripped with MakeMKV";
+    }
+  } else {
+    methodClass = "dvdbackup";
+    methodLabel = "dvdbackup";
+    methodTooltip = "Ripped with dvdbackup";
   }
 
   return (
     <div className="disc-status-zone">
       <div className="disc-status-row">
-        <span className={`status-pill ${disc.status}`}>{pillLabel}</span>
+        <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
         {disc.type && (
           <span className={`queue-entry-type-badge ${disc.type}`}>{disc.type.toUpperCase()}</span>
         )}
@@ -412,55 +432,10 @@ function DiscStatusZone({ disc }) {
         {disc.temp_name && (
           <span className="working-title-badge" title={disc.temp_name}>{disc.temp_name}</span>
         )}
-        {makemkvReasonText && (
-          <span className="makemkv-reason-badge">{makemkvReasonText}</span>
-        )}
-        {!makemkvInProgress && isDirty && (
-          <span className="dirty-rip-badge" title="Rip completed with read errors — use Retry Rip to attempt again">
-            ⚠ Dirty rip
-          </span>
-        )}
-        {!makemkvInProgress && (disc.status === "protected" || wasProtected) && (
-          <span
-            className="status-pill protected"
-            title={disc.error_message || "Disc appears copy-protected"}
-          >
-            🔒 Protected
-          </span>
-        )}
-        {disc.rip_method === "makemkv" && !inProgress && (() => {
-          const tooltipReason =
-            disc.rip_reason === "protected" ? "disc was copy-protected; re-ripped with MakeMKV" :
-            disc.rip_reason === "dirty" ? "dvdbackup reported a dirty rip; re-ripped with MakeMKV" :
-            disc.rip_reason === "dvdbackup_failed" ? "dvdbackup failed; re-ripped with MakeMKV" :
-            "ripped with MakeMKV";
-          const isClean = disc.rip_quality !== "dirty";
-          return (
-            <span
-              className={`makemkv-reason-badge ${isClean ? "clean" : "dirty"}`}
-              title={tooltipReason}
-            >
-              {isClean ? "✓ Clean · MakeMKV" : "⚠ Dirty · MakeMKV"}
-            </span>
-          );
-        })()}
-        {isRerip && <span className="attempt-badge">Attempt {disc.rip_attempt_count}</span>}
-        {disc.possible_duplicate_of_id != null && (
-          <span
-            className="possible-duplicate-badge"
-            title="This disc may already exist in the library — check the Audit tab once ripping completes"
-          >
-            Possible duplicate of #{disc.possible_duplicate_of_id}
-          </span>
+        {disc.status !== "queued" && (
+          <span className={`method-pill ${methodClass}`} title={methodTooltip}>{methodLabel}</span>
         )}
       </div>
-
-      {disc.status === "error" && disc.error_message && !wasProtected && (
-        <p className="error-hint">{disc.error_message}</p>
-      )}
-      {disc.status === "identifying" && (
-        <p className="identifying-hint">Disc ripped — please identify before this drive can be reused</p>
-      )}
 
       {(disc.status === "ripping" || disc.status === "building") && (
         <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
@@ -576,26 +551,9 @@ function DrivePanel({ drive, onRefresh }) {
         </div>
       </div>
 
-      <div className="drive-row-region">
-        <RegionBadge drive={drive} onRefresh={onRefresh} />
-      </div>
-
       <div className="drive-row-action">
         {disc && (disc.status === "ripping" || disc.status === "building") && (
           <CancelRipButton disc={disc} onRefresh={onRefresh} />
-        )}
-        {disc && (
-          disc.status === "error" || (
-            disc.rip_quality === "dirty"
-            && disc.status !== "ripping"
-            && disc.status !== "building"
-            && disc.status !== "queued"
-          )
-        ) && (
-          <RetryRipButton disc={disc} onRefresh={onRefresh} />
-        )}
-        {disc && !_IN_PROGRESS_DISC_STATUSES.includes(disc.status) && (
-          <DeleteDiscButton disc={disc} onRefresh={onRefresh} />
         )}
       </div>
 
