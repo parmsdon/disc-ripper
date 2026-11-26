@@ -99,7 +99,7 @@ if [[ "$TARGET" == "app" ]]; then
 _step "1. DNF packages"
 
 # Packages with stable rpm names — check with rpm -q
-RPM_PACKAGES=(python3-psycopg2 python3-pyodbc freetds postgresql-server)
+RPM_PACKAGES=(python3-psycopg2 python3-pyodbc freetds postgresql-server genisoimage)
 MISSING_PKGS=()
 for pkg in "${RPM_PACKAGES[@]}"; do
     if rpm -q "$pkg" &>/dev/null; then
