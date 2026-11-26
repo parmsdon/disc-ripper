@@ -81,6 +81,16 @@ _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
 
 
+# Generic ISO 9660 Volume IDs shared by many DVDs. A fingerprint in this set
+# must never be used for dedup: doing so caused prod bug where a new disc was
+# incorrectly matched against an existing disc #701 that "owned" DVD_VIDEO.
+# These labels remain valid as display labels (temp_name) but not as identity.
+_GENERIC_DISC_FINGERPRINTS = frozenset({
+    "DVD_VIDEO", "DVDVOLUME", "VIDEO_TS", "DVDROM", "DVD",
+    "VIDEO", "DISC1", "DISC2", "DISC3", "DISC4",
+})
+
+
 def _find_existing_disc(session, disc_fingerprint):
     """
     Look up an existing Disc by fingerprint alone - shared by the DVD and
@@ -90,6 +100,14 @@ def _find_existing_disc(session, disc_fingerprint):
     one. Returns (active_disc_or_None, completed_disc_or_None).
     """
     if not disc_fingerprint:
+        return None, None
+    # Refuse to dedup on known-generic Volume IDs; every disc with such a
+    # label must be treated as new until a content-based ID replaces it.
+    if disc_fingerprint in _GENERIC_DISC_FINGERPRINTS:
+        logger.info(
+            "Disc fingerprint %r is a generic volume label — skipping dedup lookup",
+            disc_fingerprint,
+        )
         return None, None
 
     active = session.scalars(
