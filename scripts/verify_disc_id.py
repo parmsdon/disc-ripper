@@ -6,14 +6,9 @@ Usage (run on the ripper machine as the ripper user):
 
     DISCRIPPER_ENV=prod python3 scripts/verify_disc_id.py /dev/sr0 /path/to/disc.iso
 
-The script prints the ID computed from each source and reports whether they
-match. Use this to confirm the algorithm is consistent before running the
-backfill on prod.
-
-Suggested test pairs:
-  1. One disc ripped with dvdbackup (mkisofs ISO)
-  2. One disc ripped with MakeMKV (backup --decrypt ISO)
-  3. One region-patched ISO (verify it still matches the unpatched disc in the drive)
+The script tries libdvdread (primary) and isoinfo (fallback) independently for
+each path and reports which succeeded, then checks whether the final IDs match.
+Run this for one dvdbackup ISO and one MakeMKV ISO before the prod backfill.
 """
 
 import sys
@@ -22,22 +17,37 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ripper_service.disc_id import compute_dvd_id, _list_ifo_files
+from ripper_service.disc_id import (
+    _lib,
+    _read_ifo_via_libdvdread,
+    _read_ifo_via_isoinfo,
+    compute_dvd_id,
+)
 
 
-def _summarise(path: str, label: str) -> str | None:
-    files = _list_ifo_files(path)
-    if files is None:
-        print(f"  {label}: FAILED — could not list IFO files from {path!r}")
-        return None
-    names = ", ".join(n for n, _, _ in files)
-    print(f"  {label}: found {len(files)} IFO file(s): {names}")
-    disc_id = compute_dvd_id(path)
-    if disc_id is None:
-        print(f"  {label}: FAILED — compute_dvd_id returned None")
+def _probe(path: str, label: str) -> str | None:
+    print(f"  {label}: {path!r}")
+    if _lib is None:
+        print(f"    libdvdread: NOT AVAILABLE")
     else:
-        print(f"  {label}: {disc_id}")
-    return disc_id
+        hex_lib = _read_ifo_via_libdvdread(path)
+        if hex_lib:
+            print(f"    libdvdread: ifo:{hex_lib[:16]}  ✓")
+        else:
+            print(f"    libdvdread: failed")
+
+    hex_iso = _read_ifo_via_isoinfo(path)
+    if hex_iso:
+        print(f"    isoinfo:    ifo:{hex_iso[:16]}  ✓")
+    else:
+        print(f"    isoinfo:    failed (possibly UDF-only — OK if libdvdread worked)")
+
+    final = compute_dvd_id(path)
+    if final:
+        print(f"    final ID:   {final}")
+    else:
+        print(f"    final ID:   NONE — both methods failed")
+    return final
 
 
 def main() -> None:
@@ -48,11 +58,11 @@ def main() -> None:
 
     device_path, iso_path = sys.argv[1], sys.argv[2]
 
-    print(f"Device: {device_path}")
-    device_id = _summarise(device_path, "device")
+    print("Device:")
+    device_id = _probe(device_path, "device")
 
-    print(f"\nISO:    {iso_path}")
-    iso_id = _summarise(iso_path, "iso   ")
+    print("ISO:")
+    iso_id = _probe(iso_path, "iso   ")
 
     print()
     if device_id is None or iso_id is None:
