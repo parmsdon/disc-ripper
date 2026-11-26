@@ -182,10 +182,16 @@ class Disc(Base):
     raw_path = Column(String, nullable=True)           # path under datastore, e.g. dvd_store/raw/123
     error_message = Column(Text, nullable=True)
 
-    # Disc fingerprint:
+    # Disc identity key:
     #   CD  -> CDDB/MusicBrainz disc ID (computed from track lengths/offsets)
-    #   DVD -> Volume ID / Volume Set ID from the ISO9660/UDF filesystem
+    #   DVD -> "ifo:<16-hex>" — content-based hash of VIDEO_TS IFO files
     disc_fingerprint = Column(String, nullable=True, index=True)
+    # ISO 9660 / UDF volume label as reported by the disc or isoinfo.
+    # Separate from disc_fingerprint so the content ID is never used as a
+    # filename (colons are invalid on Windows/Samba). Set at insertion and
+    # used for ISO file naming; backfilled from old plain disc_fingerprint
+    # values for discs created before the content-based ID was introduced.
+    volume_label = Column(String, nullable=True)
 
     # CD-specific album info (compilations use album_artist = "Various")
     album_title = Column(String, nullable=True)

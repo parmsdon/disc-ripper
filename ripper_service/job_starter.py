@@ -117,7 +117,7 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
 
         if disc.type == DiscType.dvd:
             scratch_dir = str(Path(cfg["storage"]["scratch_dir"]) / str(disc.id))
-            disc_label = disc.disc_fingerprint or f"disc_{disc.id}"
+            disc_label = disc.volume_label or f"disc_{disc.id}"
             thread = threading.Thread(
                 target=_run_job,
                 args=(
@@ -241,7 +241,7 @@ def _finish_success_makemkv(
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
 
-        disc_label = disc.disc_fingerprint or f"disc_{disc.id}"
+        disc_label = disc.volume_label or f"disc_{disc.id}"
         iso_path = str(iso_dir / f"{disc_label}.iso")
         original_region = patch_region_if_needed(iso_path, disc.id)
         if original_region is not None:
@@ -607,7 +607,7 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         if disc.drive is not None and disc.drive.physical_drive is not None:
             disc.ripped_in_region = disc.drive.physical_drive.region
 
-        disc_label = disc.disc_fingerprint or f"disc_{disc.id}"
+        disc_label = disc.volume_label or f"disc_{disc.id}"
         iso_path = str(iso_dir / f"{disc_label}.iso")
         original_region = patch_region_if_needed(iso_path, disc.id)
         if original_region is not None:

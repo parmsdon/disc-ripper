@@ -43,6 +43,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "raw_path": disc.raw_path,
         "error_message": disc.error_message,
         "disc_fingerprint": disc.disc_fingerprint,
+        "volume_label": disc.volume_label,
         "album_title": disc.album_title,
         "album_artist": disc.album_artist,
         "needs_rerip": disc.needs_rerip,
@@ -109,6 +110,7 @@ def identification_queue():
             "status": disc.status.value,
             "temp_name": disc.temp_name,
             "disc_fingerprint": disc.disc_fingerprint,
+            "volume_label": disc.volume_label,
             "created_at": disc.created_at.isoformat() if disc.created_at else None,
             "ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
             "mb_lookup_status": disc.mb_lookup_status if disc.type == DiscType.cd else None,
@@ -638,7 +640,7 @@ def delete_preview(disc_id):
     if disc.type == DiscType.cd and datastore_root != Path(""):
         has_cover = (datastore_root / "cd_store" / "covers" / f"{disc_id}.jpg").exists()
 
-    disc_name = disc.temp_name or disc.disc_fingerprint or f"Disc #{disc_id}"
+    disc_name = disc.temp_name or disc.volume_label or f"Disc #{disc_id}"
 
     return jsonify({
         "disc_id": disc_id,

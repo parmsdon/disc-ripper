@@ -363,9 +363,11 @@ def run(cfg: dict) -> None:
                                         status=DiscStatus.queued,
                                         drive_id=drive_id,
                                         disc_fingerprint=disc_fingerprint,
-                                        # Use the ISO 9660 volume label as a human-readable
-                                        # working title. Under the content-based ID scheme
-                                        # disc_fingerprint is an ifo: hash, not a label.
+                                        # Store the ISO 9660 / UDF volume label separately
+                                        # so it can be used for ISO file naming without
+                                        # the colon in "ifo:..." causing Windows/Samba issues.
+                                        volume_label=volume_label,
+                                        # Also use it as the initial working title.
                                         temp_name=volume_label,
                                     )
                                     session.add(disc)

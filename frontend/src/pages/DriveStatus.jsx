@@ -240,7 +240,7 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
   }
 
   function handleCopyLabel() {
-    onChange(disc.disc_fingerprint);
+    onChange(disc.volume_label);
   }
 
   function handleCopyCurrent() {
@@ -259,7 +259,7 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
       />
       {/* CD disc_fingerprint is a CDDB-style hash, not a human-readable
           label - only worth copying for DVDs (volume id/volume set id). */}
-      {disc.type !== "cd" && disc.disc_fingerprint && (
+      {disc.type !== "cd" && disc.volume_label && (
         <button
           type="button"
           className="copy-label-btn"
@@ -407,7 +407,7 @@ function DiscStatusZone({ disc }) {
           <span className={`queue-entry-type-badge ${disc.type}`}>{disc.type.toUpperCase()}</span>
         )}
         <span className="disc-id-label" title={disc.disc_fingerprint || undefined}>
-          #{disc.id}{disc.disc_fingerprint ? ` · ${disc.disc_fingerprint}` : ""}
+          #{disc.id}{disc.volume_label ? ` · ${disc.volume_label}` : ""}
         </span>
         {disc.temp_name && (
           <span className="working-title-badge" title={disc.temp_name}>{disc.temp_name}</span>

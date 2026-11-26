@@ -187,6 +187,7 @@ def dvd_catalogue():
         return {
             "disc_id": disc.id,
             "disc_fingerprint": disc.disc_fingerprint,
+            "disc_volume_label": disc.volume_label,
             "disc_temp_name": disc.temp_name,
             "disc_ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
             "disc_rip_quality": disc.rip_quality,

@@ -118,8 +118,8 @@ export default function DvdIdentifyPanel({ disc, onConfirm, onSkip }) {
           <div>
             <div className="identify-panel-title">Identify DVD</div>
             <div className="identify-disc-name">{disc.temp_name || "Unnamed"}</div>
-            {disc.disc_fingerprint && (
-              <div className="identify-disc-fp">{disc.disc_fingerprint}</div>
+            {disc.volume_label && (
+              <div className="identify-disc-fp">{disc.volume_label}</div>
             )}
           </div>
           <button className="mb-popover-close" onClick={onSkip}>×</button>

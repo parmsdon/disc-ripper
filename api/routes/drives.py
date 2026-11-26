@@ -84,6 +84,7 @@ def list_drives():
                 "type": current_disc_row.type.value if current_disc_row.type else None,
                 "status": current_disc_row.status.value if current_disc_row.status else None,
                 "disc_fingerprint": current_disc_row.disc_fingerprint,
+                "volume_label": current_disc_row.volume_label,
                 "temp_name": current_disc_row.temp_name,
                 "rip_quality": current_disc_row.rip_quality,
                 "rip_attempt_count": current_disc_row.rip_attempt_count,

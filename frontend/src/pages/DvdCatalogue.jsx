@@ -252,9 +252,9 @@ export default function DvdCatalogue() {
                         <div>
                           {row.disc_temp_name || <em className="catalogue-dim">Unnamed</em>}
                         </div>
-                        {row.disc_fingerprint && (
+                        {row.disc_volume_label && (
                           <div className="catalogue-meta catalogue-mono">
-                            {row.disc_fingerprint}
+                            {row.disc_volume_label}
                           </div>
                         )}
                       </>

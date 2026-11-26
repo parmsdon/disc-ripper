@@ -47,8 +47,8 @@ function QueueEntry({ disc, onIdentify }) {
             : <em className="queue-entry-unnamed">Unnamed</em>
           }
         </div>
-        {disc.disc_fingerprint && (
-          <div className="queue-entry-meta">{disc.disc_fingerprint}</div>
+        {disc.volume_label && (
+          <div className="queue-entry-meta">{disc.volume_label}</div>
         )}
         {rippedAt && (
           <div className="queue-entry-date">Ripped: {rippedAt}</div>
