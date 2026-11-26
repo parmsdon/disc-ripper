@@ -8,8 +8,10 @@ values) matched zero rows — every fingerprint was already an ifo: hash.
 For every DVD with volume_label IS NULL and a raw_path:
   1. Find the .iso file in dvd_store/raw/<disc_id>/.
   2. Read the volume label from the ISO via isoinfo -d -i.
-  3. Fall back to the ISO filename stem if isoinfo fails or returns empty.
-  4. If no ISO exists, report as failed and skip.
+  3. If isoinfo returns a generic label (e.g. "CDROM"), fall back to the
+     ISO filename stem (which was derived from the original disc title).
+  4. If isoinfo fails or returns empty, fall back to the filename stem.
+  5. If no ISO exists, report as failed and skip.
 
 Usage:
     DISCRIPPER_ENV=prod python3 scripts/backfill_volume_labels.py          # dry-run
@@ -21,6 +23,7 @@ The app/DB machine (ripper) must have isoinfo available (genisoimage package).
 import argparse
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +37,9 @@ from common.models import Disc, DiscType
 from ripper_service.disc_label import read_volume_info, GENERIC_VOLUME_LABELS
 
 BATCH_SIZE = 50
+
+# Well-known phase keys that appear in the summary with fixed labels.
+_PHASE_KEYS = ("total", "no_raw_path", "no_iso", "failed")
 
 
 def find_iso(datastore_root: str, raw_path: str) -> Path | None:
@@ -79,19 +85,13 @@ def main() -> None:
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
 
-    counts = {
-        "total": 0,
-        "no_raw_path": 0,
-        "no_iso": 0,
-        "source_iso": 0,
-        "source_filename": 0,
-        "failed": 0,
-    }
+    counts: Counter = Counter()
 
     col_w = 50  # column width for temp_name in report
+    src_w = 28  # column width for source in report (longest: "filename(generic:DVD_VIDEO)")
 
-    print(f"{'ID':>6}  {'temp_name':<{col_w}}  {'source':<8}  label")
-    print("-" * (6 + 2 + col_w + 2 + 8 + 2 + 50))
+    print(f"{'ID':>6}  {'temp_name':<{col_w}}  {'source':<{src_w}}  label")
+    print("-" * (6 + 2 + col_w + 2 + src_w + 2 + 50))
 
     pending: list[tuple[Disc, str]] = []
 
@@ -110,25 +110,25 @@ def main() -> None:
             tname = (disc.temp_name or "")[:col_w]
 
             if not disc.raw_path:
-                print(f"{disc.id:>6}  {tname:<{col_w}}  {'—':<8}  (no raw_path — skip)")
+                print(f"{disc.id:>6}  {tname:<{col_w}}  {'—':<{src_w}}  (no raw_path — skip)")
                 counts["no_raw_path"] += 1
                 continue
 
             iso_path = find_iso(datastore_root, disc.raw_path)
             if iso_path is None:
-                print(f"{disc.id:>6}  {tname:<{col_w}}  {'failed':<8}  (no .iso in {disc.raw_path})")
+                print(f"{disc.id:>6}  {tname:<{col_w}}  {'failed':<{src_w}}  (no .iso in {disc.raw_path})")
                 counts["no_iso"] += 1
                 counts["failed"] += 1
                 continue
 
             label, source = label_from_iso(iso_path)
             if label is None:
-                print(f"{disc.id:>6}  {tname:<{col_w}}  {'failed':<8}  (isoinfo returned nothing, no filename fallback)")
+                print(f"{disc.id:>6}  {tname:<{col_w}}  {'failed':<{src_w}}  (isoinfo returned nothing, no filename fallback)")
                 counts["failed"] += 1
                 continue
 
-            counts[f"source_{source}"] += 1
-            print(f"{disc.id:>6}  {tname:<{col_w}}  {source:<8}  {label}")
+            counts[source] += 1
+            print(f"{disc.id:>6}  {tname:<{col_w}}  {source:<{src_w}}  {label}")
             pending.append((disc, label))
 
             if not dry_run and len(pending) >= BATCH_SIZE:
@@ -141,14 +141,19 @@ def main() -> None:
         if not dry_run:
             session.commit()
 
+    # Source counts: everything in counts that isn't a phase key.
+    source_counts = {k: v for k, v in counts.items() if k not in _PHASE_KEYS}
+
     print()
     print("Summary")
     print(f"  DVDs with volume_label NULL:  {counts['total']}")
     print(f"  No raw_path (queued/error):   {counts['no_raw_path']}")
     print(f"  No ISO found:                 {counts['no_iso']}")
-    print(f"  Label from ISO (isoinfo):     {counts['source_iso']}")
-    print(f"  Label from filename stem:     {counts['source_filename']}")
     print(f"  Failed (no label at all):     {counts['failed']}")
+    if source_counts:
+        print(f"  Label sources:")
+        for src, n in sorted(source_counts.items()):
+            print(f"    {src:<{src_w - 2}}  {n}")
     if dry_run:
         print()
         print("Dry-run — no changes written. Re-run with --apply to write.")
