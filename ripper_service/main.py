@@ -36,7 +36,7 @@ from ripper_service.cd_toc import read_table_of_contents
 from ripper_service.lookup_queue import submit_lookup
 from ripper_service.mb_lookup import compute_mb_disc_id, init_useragent, lookup_musicbrainz
 from ripper_service.db import get_session_factory
-from ripper_service.disc_label import read_volume_info
+from ripper_service.disc_label import read_volume_info, GENERIC_VOLUME_LABELS
 from ripper_service.disc_id import compute_dvd_id
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.job_rollback import rollback_excess_jobs, rollback_job
@@ -82,14 +82,10 @@ _SERVICE_HEARTBEAT_KEY = "service_heartbeat"
 _SERVICE_COMMAND_KEY = "service_command"
 
 
-# Generic ISO 9660 Volume IDs shared by many DVDs. A fingerprint in this set
-# must never be used for dedup: doing so caused prod bug where a new disc was
-# incorrectly matched against an existing disc #701 that "owned" DVD_VIDEO.
-# These labels remain valid as display labels (temp_name) but not as identity.
-_GENERIC_DISC_FINGERPRINTS = frozenset({
-    "DVD_VIDEO", "DVDVOLUME", "VIDEO_TS", "DVDROM", "DVD",
-    "VIDEO", "DISC1", "DISC2", "DISC3", "DISC4",
-})
+# Shared with disc_label.py — see GENERIC_VOLUME_LABELS for the canonical set.
+# Used here to block dedup on known-generic Volume IDs (the prod bug where
+# disc #701 "owned" DVD_VIDEO and all subsequent discs with that label resumed it).
+_GENERIC_DISC_FINGERPRINTS = GENERIC_VOLUME_LABELS
 
 
 def _find_existing_disc(session, disc_fingerprint):

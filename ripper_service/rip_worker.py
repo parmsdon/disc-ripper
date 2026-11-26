@@ -13,6 +13,7 @@ import os
 import pty
 import re
 import select
+import string
 import subprocess
 import threading
 import time
@@ -283,11 +284,27 @@ def run_dvdbackup(device_path, scratch_dir, disc_label, fake_mode, rip_job_id, s
         session.close()
 
 
-def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_factory) -> dict:
+_ISO9660_SAFE = frozenset(string.ascii_uppercase + string.digits + "_")
+
+
+def sanitize_volume_label(label: str) -> str:
+    """
+    Sanitize a string for use as an ISO 9660 Volume ID (-V argument to mkisofs).
+    ISO 9660 Level 1 restricts volume IDs to [A-Z0-9_], max 32 characters.
+    Returns "DVD" if the sanitized result would be empty.
+    """
+    sanitized = "".join(c if c in _ISO9660_SAFE else "_" for c in label.upper())[:32]
+    return sanitized or "DVD"
+
+
+def run_mkisofs(scratch_subdir, output_iso_path, volume_label, fake_mode, rip_job_id, session_factory) -> dict:
     """
     Build an ISO from scratch_subdir (the directory dvdbackup wrote
     VIDEO_TS/AUDIO_TS into - real or fake), updating rip_job progress as
     output streams in.
+
+    volume_label is embedded as the ISO 9660 Volume ID via -V; it is
+    sanitized to [A-Z0-9_] and truncated to 32 chars automatically.
 
     Returns {"success": bool, "log": str, "return_code": int|None}.
     Never raises - any failure is captured and reflected in the result.
@@ -299,7 +316,9 @@ def run_mkisofs(scratch_subdir, output_iso_path, fake_mode, rip_job_id, session_
         ]
     else:
         command = [
-            "mkisofs", "-dvd-video", "-o", output_iso_path, scratch_subdir,
+            "mkisofs", "-dvd-video",
+            "-V", sanitize_volume_label(volume_label),
+            "-o", output_iso_path, scratch_subdir,
         ]
 
     log_lines = []

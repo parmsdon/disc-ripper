@@ -31,7 +31,7 @@ from sqlalchemy.orm import sessionmaker
 
 from common.config import get_db_url, load_config
 from common.models import Disc, DiscType
-from ripper_service.disc_label import read_volume_info
+from ripper_service.disc_label import read_volume_info, GENERIC_VOLUME_LABELS
 
 BATCH_SIZE = 50
 
@@ -47,12 +47,19 @@ def find_iso(datastore_root: str, raw_path: str) -> Path | None:
 def label_from_iso(iso_path: Path) -> tuple[str | None, str]:
     """
     Try isoinfo -d -i; return (label, source).
-    source is "iso" on success, "filename" if isoinfo fails or returns empty.
+
+    source values:
+      "iso"                   — isoinfo returned a valid, non-generic label
+      "filename(generic:X)"   — isoinfo returned a generic label X (e.g. CDROM);
+                                fell back to ISO filename stem
+      "filename"              — isoinfo failed or returned empty; using stem
     """
     info = read_volume_info(str(iso_path))
-    label = info["volume_id"] or info["volume_set_id"]
-    if label:
-        return label, "iso"
+    raw = info["volume_id"] or info["volume_set_id"]
+    if raw and raw not in GENERIC_VOLUME_LABELS:
+        return raw, "iso"
+    if raw and raw in GENERIC_VOLUME_LABELS:
+        return iso_path.stem, f"filename(generic:{raw})"
     # isoinfo returned empty (UDF-only, damaged ISO 9660 header, etc.)
     return iso_path.stem, "filename"
 

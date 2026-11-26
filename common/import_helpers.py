@@ -14,7 +14,7 @@ from common.models import (
     Catalog, Disc, DiscStatus, DiscType, JobStatus, RipJob, naive_utcnow,
 )
 from common.encode_queue import create_encode_jobs
-from ripper_service.disc_label import read_volume_info
+from ripper_service.disc_label import read_volume_info, GENERIC_VOLUME_LABELS
 from ripper_service.region_patcher import patch_region_if_needed, MIN_ISO_SIZE
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,11 @@ def import_one_iso(
 
         if not disc.volume_label:
             vol = read_volume_info(str(dst))
-            disc.volume_label = vol["volume_id"] or vol["volume_set_id"] or working_title
+            raw_label = vol["volume_id"] or vol["volume_set_id"]
+            disc.volume_label = (
+                raw_label if raw_label and raw_label not in GENERIC_VOLUME_LABELS
+                else working_title
+            )
 
         if catalog_id is not None:
             disc.catalog_id = catalog_id

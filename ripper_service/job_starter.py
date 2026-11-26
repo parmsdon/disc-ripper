@@ -401,7 +401,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
                     else:
                         video_ts_parent = str(Path(scratch_dir) / disc_label)
                         try:
-                            mkiso_result = run_mkisofs(video_ts_parent, iso_path, fake_rip_mode, rip_job_id, session_factory)
+                            mkiso_result = run_mkisofs(video_ts_parent, iso_path, disc_label, fake_rip_mode, rip_job_id, session_factory)
                         except Exception:
                             logger.exception("Unexpected error in mkisofs last resort for rip job %s", rip_job_id)
                             mkiso_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
@@ -530,7 +530,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
                 return
             video_ts_parent = str(Path(scratch_dir) / disc_label)
             try:
-                mkiso_result = run_mkisofs(video_ts_parent, iso_path, fake_rip_mode, rip_job_id, session_factory)
+                mkiso_result = run_mkisofs(video_ts_parent, iso_path, disc_label, fake_rip_mode, rip_job_id, session_factory)
             except Exception:
                 logger.exception("Unexpected error running mkisofs fallback for rip job %s", rip_job_id)
                 mkiso_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
@@ -554,7 +554,7 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
     video_ts_parent = str(Path(scratch_dir) / disc_label)
 
     try:
-        mkiso_result = run_mkisofs(video_ts_parent, iso_path, fake_rip_mode, rip_job_id, session_factory)
+        mkiso_result = run_mkisofs(video_ts_parent, iso_path, disc_label, fake_rip_mode, rip_job_id, session_factory)
     except Exception:
         logger.exception("Unexpected error running mkisofs for rip job %s", rip_job_id)
         mkiso_result = {"success": False, "log": "Unexpected error — see service logs", "return_code": None}
