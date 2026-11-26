@@ -114,6 +114,7 @@ export default function Audit() {
   function computeOpen(d) {
     const keys = new Set();
     if (d.dvd?.possible_duplicates?.length > 0)         keys.add("dvd-possible-dups");
+    if (d.dvd?.legacy_fingerprints?.length > 0)         keys.add("dvd-legacy-fps");
     if (d.dvd?.duplicate_discs?.length > 0)            keys.add("dvd-dup-fps");
     if (d.dvd?.missing_iso_files?.length > 0)          keys.add("dvd-missing-iso");
     if (d.dvd?.orphaned_iso_dirs?.length > 0)          keys.add("dvd-orphaned-iso");
@@ -230,6 +231,19 @@ export default function Audit() {
               `#${r.other_id}`,
               r.other_title ?? "—",
               r.other_status ?? "—",
+            ])} />
+        </CheckRow>
+
+        <CheckRow groupLabel="" name="Legacy volume-label fingerprints (run backfill)"
+          count={dvd?.legacy_fingerprints?.length}
+          open={o("dvd-legacy-fps")} onToggle={tog("dvd-legacy-fps")}
+          issueLabel="disc">
+          <IssueTable columns={["Disc #", "Title", "Status", "Current fingerprint"]}
+            rows={(dvd?.legacy_fingerprints ?? []).map((r) => [
+              r.disc_id,
+              r.disc_title,
+              r.disc_status,
+              <code key="fp">{r.disc_fingerprint}</code>,
             ])} />
         </CheckRow>
 

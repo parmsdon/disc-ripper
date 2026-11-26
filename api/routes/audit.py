@@ -163,6 +163,26 @@ def run_audit():
             "other_fingerprint": other.disc_fingerprint if other else None,
         })
 
+    # ── DVD: unupgraded fingerprints (plain volume labels, not ifo: hashes) ─
+    # These discs were ripped before the content-based ID rollout. Run
+    # scripts/backfill_dvd_ids.py to clear them.
+    legacy_fp_discs = session.scalars(
+        select(Disc).where(
+            Disc.type == DiscType.dvd,
+            Disc.disc_fingerprint.isnot(None),
+            ~Disc.disc_fingerprint.like("ifo:%"),
+        ).order_by(Disc.id)
+    ).all()
+    legacy_fingerprints = [
+        {
+            "disc_id": d.id,
+            "disc_title": _disc_title(d),
+            "disc_fingerprint": d.disc_fingerprint,
+            "disc_status": d.status,
+        }
+        for d in legacy_fp_discs
+    ]
+
     # ── DVD: duplicate fingerprints ──────────────────────────────────────────
     dup_fp_rows = session.execute(
         select(Disc.disc_fingerprint, func.count(Disc.id).label("cnt"))
@@ -562,7 +582,8 @@ def run_audit():
 
     # ── Summary ──────────────────────────────────────────────────────────────
     dvd_issues = (
-        len(possible_duplicates) + len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
+        len(possible_duplicates) + len(legacy_fingerprints)
+        + len(duplicate_dvd_discs) + len(missing_iso_files) + len(orphaned_iso_dirs)
         + len(null_raw_path) + len(stale_dvd_associations)
         + len(missing_dvd_encode_jobs) + len(duplicate_temp_names)
     )
@@ -578,6 +599,7 @@ def run_audit():
     return jsonify({
         "dvd": {
             "possible_duplicates": possible_duplicates,
+            "legacy_fingerprints": legacy_fingerprints,
             "duplicate_discs": duplicate_dvd_discs,
             "missing_iso_files": missing_iso_files,
             "orphaned_iso_dirs": orphaned_iso_dirs,

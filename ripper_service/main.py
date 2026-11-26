@@ -37,6 +37,7 @@ from ripper_service.lookup_queue import submit_lookup
 from ripper_service.mb_lookup import compute_mb_disc_id, init_useragent, lookup_musicbrainz
 from ripper_service.db import get_session_factory
 from ripper_service.disc_label import read_volume_info
+from ripper_service.disc_id import compute_dvd_id
 from ripper_service.drive_registry import sync_physical_drives
 from ripper_service.job_rollback import rollback_excess_jobs, rollback_job
 from ripper_service.job_starter import start_eligible_rip_jobs
@@ -286,7 +287,10 @@ def run(cfg: dict) -> None:
                                 )
                             elif drive_id is not None:
                                 volume_info = read_volume_info(device_path)
-                                disc_fingerprint = volume_info["volume_id"] or volume_info["volume_set_id"]
+                                volume_label = volume_info["volume_id"] or volume_info["volume_set_id"]
+                                # Content-based identity: hash of VIDEO_TS.IFO (region byte
+                                # zeroed) + volume space size. Never collides on generic labels.
+                                disc_fingerprint = compute_dvd_id(device_path)
 
                                 # A service restart loses media_present_by_device,
                                 # so a disc that was never removed looks like a
@@ -306,9 +310,9 @@ def run(cfg: dict) -> None:
                                         .values(drive_id=drive_id)
                                     )
                                     logger.info(
-                                        "Disc %s already tracked as disc #%s on Drive %s, "
+                                        "Disc %r (%s) already tracked as disc #%s on Drive %s, "
                                         "resuming existing record",
-                                        disc_fingerprint, existing_active_disc.id, label,
+                                        volume_label, disc_fingerprint, existing_active_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None and (
                                     existing_completed_disc.status in (DiscStatus.error, DiscStatus.protected)
@@ -342,16 +346,16 @@ def run(cfg: dict) -> None:
                                         )
                                     else:
                                         logger.info(
-                                            "Disc %s previously had errors - disc #%s on "
+                                            "Disc %r previously had errors - disc #%s on "
                                             "Drive %s, awaiting user action",
-                                            disc_fingerprint, existing_completed_disc.id, label,
+                                            volume_label, existing_completed_disc.id, label,
                                         )
                                 elif existing_completed_disc is not None:
                                     existing_completed_disc.drive_id = drive_id
                                     logger.info(
-                                        "Disc %s already processed as disc #%s on Drive %s - "
+                                        "Disc %r already processed as disc #%s on Drive %s - "
                                         "ignoring reinsertion",
-                                        disc_fingerprint, existing_completed_disc.id, label,
+                                        volume_label, existing_completed_disc.id, label,
                                     )
                                 else:
                                     disc = Disc(
@@ -359,16 +363,20 @@ def run(cfg: dict) -> None:
                                         status=DiscStatus.queued,
                                         drive_id=drive_id,
                                         disc_fingerprint=disc_fingerprint,
+                                        # Use the ISO 9660 volume label as a human-readable
+                                        # working title. Under the content-based ID scheme
+                                        # disc_fingerprint is an ifo: hash, not a label.
+                                        temp_name=volume_label,
                                     )
                                     session.add(disc)
 
-                                    # When the DVD ID couldn't be read (fingerprint=None),
-                                    # check the kernel-cached label (ID_FS_LABEL from udevadm)
-                                    # for a soft match. If it matches an existing disc we show
+                                    # When compute_dvd_id failed (fingerprint=None), check the
+                                    # kernel-cached label (ID_FS_LABEL from udevadm) for a soft
+                                    # match against existing disc fingerprints. If found, show
                                     # "possible duplicate of #N" on Drive Status while ripping.
                                     # A label match alone never skips the rip.
                                     if disc_fingerprint is None:
-                                        fs_label = info.get("fs_label")
+                                        fs_label = info.get("fs_label") or volume_label
                                         if fs_label:
                                             label_match = session.scalar(
                                                 select(Disc).where(
@@ -378,7 +386,7 @@ def run(cfg: dict) -> None:
                                             if label_match is not None:
                                                 disc.possible_duplicate_of_id = label_match.id
                                                 logger.info(
-                                                    "Drive %s: udevadm label %r matches disc #%s — "
+                                                    "Drive %s: label %r matches disc #%s — "
                                                     "flagging as possible duplicate (rip will proceed)",
                                                     label, fs_label, label_match.id,
                                                 )
@@ -399,9 +407,9 @@ def run(cfg: dict) -> None:
                                         status=JobStatus.queued,
                                     ))
                                     logger.info(
-                                        "Created disc #%s for %s (volume_id=%s, volume_set_id=%s) - "
+                                        "Created disc #%s for %s (fingerprint=%s, label=%s) - "
                                         "rip job queued, waiting for ripping to be enabled",
-                                        disc.id, label, volume_info["volume_id"], volume_info["volume_set_id"],
+                                        disc.id, label, disc_fingerprint, volume_label,
                                     )
                                     pending_log_events.append(("disc_inserted", {
                                         "drive_label": label,

@@ -28,7 +28,7 @@ from ripper_service import active_jobs
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.log_writer import write_log_event
 from ripper_service.region_patcher import patch_region_if_needed
-from ripper_service.disc_label import read_volume_info
+from ripper_service.disc_id import compute_dvd_id
 from ripper_service.makemkv_worker import run_makemkv
 from ripper_service.rip_worker import run_cdparanoia, run_dvdbackup, run_mkisofs, scan_for_copy_protection
 
@@ -613,11 +613,10 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
         if original_region is not None:
             disc.ripped_in_region = f"0x{original_region:02X}"
 
-        # When the DVD ID couldn't be read at insertion, compute it from the
-        # resulting ISO and check for duplicates (spec item #6).
+        # When compute_dvd_id failed at insertion (fingerprint=None), try again
+        # from the resulting ISO — it's more reliable than the live device.
         if disc.disc_fingerprint is None and os.path.isfile(iso_path):
-            volume_info = read_volume_info(iso_path)
-            computed_fp = volume_info["volume_id"] or volume_info["volume_set_id"]
+            computed_fp = compute_dvd_id(iso_path)
             if computed_fp:
                 disc.disc_fingerprint = computed_fp
                 other = session.scalar(
