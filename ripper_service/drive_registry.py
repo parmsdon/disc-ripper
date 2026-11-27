@@ -7,6 +7,7 @@ added/removed from config are picked up without restarting the service.
 """
 
 from sqlalchemy import select, not_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from common.models import Drive, PhysicalDrive, DiscType, naive_utcnow
 from ripper_service.udev_helper import get_drive_info
@@ -35,15 +36,21 @@ def sync_physical_drives(session, cfg: dict) -> dict:
         raw_type = drive_cfg.get("type")
         drive_type = DiscType(raw_type) if raw_type else None
 
-        drive = session.scalar(
-            select(Drive).where(Drive.device_path == device_path, Drive.env == env)
+        stmt = (
+            pg_insert(Drive)
+            .values(device_path=device_path, env=env,
+                    label=drive_cfg.get("label"),
+                    drive_type=drive_type, active=True)
+            .on_conflict_do_update(
+                index_elements=["device_path", "env"],
+                set_=dict(label=drive_cfg.get("label"),
+                          drive_type=drive_type, active=True),
+            )
+            .returning(Drive.id)
         )
-        if drive is None:
-            drive = Drive(device_path=device_path, env=env)
-            session.add(drive)
-        drive.label = drive_cfg.get("label")
-        drive.drive_type = drive_type
-        drive.active = True
+        drive_id = session.execute(stmt).scalar_one()
+        session.flush()
+        drive = session.get(Drive, drive_id)
 
         hardware_id = get_drive_info(device_path)["hardware_id"]
 
