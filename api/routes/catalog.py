@@ -7,28 +7,23 @@ sync background thread.
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import timedelta
 
 from flask import Blueprint, jsonify, current_app, request
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 
 from common.catalog_dups import load_dup_roles
-from common.models import Catalog, Disc, DiscStatus, DiscType
+from common.config import get_db_url
+from common.models import Catalog, Disc, DiscStatus, DiscType, SyncState, naive_utcnow
 from mymovies_sync.sync import run_sync
 
 logger = logging.getLogger(__name__)
 
 catalog_bp = Blueprint("catalog", __name__)
 
-# Process-wide sync state, shared by the background thread and the
-# status endpoint. A single Flask process (dev: `flask run`/app.py) is
-# assumed - this isn't safe across multiple worker processes, same
-# caveat as the ripper service's in-process active_jobs registry.
-_sync_lock = threading.Lock()
-_sync_running = False
-_last_result = None
-_last_run_at = None
-_sync_progress = None  # {"current": int, "total": int} while running, None otherwise
+# If running=TRUE and started_at is older than this, treat the lock as stale
+# (the worker that claimed it must have died mid-sync).
+_STALE_SYNC_MINUTES = 10
 
 
 def _catalog_to_dict(entry: Catalog, dup_roles: dict | None = None) -> dict:
@@ -121,24 +116,71 @@ def get_catalog_entry(catalog_id):
 
 
 def _run_sync_in_background(cfg: dict) -> None:
-    global _sync_running, _last_result, _last_run_at, _sync_progress
+    """Background thread: run sync, writing progress and final result to sync_state."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
+    engine = create_engine(get_db_url(cfg))
+    StateSession = sessionmaker(bind=engine)
+
+    # Update progress at most every 5% of total rows (capped to every 50 rows).
     def _progress(current, total):
-        global _sync_progress
-        with _sync_lock:
-            _sync_progress = {"current": current, "total": total}
+        step = max(1, min(50, total // 20))
+        if current % step != 0 and current != total:
+            return
+        s = StateSession()
+        try:
+            s.execute(
+                update(SyncState)
+                .where(SyncState.id == 1)
+                .values(progress_current=current, progress_total=total)
+            )
+            s.commit()
+        except Exception:
+            pass
+        finally:
+            s.close()
 
+    s = StateSession()
     try:
         result = run_sync(cfg, progress_callback=_progress)
+        s.execute(
+            update(SyncState)
+            .where(SyncState.id == 1)
+            .values(
+                running=False,
+                finished_at=naive_utcnow(),
+                progress_current=None,
+                progress_total=None,
+                last_synced=result.get("synced"),
+                last_inserted=result.get("inserted"),
+                last_updated=result.get("updated"),
+                last_errors=result.get("errors"),
+                last_duration_seconds=result.get("duration_seconds"),
+                last_error_message=None,
+            )
+        )
+        s.commit()
     except Exception as exc:
         logger.exception("My Movies sync (triggered via API) failed")
-        result = {"error": str(exc)}
+        try:
+            s.execute(
+                update(SyncState)
+                .where(SyncState.id == 1)
+                .values(
+                    running=False,
+                    finished_at=naive_utcnow(),
+                    progress_current=None,
+                    progress_total=None,
+                    last_error_message=str(exc),
+                )
+            )
+            s.commit()
+        except Exception:
+            pass
     finally:
-        with _sync_lock:
-            _last_result = result
-            _last_run_at = datetime.now(timezone.utc).isoformat()
-            _sync_running = False
-            _sync_progress = None
+        s.close()
+        engine.dispose()
 
 
 _RIPPED_STATUSES = [DiscStatus.ripped, DiscStatus.identifying, DiscStatus.done]
@@ -300,26 +342,70 @@ def dvd_catalogue():
 
 @catalog_bp.route("/sync", methods=["POST"])
 def trigger_sync():
+    Session = current_app.config["DB_SESSION"]
     cfg = current_app.config["DISCRIPPER_CFG"]
+    session = Session()
 
-    global _sync_running
-    with _sync_lock:
-        if _sync_running:
-            return jsonify({"status": "already_running"})
-        _sync_running = True
+    stale_cutoff = naive_utcnow() - timedelta(minutes=_STALE_SYNC_MINUTES)
+
+    # Atomic claim: flip running=TRUE only when not currently running (or lock is stale).
+    # Postgres row-level locking ensures only one worker wins if two hit this simultaneously.
+    result = session.execute(
+        update(SyncState)
+        .where(SyncState.id == 1)
+        .where(
+            (SyncState.running == False) |  # noqa: E712
+            (SyncState.started_at < stale_cutoff)
+        )
+        .values(
+            running=True,
+            started_at=naive_utcnow(),
+            progress_current=None,
+            progress_total=None,
+        )
+        .returning(SyncState.id)
+    )
+    session.commit()
+
+    if result.fetchone() is None:
+        return jsonify({"status": "already_running"}), 409
 
     thread = threading.Thread(target=_run_sync_in_background, args=(cfg,), daemon=True)
     thread.start()
-
     return jsonify({"status": "started"})
 
 
 @catalog_bp.route("/sync/status", methods=["GET"])
 def sync_status():
-    with _sync_lock:
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    state = session.get(SyncState, 1)
+
+    if state is None:
         return jsonify({
-            "running": _sync_running,
-            "last_result": _last_result,
-            "last_run_at": _last_run_at,
-            "progress": _sync_progress if _sync_running else None,
+            "running": False,
+            "last_result": None,
+            "last_run_at": None,
+            "progress": None,
         })
+
+    last_result = None
+    if state.finished_at is not None:
+        if state.last_error_message:
+            last_result = {"error": state.last_error_message}
+        else:
+            last_result = {
+                "synced": state.last_synced,
+                "inserted": state.last_inserted,
+                "updated": state.last_updated,
+                "errors": state.last_errors,
+                "duration_seconds": state.last_duration_seconds,
+            }
+
+    return jsonify({
+        "running": state.running,
+        "last_result": last_result,
+        "last_run_at": state.finished_at.isoformat() if state.finished_at else None,
+        "progress": {"current": state.progress_current, "total": state.progress_total}
+                    if state.running and state.progress_current is not None else None,
+    })

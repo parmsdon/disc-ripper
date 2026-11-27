@@ -398,3 +398,27 @@ class Setting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=False)
+
+
+class SyncState(Base):
+    """Singleton row (id=1) tracking My Movies sync progress and last result.
+
+    Stored in the DB so all gunicorn workers share the same state and it
+    survives restarts.  The running/started_at pair acts as a cross-process
+    mutex: trigger_sync() atomically flips running=TRUE only when it is FALSE
+    (or the timestamp is stale), preventing concurrent syncs.
+    """
+    __tablename__ = "sync_state"
+
+    id = Column(Integer, primary_key=True)          # always 1
+    running = Column(Boolean, nullable=False, default=False)
+    started_at = Column(DateTime, nullable=True)
+    progress_current = Column(Integer, nullable=True)
+    progress_total = Column(Integer, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    last_synced = Column(Integer, nullable=True)
+    last_inserted = Column(Integer, nullable=True)
+    last_updated = Column(Integer, nullable=True)
+    last_errors = Column(Integer, nullable=True)
+    last_duration_seconds = Column(Float, nullable=True)
+    last_error_message = Column(Text, nullable=True)

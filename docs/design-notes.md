@@ -83,7 +83,7 @@ leaves it NULL and the drive is eligible for both media types.
 - Compilations: `album_artist = "Various"`, per-track `artist` set
   individually.
 - DVDs: My Movies (SQL Server via ODBC) is the source of truth for the movie
-  catalog. `mymovies_sync` periodically pulls into the `catalog` table.
+  catalog. `mymovies_sync` pulls into the `catalog` table on demand (Sync Now).
   When a DVD is ripped, the user maps the `disc` to a `catalog` entry via the
   Data Editing tab. One catalog entry can map to multiple discs (re-rips,
   special editions).

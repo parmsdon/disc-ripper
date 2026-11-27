@@ -143,25 +143,19 @@ and otherwise falls back to the default port 1433. Do not rename this
 section without updating `connector.py` to match.
 
 Fill in `mymovies:` in `config/dev.yaml` (server/port/database/username/
-password, plus `sync_interval_hours`) — see `config/dev.yaml.example`.
-`server`/`port` are for documentation/diagnostics only; the live
-connection's actual host/port comes from the `[mymovies]` freetds.conf
-stanza above.
+password) — see `config/dev.yaml.example`. `server`/`port` are for
+documentation/diagnostics only; the live connection's actual host/port
+comes from the `[mymovies]` freetds.conf stanza above.
 
-Run a one-off sync to confirm connectivity:
+Sync runs only when triggered via the web UI (Sync Now button). Sync
+state is stored in the `sync_state` DB table so it survives restarts and
+is shared across all gunicorn workers.
+
+Run a one-off sync from the shell to confirm connectivity:
 
 ```bash
 export DISCRIPPER_ENV=dev
 python3 -m mymovies_sync.sync
-```
-
-Run the scheduler as a long-running background process (like
-`ripper_service.main` — under `tmux`/`screen` or a process supervisor,
-`Ctrl+C` to stop):
-
-```bash
-export DISCRIPPER_ENV=dev
-python3 -m mymovies_sync.scheduler
 ```
 
 ---
