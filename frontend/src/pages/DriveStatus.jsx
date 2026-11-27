@@ -228,17 +228,13 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
 
   // Button label and style
   let btnLabel, btnClass, btnDisabled;
-  if (isUnchanged && hasValue && disc.name_confirmed) {
-    btnLabel = "✓ Confirmed";
+  if (isUnchanged && disc.name_confirmed) {
+    btnLabel = "Confirm";
     btnClass = "confirm-btn confirmed";
     btnDisabled = true;
-  } else if (isUnchanged && hasValue && !disc.name_confirmed) {
-    btnLabel = saving ? "Saving…" : "Confirm";
-    btnClass = "confirm-btn prominent";
-    btnDisabled = saving || checking || !!conflict;
   } else {
-    btnLabel = saving ? "Saving…" : "Save";
-    btnClass = "confirm-btn";
+    btnLabel = saving ? "Saving…" : (isUnchanged ? "Confirm" : "Save");
+    btnClass = "confirm-btn prominent";
     btnDisabled = saving || checking || !!conflict || !hasValue;
   }
 
@@ -407,9 +403,6 @@ function DiscStatusZone({ disc }) {
         <span className="disc-id-label" title={disc.disc_fingerprint || undefined}>
           #{disc.id}{disc.volume_label ? ` · ${disc.volume_label}` : ""}
         </span>
-        {disc.temp_name && (
-          <span className="working-title-badge" title={disc.temp_name}>{disc.temp_name}</span>
-        )}
         {disc.status !== "queued" && (
           <span className={`method-pill ${methodClass}`} title={methodTooltip}>{methodLabel}</span>
         )}

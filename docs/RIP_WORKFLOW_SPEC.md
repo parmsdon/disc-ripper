@@ -88,12 +88,12 @@ Shown for every state except `queued` (method not yet determined).
 
 - Pre-filled with `disc.temp_name` if set, otherwise `disc.volume_label`.
 - Shown from insertion (queued) through to `done` — available until the disc is ejected.
-- **Confirm** button (prominent/blue): input text matches the saved `temp_name` and
-  `name_confirmed = false`. Saves `temp_name` and sets `name_confirmed = true`.
-- **Save** button: input text differs from saved `temp_name`. Saves edited text and
-  sets `name_confirmed = true`.
-- **✓ Confirmed** (green, disabled): `name_confirmed = true` and input matches saved
-  name. Editing the text re-enables the button as "Save".
+One button with three states (always labelled **Confirm** or **Save**):
+
+- Input text unchanged, `name_confirmed = false` → **Confirm**, active (blue).
+- Input text edited (differs from saved name) → **Save**, active (same blue as Confirm).
+- After Confirm or Save (`name_confirmed = true`, input unchanged) → **Confirm**,
+  disabled/greyed. Stays greyed until the text is edited again.
 
 ### Action buttons
 
