@@ -161,6 +161,27 @@ Manual only — no auto-eject after rip completion.
 
 Identification is a two-step process for ripped discs. Imported discs skip step 1.
 
+### Identification queue membership
+
+The queue contains every disc row where:
+- Status is **not** one of: `queued`, `ripping`, `building`, `cancelled`.
+- AND the disc is unmatched (`catalog_id IS NULL` for DVD, `album_title IS NULL` for
+  CD) or its name is not yet confirmed.
+
+**Failed discs (`error`, `protected`) are included.** A matched failed disc has no ISO,
+so library generation skips it, no encode jobs are created, and "never ripped" / missing
+title reports still count it as missing. When the disc is later re-ripped successfully it
+keeps its catalog match and proceeds to encode as normal.
+
+Failed discs show a red **"Failed"** pill in the queue so they stand out. Discs with no
+temp\_name fall back to `volume_label`, then `disc_<id>` for display.
+
+**Cancelled discs are excluded** (shown as "Not ripped"; re-inserting the disc starts a
+fresh rip with no existing catalog match).
+
+The **DVDs Unmatched** / **CDs Unidentified** counts on the Health tab equal the number
+of DVD / CD rows in the identification queue.
+
 ### Step 1 — Name confirmation (ripped discs only)
 
 The working title must be confirmed and locked before a disc can be matched to My Movies.

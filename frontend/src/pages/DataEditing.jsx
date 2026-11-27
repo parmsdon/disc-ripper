@@ -80,26 +80,24 @@ function QueueEntry({ disc, onIdentify, onRefresh }) {
 
   const nameBtnDisabled = nameSaving || !hasNameValue || (isUnchanged && disc.name_confirmed);
 
+  const isFailed = disc.status === "error" || disc.status === "protected";
+  const displayTitle = disc.temp_name || disc.volume_label || `disc_${disc.id}`;
+
   return (
     <div className="queue-entry">
       <span className={`queue-entry-type-badge ${disc.type}`}>
         {disc.type.toUpperCase()}
       </span>
       <div className="queue-entry-info">
-        <div className="queue-entry-title">
-          {disc.temp_name
-            ? disc.temp_name
-            : <em className="queue-entry-unnamed">Unnamed</em>
-          }
-        </div>
-        {disc.volume_label && !disc.temp_name && (
-          <div className="queue-entry-meta">{disc.volume_label}</div>
-        )}
+        <div className="queue-entry-title">{displayTitle}</div>
         {rippedAt && (
           <div className="queue-entry-date">Ripped: {rippedAt}</div>
         )}
       </div>
       <div className="queue-entry-badges">
+        {isFailed && (
+          <span className="status-pill failed" style={{ fontSize: "11px", padding: "1px 7px" }}>Failed</span>
+        )}
         <MbStatusBadge disc={disc} />
         {disc.rip_quality === "dirty" && (
           <span className="dirty-rip-badge">⚠ dirty</span>

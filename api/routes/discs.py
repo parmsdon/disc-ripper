@@ -87,13 +87,13 @@ def identification_queue():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
-    # Discs still ripping, hard-failed, or cancelled don't belong in the queue.
-    _in_progress = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building]
-    _hard_error = [DiscStatus.error, DiscStatus.cancelled]
+    # Only exclude discs still mid-rip or cancelled (not ripped at all).
+    # Failed/protected discs are included — they can be matched pre-emptively.
+    _excluded = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.cancelled]
     discs = session.scalars(
         select(Disc)
         .where(
-            Disc.status.notin_(_in_progress + _hard_error),
+            Disc.status.notin_(_excluded),
             or_(
                 Disc.name_confirmed == False,  # noqa: E712 — needs naming step
                 and_(Disc.type == DiscType.dvd, Disc.catalog_id.is_(None)),

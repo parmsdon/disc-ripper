@@ -14,7 +14,8 @@ from common.models import (
 
 health_bp = Blueprint("health", __name__)
 
-_AWAITING_ID = [DiscStatus.ripped, DiscStatus.identifying]
+# Statuses excluded from the identification queue — mirrors discs.py identification_queue().
+_QUEUE_EXCLUDED = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.cancelled]
 
 
 @health_bp.route("/", methods=["GET"])
@@ -83,14 +84,14 @@ def health():
                 Disc,
                 Disc.type == DiscType.dvd,
                 Disc.catalog_id.is_(None),
-                Disc.status.in_(_AWAITING_ID),
+                Disc.status.notin_(_QUEUE_EXCLUDED),
             ),
             "cds_identified": count(Disc, Disc.type == DiscType.cd, Disc.album_title.isnot(None)),
             "cds_unidentified": count(
                 Disc,
                 Disc.type == DiscType.cd,
                 Disc.album_title.is_(None),
-                Disc.status.in_(_AWAITING_ID),
+                Disc.status.notin_(_QUEUE_EXCLUDED),
             ),
             "cd_tracks_titled": count(CDTrack, CDTrack.title.isnot(None)),
             "cd_tracks_untitled": count(CDTrack, CDTrack.title.is_(None)),
