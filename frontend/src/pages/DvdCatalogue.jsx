@@ -63,6 +63,19 @@ export default function DvdCatalogue() {
   }, [syncStatus?.running, fetchRows, ripStatus, idStatus, mmStatus, dirty, search]);
 
   const [deleteDiscId, setDeleteDiscId] = useState(null);
+  const [retryRipLoadingId, setRetryRipLoadingId] = useState(null);
+
+  async function handleRetryRip(discId) {
+    setRetryRipLoadingId(discId);
+    try {
+      await api.retryRip(discId);
+      fetchRows(ripStatus, idStatus, mmStatus, dirty, search, sort);
+    } catch (e) {
+      console.error("Retry rip failed:", e);
+    } finally {
+      setRetryRipLoadingId(null);
+    }
+  }
 
   async function handleSyncNow() {
     setTriggering(true);
@@ -290,6 +303,20 @@ export default function DvdCatalogue() {
                       : <span className="catalogue-dim">—</span>}
                   </td>
                   <td>
+                    {row.disc_id && (
+                      row.disc_status === "error" ||
+                      row.disc_status === "protected" ||
+                      row.disc_rip_quality === "dirty"
+                    ) && (
+                      <button
+                        className="catalogue-reidentify-btn"
+                        onClick={() => handleRetryRip(row.disc_id)}
+                        disabled={retryRipLoadingId === row.disc_id}
+                        title="Retry the rip — re-insert the disc to trigger automatically, or click to queue now"
+                      >
+                        {retryRipLoadingId === row.disc_id ? "…" : "Retry Rip"}
+                      </button>
+                    )}
                     {row.disc_id && (
                       <button
                         className="catalogue-delete-btn"
