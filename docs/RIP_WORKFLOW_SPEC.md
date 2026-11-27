@@ -255,29 +255,46 @@ is skipped and the rip proceeds — an inconclusive check never blocks a rip.
 Read-only statistics tab showing per-drive rip quality and cross-drive retry analysis.
 An env selector (Prod / Dev, default Prod) filters the data by `drives.env`.
 
+### Per-job outcome columns on `rip_jobs`
+
+The Drive Health tab is based on first-class columns added in migration 0036:
+
+| Column | Values | Populated by |
+|---|---|---|
+| `outcome` | `clean / dirty / failed / cancelled` | Ripper service at job completion |
+| `dvdbackup_outcome` | `clean / dirty / timed_out / failed / not_run / unknown` | Ripper service at job completion |
+| `makemkv_outcome` | `clean / failed / not_run / unknown` | Ripper service at job completion |
+| `dvdbackup_seconds` | float, nullable | Time from job start to MakeMKV fallback (or job end), null if dvdbackup not run |
+| `makemkv_seconds` | float, nullable | Time from MakeMKV start to job end, null if MakeMKV not run |
+| `iso_size_bytes` | bigint, nullable | `os.path.getsize(iso_path)` on job completion, null for failed or CD jobs |
+
+**`outcome`** is the job-level result, independent of `disc.rip_quality` (the disc's
+current best result). A disc that failed on drive A and later ripped clean on drive B
+shows `outcome = failed` on the first job and `outcome = clean` on the second.
+
+**Backfill**: run `python3 scripts/backfill_rip_job_outcomes.py` once per environment
+to populate historical jobs as far as the `rip_log_events` record allows.  Jobs that
+cannot be determined get `outcome = unknown` and are excluded from count totals (but
+still increment `total_attempts`).
+
 ### Per-drive statistics
 
 Each drive card shows:
 
 | Metric | Source | Notes |
 |---|---|---|
-| Total attempts | `rip_jobs` WHERE `status != 'cancelled'` | Cancelled jobs excluded everywhere |
-| Clean | `rip_jobs.status = done` AND `disc.rip_quality = clean` | |
-| Dirty | `rip_jobs.status = done` AND `disc.rip_quality = dirty` | |
-| Failed | `rip_jobs.status = error` | Includes protected |
-| Timed out (†) | `rip_log_events` WHERE `event_type = dvdbackup_failed` AND `detail LIKE 'Timed out%'` | Heuristic: if MakeMKV rescued the disc afterwards it still counts in Clean |
+| Total attempts | `rip_jobs WHERE outcome != 'cancelled'` | Cancelled excluded everywhere |
+| Clean | `rip_jobs.outcome = clean` | |
+| Dirty | `rip_jobs.outcome = dirty` | |
+| Failed | `rip_jobs.outcome = failed` | |
+| Timed out | `rip_jobs.dvdbackup_outcome = timed_out` | First-class field; not double-counted against Clean |
 | Success rate | `(clean + dirty) / total_attempts` | |
-| Avg clean rip time | `AVG(completed_at − started_at)` for clean done jobs | From `rip_jobs` timestamps |
-| Avg read speed (‡) | **Not available** — ISO size not in DB | |
-| Last 10 outcomes | Most-recent 10 terminal jobs (clean/dirty/failed) | Colour-coded strip, newest first |
-| Failed here, OK elsewhere | Distinct discs with an error job on this drive AND a later done job on a different drive | Strongest signal of a hardware problem |
-
-**† Timed out**: a first-class `timed_out` outcome does not exist in `rip_jobs`.
-The counter is a text heuristic only and may over-count if MakeMKV rescued the disc.
-
-**‡ Avg read speed**: ISO file size is not stored in the database (`disc.raw_path`
-is a directory path, not a file). To enable: add `iso_size_bytes` to the `discs`
-table and populate it when the ISO build completes in `_run_job`.
+| Avg dvdbackup time | `AVG(dvdbackup_seconds)` WHERE `outcome = clean AND dvdbackup_outcome = clean` | |
+| Avg MakeMKV time | `AVG(makemkv_seconds)` WHERE `outcome = clean AND makemkv_outcome = clean` | |
+| dvdbackup read speed | `AVG(iso_size_bytes / 1 MiB / dvdbackup_seconds)` for clean dvdbackup jobs | Null until `iso_size_bytes` is populated |
+| MakeMKV read speed | `AVG(iso_size_bytes / 1 MiB / makemkv_seconds)` for clean MakeMKV jobs | Null until `iso_size_bytes` is populated |
+| Last 10 outcomes | Most-recent 10 jobs with `outcome IN (clean, dirty, failed)` | Colour-coded strip, newest first |
+| Failed here, OK elsewhere | Discs with `outcome IN (dirty, failed)` on this drive AND a later `outcome = clean` job on another drive | Strongest signal of a hardware problem |
 
 ### Highlighting
 
@@ -290,9 +307,9 @@ No highlighting when there is only one drive (no comparison is possible).
 
 ### Cross-drive retries
 
-A table of discs that failed on one drive and were later ripped clean on a
-different drive. One row per disc (most recent failure shown). Columns: disc
-title, failed drive, failure date, success drive, success date.
+A table of discs with `outcome IN (dirty, failed)` on one drive that later had
+`outcome = clean` on a different drive. One row per disc (most recent failure shown).
+Columns: disc title, failed drive, failure date, success drive, success date.
 
 The per-drive "Failed here, OK elsewhere" count tallies the same set of discs
 grouped by the failing drive.

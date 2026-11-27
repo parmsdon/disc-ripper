@@ -75,6 +75,7 @@ def _rollback_one_job(session, rip_job: RipJob, cfg: dict) -> None:
         disc.status = DiscStatus.queued
     else:
         rip_job.status = JobStatus.cancelled
+        rip_job.outcome = "cancelled"
         rip_job.error_message = "Disc ejected while ripping; re-insert to retry"
         if disc is not None:
             has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path

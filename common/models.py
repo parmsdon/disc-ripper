@@ -16,6 +16,7 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     Integer,
     String,
@@ -339,6 +340,17 @@ class RipJob(Base):
     # Live progress, parsed from dvdbackup/mkisofs stdout while running.
     progress_percent = Column(Integer, nullable=True)
     progress_stage = Column(String, nullable=True)     # e.g. "Copying Title, part 1/4"
+
+    # Per-job outcome fields — populated at job completion.
+    # outcome: clean / dirty / failed / cancelled
+    # dvdbackup_outcome: clean / dirty / timed_out / failed / not_run / unknown
+    # makemkv_outcome: clean / failed / not_run / unknown
+    outcome           = Column(String, nullable=True)
+    dvdbackup_outcome = Column(String, nullable=True)
+    makemkv_outcome   = Column(String, nullable=True)
+    dvdbackup_seconds = Column(Float,  nullable=True)
+    makemkv_seconds   = Column(Float,  nullable=True)
+    iso_size_bytes    = Column(BigInteger, nullable=True)
 
     disc = relationship("Disc", back_populates="rip_jobs")
     drive = relationship("Drive", back_populates="rip_jobs")

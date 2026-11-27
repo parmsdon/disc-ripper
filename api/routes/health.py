@@ -213,6 +213,9 @@ def drive_health():
     Per-drive rip statistics and cross-drive retry analysis.
     ?env=prod|dev  defaults to prod.
     Cancelled jobs are excluded from all counts and rates.
+    All outcome counts are sourced from rip_jobs.outcome (populated since
+    migration 0036); pre-existing jobs without outcome are excluded from
+    per-job stats but still count in total_attempts.
     """
     Session = current_app.config["DB_SESSION"]
     session = Session()
@@ -227,53 +230,55 @@ def drive_health():
             d.id               AS drive_id,
             d.label,
             d.device_path,
-            COUNT(rj.id) FILTER (WHERE rj.status != 'cancelled')::int AS total_attempts,
-            COUNT(rj.id) FILTER (WHERE rj.status = 'done'
-                AND di.rip_quality = 'clean')::int                     AS clean_count,
-            COUNT(rj.id) FILTER (WHERE rj.status = 'done'
-                AND di.rip_quality = 'dirty')::int                     AS dirty_count,
-            COUNT(rj.id) FILTER (WHERE rj.status = 'error')::int       AS failed_count,
-            AVG(EXTRACT(EPOCH FROM (rj.completed_at - rj.started_at)))
-                FILTER (WHERE rj.status = 'done' AND di.rip_quality = 'clean'
-                    AND rj.started_at IS NOT NULL AND rj.completed_at IS NOT NULL)
-                AS avg_clean_duration_secs
+            COUNT(rj.id) FILTER (WHERE rj.outcome != 'cancelled'
+                                    OR rj.outcome IS NULL)::int           AS total_attempts,
+            COUNT(rj.id) FILTER (WHERE rj.outcome = 'clean')::int         AS clean_count,
+            COUNT(rj.id) FILTER (WHERE rj.outcome = 'dirty')::int         AS dirty_count,
+            COUNT(rj.id) FILTER (WHERE rj.outcome = 'failed')::int        AS failed_count,
+            COUNT(rj.id) FILTER (WHERE rj.dvdbackup_outcome = 'timed_out')::int
+                                                                           AS timed_out_count,
+            AVG(rj.dvdbackup_seconds)
+                FILTER (WHERE rj.outcome = 'clean'
+                    AND rj.dvdbackup_outcome = 'clean'
+                    AND rj.dvdbackup_seconds IS NOT NULL)
+                AS avg_dvdbackup_secs,
+            AVG(rj.makemkv_seconds)
+                FILTER (WHERE rj.outcome = 'clean'
+                    AND rj.makemkv_outcome = 'clean'
+                    AND rj.makemkv_seconds IS NOT NULL)
+                AS avg_makemkv_secs,
+            AVG(rj.iso_size_bytes::float / 1048576.0 / rj.dvdbackup_seconds)
+                FILTER (WHERE rj.outcome = 'clean'
+                    AND rj.dvdbackup_outcome = 'clean'
+                    AND rj.dvdbackup_seconds > 0
+                    AND rj.iso_size_bytes IS NOT NULL)
+                AS avg_dvdbackup_speed_mbps,
+            AVG(rj.iso_size_bytes::float / 1048576.0 / rj.makemkv_seconds)
+                FILTER (WHERE rj.outcome = 'clean'
+                    AND rj.makemkv_outcome = 'clean'
+                    AND rj.makemkv_seconds > 0
+                    AND rj.iso_size_bytes IS NOT NULL)
+                AS avg_makemkv_speed_mbps
         FROM drives d
         LEFT JOIN rip_jobs rj ON rj.drive_id = d.id
-        LEFT JOIN discs    di ON di.id        = rj.disc_id
         WHERE d.env = :env AND d.active = TRUE
         GROUP BY d.id, d.label, d.device_path
         ORDER BY d.label
     """), {"env": env}).mappings().all()
-
-    # ── Timed-out count per drive (text heuristic on log events) ──────────────
-    # Note: a timed-out dvdbackup followed by a successful MakeMKV fallback
-    # increments this counter but the job outcome is still 'clean'.
-    timeout_rows = session.execute(text("""
-        SELECT drive_label, COUNT(*)::int AS timeout_count
-        FROM rip_log_events
-        WHERE event_type = 'dvdbackup_failed' AND detail LIKE 'Timed out%'
-        GROUP BY drive_label
-    """)).mappings().all()
-    timeout_by_label = {r["drive_label"]: r["timeout_count"] for r in timeout_rows}
 
     # ── Last 10 terminal outcomes per drive (most recent first) ───────────────
     last10_rows = session.execute(text("""
         WITH ranked AS (
             SELECT
                 rj.drive_id,
-                CASE
-                    WHEN rj.status = 'done' AND di.rip_quality = 'clean' THEN 'clean'
-                    WHEN rj.status = 'done' AND di.rip_quality = 'dirty' THEN 'dirty'
-                    WHEN rj.status = 'error'                              THEN 'failed'
-                    ELSE 'unknown'
-                END AS outcome,
+                COALESCE(rj.outcome, 'unknown') AS outcome,
                 ROW_NUMBER() OVER (
                     PARTITION BY rj.drive_id
                     ORDER BY COALESCE(rj.completed_at, rj.created_at) DESC
                 ) AS rn
             FROM rip_jobs rj
-            JOIN discs di ON di.id = rj.disc_id
-            WHERE rj.status IN ('done', 'error') AND rj.drive_id IS NOT NULL
+            WHERE rj.outcome IN ('clean', 'dirty', 'failed')
+              AND rj.drive_id IS NOT NULL
         )
         SELECT drive_id, outcome FROM ranked WHERE rn <= 10 ORDER BY drive_id, rn
     """)).mappings().all()
@@ -281,8 +286,8 @@ def drive_health():
     for r in last10_rows:
         last10_by_drive.setdefault(r["drive_id"], []).append(r["outcome"])
 
-    # ── Failed-here-OK-elsewhere: discs that errored on THIS drive then
-    #    succeeded on a different drive ─────────────────────────────────────────
+    # ── Failed-here-OK-elsewhere: discs with outcome dirty/failed on THIS drive
+    #    then outcome clean on a different drive ──────────────────────────────
     rescue_rows = session.execute(text("""
         SELECT fail_job.drive_id AS drive_id,
                COUNT(DISTINCT fail_job.disc_id)::int AS rescued_count
@@ -290,11 +295,11 @@ def drive_health():
         JOIN rip_jobs success_job
             ON  success_job.disc_id  = fail_job.disc_id
             AND success_job.drive_id != fail_job.drive_id
-            AND success_job.status   = 'done'
+            AND success_job.outcome  = 'clean'
             AND COALESCE(success_job.completed_at, success_job.created_at)
                 > COALESCE(fail_job.completed_at,  fail_job.created_at)
         JOIN drives fail_drive ON fail_drive.id = fail_job.drive_id
-        WHERE fail_job.status = 'error' AND fail_drive.env = :env
+        WHERE fail_job.outcome IN ('dirty', 'failed') AND fail_drive.env = :env
         GROUP BY fail_job.drive_id
     """), {"env": env}).mappings().all()
     rescued_by_drive = {r["drive_id"]: r["rescued_count"] for r in rescue_rows}
@@ -314,18 +319,21 @@ def drive_health():
         JOIN rip_jobs success_job
             ON  success_job.disc_id  = fail_job.disc_id
             AND success_job.drive_id != fail_job.drive_id
-            AND success_job.status   = 'done'
+            AND success_job.outcome  = 'clean'
             AND COALESCE(success_job.completed_at, success_job.created_at)
                 > COALESCE(fail_job.completed_at,  fail_job.created_at)
         JOIN drives fail_drive    ON fail_drive.id    = fail_job.drive_id
         JOIN drives success_drive ON success_drive.id = success_job.drive_id
         JOIN discs di             ON di.id            = fail_job.disc_id
-        WHERE fail_job.status = 'error'
+        WHERE fail_job.outcome IN ('dirty', 'failed')
           AND (fail_drive.env = :env OR success_drive.env = :env)
         ORDER BY fail_job.disc_id, fail_job.completed_at DESC NULLS LAST
     """), {"env": env}).mappings().all()
 
-    # ── Build drive objects with derived fields ────────────────────────────────
+    # ── Build drive objects ───────────────────────────────────────────────────
+    def _float(v):
+        return float(v) if v is not None else None
+
     drives = []
     for r in drive_rows:
         total  = r["total_attempts"] or 0
@@ -334,8 +342,6 @@ def drive_health():
         failed = r["failed_count"] or 0
         good   = clean + dirty
         success_rate = round(good / total, 3) if total > 0 else None
-        avg_secs = float(r["avg_clean_duration_secs"]) \
-            if r["avg_clean_duration_secs"] is not None else None
 
         drives.append({
             "drive_id": r["drive_id"],
@@ -345,17 +351,19 @@ def drive_health():
             "clean": clean,
             "dirty": dirty,
             "failed": failed,
-            "timed_out": timeout_by_label.get(r["label"], 0),
+            "timed_out": r["timed_out_count"] or 0,
             "failed_here_ok_elsewhere": rescued_by_drive.get(r["drive_id"], 0),
             "success_rate": success_rate,
-            "avg_clean_duration_seconds": avg_secs,
-            "avg_read_speed_mbps": None,
+            "avg_clean_dvdbackup_seconds": _float(r["avg_dvdbackup_secs"]),
+            "avg_clean_makemkv_seconds": _float(r["avg_makemkv_secs"]),
+            "avg_read_speed_dvdbackup_mbps": _float(r["avg_dvdbackup_speed_mbps"]),
+            "avg_read_speed_makemkv_mbps": _float(r["avg_makemkv_speed_mbps"]),
             "last_10_outcomes": last10_by_drive.get(r["drive_id"], []),
             "highlight": False,
         })
 
-    # Highlight drives whose success rate is ≥15 percentage points below fleet
-    # average. Requires ≥5 attempts and at least 2 comparable drives.
+    # Highlight drives whose success rate is ≥15pp below fleet average.
+    # Requires ≥5 attempts and at least 2 comparable drives.
     eligible = [d for d in drives if d["total_attempts"] >= 5]
     if len(eligible) >= 2:
         fleet_total = sum(d["total_attempts"] for d in eligible)
@@ -383,14 +391,4 @@ def drive_health():
         "env": env,
         "drives": drives,
         "cross_drive_retries": cross_drive_retries,
-        "data_gaps": [
-            "avg_read_speed_mbps: ISO file size is not stored in the database "
-            "(disc.raw_path is a directory path, not a file with a byte count). "
-            "To enable: add iso_size_bytes to the discs table and populate it "
-            "when the ISO build completes in _run_job.",
-            "timed_out: detected via rip_log_events.detail text match "
-            "('Timed out%' on dvdbackup_failed events). A timed-out dvdbackup "
-            "followed by a successful MakeMKV fallback counts as clean in job "
-            "totals but still increments the timed_out counter here.",
-        ],
     })

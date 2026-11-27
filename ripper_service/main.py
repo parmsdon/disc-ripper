@@ -103,6 +103,7 @@ def _cancel_queued_jobs_for_disc(session, disc) -> None:
     ).all()
     for job in queued_jobs:
         job.status = JobStatus.cancelled
+        job.outcome = "cancelled"
         job.error_message = "Disc ejected before rip could start"
         logger.info(
             "Cancelled queued job %s for ejected disc #%s (%s)",

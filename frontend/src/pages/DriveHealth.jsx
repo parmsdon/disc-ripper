@@ -15,6 +15,11 @@ function fmtPct(rate) {
   return `${Math.round(rate * 100)}%`;
 }
 
+function fmtSpeed(mbps) {
+  if (mbps == null) return "—";
+  return `${mbps.toFixed(1)} MB/s`;
+}
+
 function fmtDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -69,6 +74,9 @@ function DriveCard({ drive }) {
     : sr >= 0.7 ? "warn"
     : "error";
 
+  const hasDbSpeed = drive.avg_read_speed_dvdbackup_mbps != null
+                  || drive.avg_read_speed_makemkv_mbps != null;
+
   return (
     <div className={`drive-health-card${drive.highlight ? " drive-health-highlight" : ""}`}>
       <div className="drive-health-card-header">
@@ -83,11 +91,24 @@ function DriveCard({ drive }) {
         <Tile value={drive.dirty}          label="Dirty"    accent={drive.dirty > 0 ? "warn" : null} />
         <Tile value={drive.failed}         label="Failed"   accent={drive.failed > 0 ? "error" : null} />
         {drive.timed_out > 0 && (
-          <Tile value={drive.timed_out} label="T/O†" accent="warn" />
+          <Tile value={drive.timed_out} label="Timed out" accent="warn" />
         )}
         <Tile value={fmtPct(sr)} label="Success rate" accent={srAccent} />
-        <Tile value={fmtDuration(drive.avg_clean_duration_seconds)} label="Avg clean time" />
-        <Tile value="—" label="Avg read speed‡" />
+        {drive.avg_clean_dvdbackup_seconds != null && (
+          <Tile value={fmtDuration(drive.avg_clean_dvdbackup_seconds)} label="Avg dvdbackup time" />
+        )}
+        {drive.avg_clean_makemkv_seconds != null && (
+          <Tile value={fmtDuration(drive.avg_clean_makemkv_seconds)} label="Avg MakeMKV time" />
+        )}
+        {drive.avg_read_speed_dvdbackup_mbps != null && (
+          <Tile value={fmtSpeed(drive.avg_read_speed_dvdbackup_mbps)} label="dvdbackup speed" />
+        )}
+        {drive.avg_read_speed_makemkv_mbps != null && (
+          <Tile value={fmtSpeed(drive.avg_read_speed_makemkv_mbps)} label="MakeMKV speed" />
+        )}
+        {!hasDbSpeed && (
+          <Tile value="—" label="Read speed" />
+        )}
       </div>
 
       <div className="drive-health-strip-row">
@@ -185,18 +206,24 @@ export default function DriveHealth() {
 
           <h3 className="drive-health-section-title">Cross-Drive Retries</h3>
           <p className="drive-health-section-desc">
-            Discs that failed on one drive and were later ripped clean on another.
+            Discs that had a dirty or failed outcome on one drive, then ripped clean on another.
             A high count on the same failing drive is the strongest indicator of a hardware problem.
           </p>
           <RetryTable retries={data.cross_drive_retries} />
 
           <div className="drive-health-notes">
-            <p>† Timed-out count is a heuristic: detected via <code>dvdbackup_failed</code> log events with
-              "Timed out" in the detail text. If MakeMKV rescued the disc afterwards it still appears
-              in Clean totals.</p>
-            <p>‡ Average read speed (MB/s) cannot be computed: ISO file size is not stored in
-              the database. To enable this metric, add <code>iso_size_bytes</code> to the <code>discs</code> table
-              and populate it when the ISO build completes.</p>
+            <p>
+              Outcome counts and success rate are sourced from <code>rip_jobs.outcome</code> (set at job
+              completion). Jobs ripped before migration 0036 show <code>outcome = unknown</code> and are
+              excluded from counts but still increment total attempts. Run{" "}
+              <code>python3 scripts/backfill_rip_job_outcomes.py</code> to backfill historical jobs.
+            </p>
+            <p>
+              Read speed is computed from <code>iso_size_bytes</code> per job and shown separately for
+              dvdbackup and MakeMKV. Jobs without <code>iso_size_bytes</code> (pre-migration or failed)
+              are excluded from the average. Timed-out count is from{" "}
+              <code>dvdbackup_outcome = timed_out</code>; it is not double-counted against Clean totals.
+            </p>
           </div>
         </>
       )}

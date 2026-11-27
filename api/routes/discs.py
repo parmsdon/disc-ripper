@@ -615,6 +615,7 @@ def cancel_rip(disc_id):
     )
     if active_job is not None:
         active_job.status = JobStatus.cancelled
+        active_job.outcome = "cancelled"
         active_job.error_message = "Cancelled by user"
 
     if disc.drive_id is not None:
