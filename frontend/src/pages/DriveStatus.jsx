@@ -215,6 +215,8 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
   const savedName = disc.temp_name || "";
   const isUnchanged = value.trim() === savedName.trim();
   const hasValue = !!value.trim();
+  const isCompleted = ["ripped", "encoding", "done"].includes(disc.status);
+  const isLocked = isCompleted && disc.name_confirmed && isUnchanged;
 
   async function handleSave() {
     setSaving(true);
@@ -226,9 +228,21 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
     }
   }
 
+  function handleChange(newValue) {
+    onChange(newValue);
+    // Unconfirm on server when user edits away from the saved name.
+    if (disc.name_confirmed && newValue.trim() !== savedName.trim()) {
+      api.unconfirmName(disc.id).catch(() => {});
+    }
+  }
+
   // Button label and style
   let btnLabel, btnClass, btnDisabled;
-  if (isUnchanged && disc.name_confirmed) {
+  if (isLocked) {
+    btnLabel = "Confirm";
+    btnClass = "confirm-btn confirmed";
+    btnDisabled = true;
+  } else if (isUnchanged && disc.name_confirmed) {
     btnLabel = "Confirm";
     btnClass = "confirm-btn confirmed";
     btnDisabled = true;
@@ -244,7 +258,8 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
         type="text"
         placeholder="Working title…"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        readOnly={isLocked}
+        onChange={(e) => handleChange(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && !btnDisabled && handleSave()}
       />
       {disc.type === "cd" && mbLookupStatus === "pending" && (
@@ -373,7 +388,7 @@ function DiscStatusZone({ disc }) {
 
   // Method pill — not shown while queued (method not yet determined)
   let methodClass, methodLabel, methodTooltip;
-  const makemkvActive = disc.rip_method === "makemkv" || (inProgress && !!disc.rip_reason);
+  const makemkvActive = disc.rip_method === "makemkv" || !!disc.rip_reason;
   if (makemkvActive) {
     if (disc.rip_reason === "protected") {
       methodClass = "makemkv-protected";
@@ -398,10 +413,13 @@ function DiscStatusZone({ disc }) {
       <div className="disc-status-row">
         <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
         {disc.type && (
-          <span className={`queue-entry-type-badge ${disc.type}`}>{disc.type.toUpperCase()}</span>
+          <span className={`queue-entry-type-badge media-${statusClass}`}>{disc.type.toUpperCase()}</span>
         )}
-        <span className="disc-id-label" title={disc.disc_fingerprint || undefined}>
-          #{disc.id}{disc.volume_label ? ` · ${disc.volume_label}` : ""}
+        <span
+          className="disc-id-label"
+          title={[disc.volume_label, disc.disc_fingerprint].filter(Boolean).join(" · ") || undefined}
+        >
+          #{disc.id}{disc.temp_name ? ` · ${disc.temp_name}` : disc.volume_label ? ` · ${disc.volume_label}` : ""}
         </span>
         {disc.status !== "queued" && (
           <span className={`method-pill ${methodClass}`} title={methodTooltip}>{methodLabel}</span>

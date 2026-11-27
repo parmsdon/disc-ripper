@@ -7,6 +7,7 @@ metadata editing endpoints will be expanded in later phases.
 
 import logging
 import os
+import re
 import threading
 import shutil
 from pathlib import Path
@@ -21,6 +22,35 @@ from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, E
 discs_bp = Blueprint("discs", __name__)
 
 _ACTIVE_JOB_STATUSES = (JobStatus.queued, JobStatus.running)
+_LOCK_STATUSES = {DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done}
+
+def _sanitize_iso_name(name: str) -> str:
+    return re.sub(r'[^A-Za-z0-9]', '_', name).strip('_').upper() or "unnamed"
+
+
+def _rename_iso_at_lock(disc, cfg: dict) -> None:
+    """Rename the single ISO in raw/<disc_id>/ to the sanitised temp_name."""
+    if disc.type != DiscType.dvd or not disc.raw_path or not disc.temp_name:
+        return
+    datastore_root = cfg.get("storage", {}).get("datastore_root", "")
+    if not datastore_root:
+        return
+    raw_dir = Path(datastore_root) / disc.raw_path
+    if not raw_dir.is_dir():
+        return
+    isos = list(raw_dir.glob("*.iso"))
+    if len(isos) != 1:
+        log.warning("ISO rename skipped for disc #%s: found %d ISO(s) in %s", disc.id, len(isos), raw_dir)
+        return
+    new_name = _sanitize_iso_name(disc.temp_name)
+    new_path = raw_dir / f"{new_name}.iso"
+    if isos[0] == new_path:
+        return
+    try:
+        isos[0].rename(new_path)
+        log.info("Renamed ISO for disc #%s: %s → %s", disc.id, isos[0].name, new_path.name)
+    except OSError as exc:
+        log.warning("ISO rename failed for disc #%s: %s", disc.id, exc)
 
 
 def _active_rip_job(disc: Disc):
@@ -394,7 +424,25 @@ def update_temp_name(disc_id):
     if disc.temp_name and disc.status == DiscStatus.identifying:
         disc.status = DiscStatus.ripped
     session.commit()
+
+    # Rename ISO at lock time (name confirmed + rip completed).
+    if disc.name_confirmed and disc.status in _LOCK_STATUSES:
+        cfg = current_app.config.get("DISCRIPPER_CFG") or {}
+        _rename_iso_at_lock(disc, cfg)
+
     return jsonify(_disc_to_dict(disc))
+
+
+@discs_bp.route("/<int:disc_id>/unconfirm", methods=["PATCH"])
+def unconfirm_name(disc_id):
+    Session = current_app.config["DB_SESSION"]
+    session = Session()
+    disc = session.get(Disc, disc_id)
+    if disc is None:
+        return jsonify({"error": "Disc not found"}), 404
+    disc.name_confirmed = False
+    session.commit()
+    return jsonify({"name_confirmed": False})
 
 
 @discs_bp.route("/<int:disc_id>/candidates", methods=["GET"])

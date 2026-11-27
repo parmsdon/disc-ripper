@@ -98,6 +98,7 @@ def list_drives():
                 "rip_method": current_disc_row.rip_method,
                 "rip_reason": current_disc_row.rip_reason,
                 "possible_duplicate_of_id": current_disc_row.possible_duplicate_of_id,
+                "name_confirmed": current_disc_row.name_confirmed if current_disc_row.name_confirmed is not None else False,
             }
 
         drive_dict = _drive_summary(drive)

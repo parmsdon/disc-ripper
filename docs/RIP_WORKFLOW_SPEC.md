@@ -53,29 +53,45 @@ When a re-rip fails (any path → `_fail_job`):
 
 ### Encode behaviour
 
-- Encode jobs are queued immediately on rip success (no gate on name confirmation
-  or My Movies match). Folder name is `{temp_name}_{disc_id}` or `disc_{disc_id}`
-  if no temp_name yet, resolved at encode-start time.
-- A better re-rip (clean replaces dirty, or any re-rip succeeds): prior encode
-  jobs are invalidated (output files deleted), fresh encode jobs are queued.
+Encode jobs are created at rip completion as now, but the encoder must not start a job
+whose disc is not locked (`name_confirmed = false`). Imported discs are always
+`name_confirmed = true` and unaffected.
+
+At lock time (see Name lock below): the ISO in `dvd_store/raw/<disc_id>/` is renamed
+to `{sanitised_temp_name}.iso` and `disc.raw_path` is updated. Only then may the encoder
+start. Encode output folder names are fixed at encode-start time and never renamed.
+
+A better re-rip (clean replaces dirty, or any re-rip succeeds): prior encode jobs are
+invalidated (output files deleted), fresh encode jobs are queued.
 
 ---
 
 ## Drive card
 
+### Disc label
+
+The disc line shows **`#<id> · <temp_name>`**. The `volume_label` and `disc_fingerprint`
+appear in the tooltip on hover.
+
 ### Status pill
 
-| Disc state | Pill label | Pill style |
+| Disc state | Pill label | Colour |
 |---|---|---|
-| `status = queued` | Reading | amber |
-| `status = ripping` or `building` | Ripping | blue |
-| `status = error` or `protected` | Failed | red |
+| `status = queued` | Reading | light orange |
+| `status = ripping` or `building` | Ripping | light orange |
+| `status = error` or `protected` | Failed | light red |
 | `rip_quality = dirty` (ripped/encoding/done) | Dirty | amber |
-| clean ripped/encoding/done | Clean | teal |
+| clean ripped/encoding/done | Clean | light grey |
+
+The **media-type badge** (DVD / CD) uses the same colour as the status pill beside it.
 
 ### Method pill
 
 Shown for every state except `queued` (method not yet determined).
+dvdbackup is **blue**; both MakeMKV variants are **green**.
+
+`rip_method` is set to `"makemkv"` by `_set_rip_reason` as soon as a MakeMKV attempt
+begins, so it persists on the disc even if MakeMKV fails. The pill condition is therefore:
 
 | Condition | Pill label | Tooltip |
 |---|---|---|
@@ -86,14 +102,23 @@ Shown for every state except `queued` (method not yet determined).
 
 ### Working-title input
 
-- Pre-filled with `disc.temp_name` if set, otherwise `disc.volume_label`.
-- Shown from insertion (queued) through to `done` — available until the disc is ejected.
-One button with three states (always labelled **Confirm** or **Save**):
+The input is pre-filled with `disc.temp_name` if set, otherwise `disc.volume_label`.
 
-- Input text unchanged, `name_confirmed = false` → **Confirm**, active (blue).
-- Input text edited (differs from saved name) → **Save**, active (same blue as Confirm).
-- After Confirm or Save (`name_confirmed = true`, input unchanged) → **Confirm**,
-  disabled/greyed. Stays greyed until the text is edited again.
+**States:**
+- Input text unchanged, `name_confirmed = false` → **Confirm** button, active (blue).
+- Input text edited (differs from saved name) → **Save** button, active (same blue).
+  Editing also immediately unconfirms on the server (`name_confirmed = false`).
+- After Confirm or Save (`name_confirmed = true`, input unchanged, rip not yet complete)
+  → **Confirm** disabled/greyed. Stays greyed until text is edited again.
+
+**Name lock** — when `name_confirmed = true` **AND** `status ∈ {ripped, encoding, done}`:
+- Input becomes read-only; button disabled.
+- At the moment of lock: the ISO is renamed to `{sanitised_temp_name}.iso`, and the
+  encoder is unblocked (see Encode behaviour above).
+- If the rip completes while the name is not confirmed (never confirmed, or an unsaved
+  edit is pending): the user gets one final Confirm/Save, after which it locks.
+
+Same lock behaviour in the Identification queue for discs ejected unconfirmed.
 
 ### Action buttons
 
@@ -112,20 +137,21 @@ Identification is a two-step process for ripped discs. Imported discs skip step 
 
 ### Step 1 — Name confirmation (ripped discs only)
 
-The working title must be confirmed before a disc can be matched to My Movies.
+The working title must be confirmed and locked before a disc can be matched to My Movies.
 
-- **On the drive card** while the disc is still inserted: Confirm or Save in the
-  working-title input.
+- **On the drive card** while the disc is still inserted: Confirm or Save triggers
+  the lock (if the rip is complete).
 - **In the Identification tab** if the disc was ejected before confirmation:
-  appears flagged "Name not confirmed"; the same input + Confirm/Save is available.
+  appears flagged "Name not confirmed"; the same input + Confirm/Save + lock behaviour
+  is available.
 
 Imported ISOs are pre-confirmed (`name_confirmed = true`) because their name is
 derived from the ISO filename and there is no drive card to confirm on.
 
 ### Step 2 — My Movies match
 
-After name confirmation (or for imported discs, immediately), the disc appears in
-the Identification tab with an **Identify** button that opens the DvdIdentifyPanel
+After name lock (or for imported discs, immediately), the disc appears in the
+Identification tab with an **Identify** button that opens the DvdIdentifyPanel
 to match it to a My Movies catalog entry.
 
 Discs already matched (`catalog_id IS NOT NULL`) do not appear in the queue.

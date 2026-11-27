@@ -46,6 +46,11 @@ function QueueEntry({ disc, onIdentify, onRefresh }) {
   const needsName = !disc.name_confirmed;
   const needsCatalog = (disc.type === "dvd" && !disc.catalog_id) ||
                        (disc.type === "cd"  && !disc.album_title);
+  const isCompleted = ["ripped", "encoding", "done"].includes(disc.status);
+  const savedName = disc.temp_name || "";
+  const isUnchanged = nameValue.trim() === savedName.trim();
+  const hasNameValue = !!nameValue.trim();
+  const isLocked = isCompleted && disc.name_confirmed && isUnchanged;
 
   async function handleConfirmName() {
     if (!nameValue.trim()) return;
@@ -60,15 +65,18 @@ function QueueEntry({ disc, onIdentify, onRefresh }) {
     }
   }
 
-  const savedName = disc.temp_name || "";
-  const isUnchanged = nameValue.trim() === savedName.trim();
-  const hasNameValue = !!nameValue.trim();
+  function handleNameChange(newValue) {
+    setNameValue(newValue);
+    if (disc.name_confirmed && newValue.trim() !== savedName.trim()) {
+      api.unconfirmName(disc.id).catch(() => {});
+    }
+  }
 
-  let nameBtnLabel;
-  if (nameSaving) nameBtnLabel = "Saving…";
-  else if (isUnchanged && hasNameValue && disc.name_confirmed) nameBtnLabel = "✓ Confirmed";
-  else if (isUnchanged && hasNameValue) nameBtnLabel = "Confirm";
-  else nameBtnLabel = "Save";
+  let nameBtnLabel, nameBtnClass;
+  if (nameSaving) { nameBtnLabel = "Saving…"; nameBtnClass = "confirm-btn prominent"; }
+  else if (isUnchanged && disc.name_confirmed) { nameBtnLabel = "Confirm"; nameBtnClass = "confirm-btn confirmed"; }
+  else if (isUnchanged) { nameBtnLabel = "Confirm"; nameBtnClass = "confirm-btn prominent"; }
+  else { nameBtnLabel = "Save"; nameBtnClass = "confirm-btn prominent"; }
 
   const nameBtnDisabled = nameSaving || !hasNameValue || (isUnchanged && disc.name_confirmed);
 
@@ -100,18 +108,19 @@ function QueueEntry({ disc, onIdentify, onRefresh }) {
           <span className="name-not-confirmed-badge">Name not confirmed</span>
         )}
       </div>
-      {needsName && (
+      {(needsName && !isLocked) && (
         <div className="queue-entry-name-row">
           <input
             type="text"
             className="queue-entry-name-input"
             placeholder="Working title…"
             value={nameValue}
-            onChange={(e) => setNameValue(e.target.value)}
+            readOnly={isLocked}
+            onChange={(e) => handleNameChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !nameBtnDisabled && handleConfirmName()}
           />
           <button
-            className={`confirm-btn${!nameBtnDisabled && !disc.name_confirmed ? " prominent" : ""}`}
+            className={nameBtnClass}
             onClick={handleConfirmName}
             disabled={nameBtnDisabled}
           >
@@ -119,7 +128,7 @@ function QueueEntry({ disc, onIdentify, onRefresh }) {
           </button>
         </div>
       )}
-      {(!needsName || disc.name_confirmed) && needsCatalog && (
+      {disc.name_confirmed && needsCatalog && (
         <button onClick={() => onIdentify(disc)}>Identify</button>
       )}
     </div>

@@ -26,6 +26,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ temp_name: name }),
     }),
+  unconfirmName: (discId) =>
+    request(`/discs/${discId}/unconfirm`, { method: "PATCH" }),
   getMaxRippers: () => request("/settings/max-rippers"),
   setMaxRippers: (n) =>
     request("/settings/max-rippers", {

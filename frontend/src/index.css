@@ -385,8 +385,8 @@ body {
 .status-pill.running,
 .status-pill.ripping,
 .status-pill.building {
-  background: rgba(79, 140, 255, 0.15);
-  color: var(--accent);
+  background: rgba(220, 140, 60, 0.15);
+  color: #d4813a;
 }
 
 .status-pill.done,
@@ -407,11 +407,15 @@ body {
 }
 
 .status-pill.imperfect,
-.status-pill.queued,
 .status-pill.identifying,
 .status-pill.warn {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
+}
+
+.status-pill.queued {
+  background: rgba(220, 140, 60, 0.15);
+  color: #d4813a;
 }
 
 .status-pill.protected {
@@ -426,18 +430,18 @@ body {
 
 /* Spec-aligned terminal state pills */
 .status-pill.clean {
-  background: rgba(56, 178, 172, 0.15);
-  color: #4db6ac;
+  background: rgba(154, 163, 178, 0.18);
+  color: var(--text-dim);
 }
 
 .status-pill.dirty {
-  background: rgba(217, 161, 60, 0.15);
+  background: rgba(217, 161, 60, 0.18);
   color: var(--warn);
 }
 
 [data-theme="light"] .status-pill.clean {
-  background: rgba(22, 101, 52, 0.12);
-  color: #15803d;
+  background: rgba(100, 100, 100, 0.1);
+  color: #6b7280;
 }
 
 [data-theme="light"] .status-pill.dirty {
@@ -445,7 +449,14 @@ body {
   color: #b45309;
 }
 
-/* Method pill */
+[data-theme="light"] .status-pill.queued,
+[data-theme="light"] .status-pill.ripping,
+[data-theme="light"] .status-pill.building {
+  background: rgba(194, 90, 20, 0.12);
+  color: #c2560e;
+}
+
+/* Method pill — dvdbackup = blue, MakeMKV = green */
 .method-pill {
   display: inline-block;
   padding: 2px 8px;
@@ -454,33 +465,25 @@ body {
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
-  background: rgba(154, 163, 178, 0.12);
-  color: var(--text-dim);
-}
-
-.method-pill.makemkv-protected {
   background: rgba(79, 140, 255, 0.15);
   color: var(--accent);
 }
 
+.method-pill.makemkv-protected,
 .method-pill.makemkv-fallback {
-  background: rgba(217, 161, 60, 0.15);
-  color: var(--warn);
+  background: rgba(76, 175, 109, 0.15);
+  color: var(--good);
 }
 
 [data-theme="light"] .method-pill {
-  background: rgba(100, 100, 100, 0.08);
-  color: var(--text-dim);
-}
-
-[data-theme="light"] .method-pill.makemkv-protected {
   background: rgba(37, 99, 235, 0.12);
   color: #1d4ed8;
 }
 
+[data-theme="light"] .method-pill.makemkv-protected,
 [data-theme="light"] .method-pill.makemkv-fallback {
-  background: rgba(161, 98, 7, 0.12);
-  color: #b45309;
+  background: rgba(22, 101, 52, 0.12);
+  color: #15803d;
 }
 
 .region-cell {
@@ -1362,6 +1365,7 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
+/* Fixed colours for DataEditing queue (not driven by rip status) */
 .queue-entry-type-badge.dvd {
   background: rgba(79, 140, 255, 0.15);
   color: var(--accent);
@@ -1370,6 +1374,44 @@ button:disabled {
 .queue-entry-type-badge.cd {
   background: rgba(217, 161, 60, 0.15);
   color: var(--warn);
+}
+
+/* Drive-card type badge: inherits status pill colour via media-* class */
+.queue-entry-type-badge.media-queued,
+.queue-entry-type-badge.media-ripping {
+  background: rgba(220, 140, 60, 0.15);
+  color: #d4813a;
+}
+
+.queue-entry-type-badge.media-failed {
+  background: rgba(224, 92, 92, 0.15);
+  color: var(--error);
+}
+
+.queue-entry-type-badge.media-dirty {
+  background: rgba(217, 161, 60, 0.18);
+  color: var(--warn);
+}
+
+.queue-entry-type-badge.media-clean {
+  background: rgba(154, 163, 178, 0.18);
+  color: var(--text-dim);
+}
+
+[data-theme="light"] .queue-entry-type-badge.media-queued,
+[data-theme="light"] .queue-entry-type-badge.media-ripping {
+  background: rgba(194, 90, 20, 0.12);
+  color: #c2560e;
+}
+
+[data-theme="light"] .queue-entry-type-badge.media-dirty {
+  background: rgba(161, 98, 7, 0.12);
+  color: #b45309;
+}
+
+[data-theme="light"] .queue-entry-type-badge.media-clean {
+  background: rgba(100, 100, 100, 0.1);
+  color: #6b7280;
 }
 
 .queue-entry-info {

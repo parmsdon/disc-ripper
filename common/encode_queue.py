@@ -8,7 +8,7 @@ import logging
 from sqlalchemy import and_, select, exists, or_
 from sqlalchemy.orm import aliased
 
-from common.models import CDTrack, EncodeJob, EncodeProfile, JobStatus, naive_utcnow
+from common.models import CDTrack, Disc, EncodeJob, EncodeProfile, JobStatus, naive_utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,8 @@ def get_next_encode_jobs(
     stmt = (
         select(EncodeJob)
         .join(EncodeProfile, EncodeJob.profile_id == EncodeProfile.id)
-        .where(*filters)
+        .join(Disc, EncodeJob.disc_id == Disc.id)
+        .where(*filters, Disc.name_confirmed == True)  # noqa: E712
         .order_by(EncodeJob.created_at)
         .limit(max_jobs)
     )
