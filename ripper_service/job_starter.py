@@ -21,6 +21,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from common.config import get_store_path
+from common.disc_paths import rename_iso_at_lock
 from common.encode_invalidation import invalidate_encode_jobs_for_rerip
 from common.encode_queue import create_encode_jobs
 from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob, RipQuality, Setting, naive_utcnow
@@ -270,6 +271,9 @@ def _finish_success_makemkv(
             write_log_event(session_factory, "encodes_invalidated", drive_label=label,
                 disc_id=disc_id, working_title=disc.temp_name,
                 outcome=f"{n_inv} jobs invalidated")
+
+        if disc.name_confirmed and disc.type == DiscType.dvd:
+            rename_iso_at_lock(disc_id, disc.temp_name, disc.raw_path, datastore_root)
 
         try:
             n = create_encode_jobs(session, disc_id, "dvd")
@@ -619,6 +623,12 @@ def _finish_success(rip_job_id, label, disc_id, iso_dir, cfg, scratch_dir, sessi
             write_log_event(session_factory, "encodes_invalidated", drive_label=label,
                 disc_id=disc_id, working_title=disc.temp_name,
                 outcome=f"{n_inv} jobs invalidated")
+
+        # Case (b): name was confirmed during the rip; lock triggers now that
+        # status is ripped. Rename before encode jobs are created so the encoder
+        # finds the final filename immediately.
+        if disc.name_confirmed and disc.type == DiscType.dvd:
+            rename_iso_at_lock(disc_id, disc.temp_name, disc.raw_path, datastore_root)
 
         try:
             n = create_encode_jobs(session, disc_id, "dvd")

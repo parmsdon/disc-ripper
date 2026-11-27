@@ -7,7 +7,6 @@ metadata editing endpoints will be expanded in later phases.
 
 import logging
 import os
-import re
 import threading
 import shutil
 from pathlib import Path
@@ -18,39 +17,12 @@ from flask import Blueprint, jsonify, current_app, request, send_file, abort
 from sqlalchemy import and_, case, func, or_, select, update
 
 from common.models import Catalog, CDTrack, Disc, DiscType, DiscStatus, Drive, EncodeJob, JobStatus, RipJob, LookupCandidate, naive_utcnow
+from common.disc_paths import rename_iso_at_lock
 
 discs_bp = Blueprint("discs", __name__)
 
 _ACTIVE_JOB_STATUSES = (JobStatus.queued, JobStatus.running)
 _LOCK_STATUSES = {DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done}
-
-def _sanitize_iso_name(name: str) -> str:
-    return re.sub(r'[^A-Za-z0-9]', '_', name).strip('_').upper() or "unnamed"
-
-
-def _rename_iso_at_lock(disc, cfg: dict) -> None:
-    """Rename the single ISO in raw/<disc_id>/ to the sanitised temp_name."""
-    if disc.type != DiscType.dvd or not disc.raw_path or not disc.temp_name:
-        return
-    datastore_root = cfg.get("storage", {}).get("datastore_root", "")
-    if not datastore_root:
-        return
-    raw_dir = Path(datastore_root) / disc.raw_path
-    if not raw_dir.is_dir():
-        return
-    isos = list(raw_dir.glob("*.iso"))
-    if len(isos) != 1:
-        log.warning("ISO rename skipped for disc #%s: found %d ISO(s) in %s", disc.id, len(isos), raw_dir)
-        return
-    new_name = _sanitize_iso_name(disc.temp_name)
-    new_path = raw_dir / f"{new_name}.iso"
-    if isos[0] == new_path:
-        return
-    try:
-        isos[0].rename(new_path)
-        log.info("Renamed ISO for disc #%s: %s → %s", disc.id, isos[0].name, new_path.name)
-    except OSError as exc:
-        log.warning("ISO rename failed for disc #%s: %s", disc.id, exc)
 
 
 def _active_rip_job(disc: Disc):
@@ -426,9 +398,10 @@ def update_temp_name(disc_id):
     session.commit()
 
     # Rename ISO at lock time (name confirmed + rip completed).
-    if disc.name_confirmed and disc.status in _LOCK_STATUSES:
+    if disc.name_confirmed and disc.status in _LOCK_STATUSES and disc.type == DiscType.dvd:
         cfg = current_app.config.get("DISCRIPPER_CFG") or {}
-        _rename_iso_at_lock(disc, cfg)
+        datastore_root = cfg.get("storage", {}).get("datastore_root", "")
+        rename_iso_at_lock(disc.id, disc.temp_name, disc.raw_path, datastore_root)
 
     return jsonify(_disc_to_dict(disc))
 
