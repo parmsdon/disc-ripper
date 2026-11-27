@@ -33,8 +33,45 @@ function MbStatusBadge({ disc }) {
   return null;
 }
 
-function QueueEntry({ disc, onIdentify }) {
+function QueueEntry({ disc, onIdentify, onRefresh }) {
   const rippedAt = formatRippedAt(disc.ripped_at);
+  const [nameValue, setNameValue] = useState(disc.temp_name || disc.volume_label || "");
+  const [nameSaving, setNameSaving] = useState(false);
+
+  // Sync when this entry re-renders after a save.
+  useEffect(() => {
+    setNameValue(disc.temp_name || disc.volume_label || "");
+  }, [disc.id, disc.temp_name]);
+
+  const needsName = !disc.name_confirmed;
+  const needsCatalog = (disc.type === "dvd" && !disc.catalog_id) ||
+                       (disc.type === "cd"  && !disc.album_title);
+
+  async function handleConfirmName() {
+    if (!nameValue.trim()) return;
+    setNameSaving(true);
+    try {
+      await api.saveTempName(disc.id, nameValue.trim());
+      onRefresh();
+    } catch (e) {
+      console.error("Save name failed:", e);
+    } finally {
+      setNameSaving(false);
+    }
+  }
+
+  const savedName = disc.temp_name || "";
+  const isUnchanged = nameValue.trim() === savedName.trim();
+  const hasNameValue = !!nameValue.trim();
+
+  let nameBtnLabel;
+  if (nameSaving) nameBtnLabel = "Saving…";
+  else if (isUnchanged && hasNameValue && disc.name_confirmed) nameBtnLabel = "✓ Confirmed";
+  else if (isUnchanged && hasNameValue) nameBtnLabel = "Confirm";
+  else nameBtnLabel = "Save";
+
+  const nameBtnDisabled = nameSaving || !hasNameValue || (isUnchanged && disc.name_confirmed);
+
   return (
     <div className="queue-entry">
       <span className={`queue-entry-type-badge ${disc.type}`}>
@@ -47,7 +84,7 @@ function QueueEntry({ disc, onIdentify }) {
             : <em className="queue-entry-unnamed">Unnamed</em>
           }
         </div>
-        {disc.volume_label && (
+        {disc.volume_label && !disc.temp_name && (
           <div className="queue-entry-meta">{disc.volume_label}</div>
         )}
         {rippedAt && (
@@ -59,8 +96,32 @@ function QueueEntry({ disc, onIdentify }) {
         {disc.rip_quality === "dirty" && (
           <span className="dirty-rip-badge">⚠ dirty</span>
         )}
+        {needsName && (
+          <span className="name-not-confirmed-badge">Name not confirmed</span>
+        )}
       </div>
-      <button onClick={() => onIdentify(disc)}>Identify</button>
+      {needsName && (
+        <div className="queue-entry-name-row">
+          <input
+            type="text"
+            className="queue-entry-name-input"
+            placeholder="Working title…"
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !nameBtnDisabled && handleConfirmName()}
+          />
+          <button
+            className={`confirm-btn${!nameBtnDisabled && !disc.name_confirmed ? " prominent" : ""}`}
+            onClick={handleConfirmName}
+            disabled={nameBtnDisabled}
+          >
+            {nameBtnLabel}
+          </button>
+        </div>
+      )}
+      {(!needsName || disc.name_confirmed) && needsCatalog && (
+        <button onClick={() => onIdentify(disc)}>Identify</button>
+      )}
     </div>
   );
 }
@@ -120,7 +181,7 @@ export default function DataEditing() {
             <div className="queue-summary">{summary}</div>
             <div className="identification-queue">
               {queue.map((disc) => (
-                <QueueEntry key={disc.id} disc={disc} onIdentify={setSelectedDisc} />
+                <QueueEntry key={disc.id} disc={disc} onIdentify={setSelectedDisc} onRefresh={fetchQueue} />
               ))}
             </div>
           </>

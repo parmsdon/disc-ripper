@@ -201,6 +201,7 @@ class Disc(Base):
     # so a re-rip can be triggered next time the disc is inserted.
     needs_rerip = Column(Boolean, default=False, nullable=False)
     temp_name = Column(String, nullable=True)
+    name_confirmed = Column(Boolean, default=False, nullable=False)
 
     # "clean" or "dirty" (recoverable dvdbackup read errors padded over -
     # see ripper_service.rip_worker.detect_dirty_rip), set once a DVD rip

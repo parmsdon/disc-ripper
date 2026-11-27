@@ -875,6 +875,48 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Confirm / Save button variants */
+.confirm-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.confirm-btn.prominent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.confirm-btn.confirmed {
+  background: transparent;
+  border-color: var(--good);
+  color: var(--good);
+  cursor: default;
+}
+
+.confirm-btn:disabled:not(.confirmed) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .confirm-btn.prominent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+[data-theme="light"] .confirm-btn.confirmed {
+  border-color: var(--good);
+  color: var(--good);
+}
+
 .temp-name-row .copy-label-btn,
 .temp-name-row .copy-current-btn {
   width: 22px;
@@ -1383,6 +1425,34 @@ button:disabled {
 .mb-queue-status.pending {
   color: var(--text-dim);
   font-style: italic;
+}
+
+.name-not-confirmed-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(217, 161, 60, 0.15);
+  color: var(--warn);
+}
+
+[data-theme="light"] .name-not-confirmed-badge {
+  background: rgba(161, 98, 7, 0.1);
+  color: #b45309;
+}
+
+.queue-entry-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.queue-entry-name-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 6px;
+  min-width: 0;
 }
 
 /* Identification panel overlay */

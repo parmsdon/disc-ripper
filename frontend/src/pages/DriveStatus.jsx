@@ -173,16 +173,16 @@ function DirectEjectButton({ drive, onRefresh }) {
   );
 }
 
-const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying", "ripped"];
+const _NAMEABLE_DISC_STATUSES = ["queued", "ripping", "building", "identifying", "ripped", "encoding", "done"];
 
 // value/onChange are lifted to DrivePanel so the MB popover can pre-fill it.
-// mbLookupStatus/onOpenMbPopover drive the small indicator button
-// that lives in the same button row as Copy Label and Copy Current.
+// mbLookupStatus/onOpenMbPopover drive the small indicator button next to the input.
 function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenMbPopover }) {
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [conflict, setConflict] = useState(null);
 
+  // Duplicate-name check for DVDs (fires when value differs from saved temp_name).
   useEffect(() => {
     if (disc.type !== "dvd") return;
     const trimmed = value.trim();
@@ -208,35 +208,38 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
     return () => { cancelled = true; clearTimeout(timer); };
   }, [value, disc.id, disc.type, disc.temp_name]);
 
-  // Naming is offered for the whole active lifetime of a disc (queued
-  // through identifying), so the user can type a title in as soon as it's
-  // detected rather than waiting for the rip to finish. Once status
-  // reaches "ripped" - either set directly because a name was already
-  // saved when building completed, or via the identifying -> ripped
-  // auto-transition - this input disappears for good. There's
-  // deliberately no edit-after-lock path: the working title is just a
-  // bridge until real catalog matching exists.
   if (!_NAMEABLE_DISC_STATUSES.includes(disc.status)) {
     return null;
   }
+
+  const savedName = disc.temp_name || "";
+  const isUnchanged = value.trim() === savedName.trim();
+  const hasValue = !!value.trim();
 
   async function handleSave() {
     setSaving(true);
     try {
       await api.saveTempName(disc.id, value.trim() || null);
-      onChange("");
       onSaved();
     } finally {
       setSaving(false);
     }
   }
 
-  function handleCopyLabel() {
-    onChange(disc.volume_label);
-  }
-
-  function handleCopyCurrent() {
-    onChange(disc.temp_name);
+  // Button label and style
+  let btnLabel, btnClass, btnDisabled;
+  if (isUnchanged && hasValue && disc.name_confirmed) {
+    btnLabel = "✓ Confirmed";
+    btnClass = "confirm-btn confirmed";
+    btnDisabled = true;
+  } else if (isUnchanged && hasValue && !disc.name_confirmed) {
+    btnLabel = saving ? "Saving…" : "Confirm";
+    btnClass = "confirm-btn prominent";
+    btnDisabled = saving || checking || !!conflict;
+  } else {
+    btnLabel = saving ? "Saving…" : "Save";
+    btnClass = "confirm-btn";
+    btnDisabled = saving || checking || !!conflict || !hasValue;
   }
 
   return (
@@ -246,31 +249,8 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
         placeholder="Working title…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSave()}
-        className="input-warning"
+        onKeyDown={(e) => e.key === "Enter" && !btnDisabled && handleSave()}
       />
-      {/* CD disc_fingerprint is a CDDB-style hash, not a human-readable
-          label - only worth copying for DVDs (volume id/volume set id). */}
-      {disc.type !== "cd" && disc.volume_label && (
-        <button
-          type="button"
-          className="copy-label-btn"
-          onClick={handleCopyLabel}
-          title="Copy disc label"
-        >
-          ↓
-        </button>
-      )}
-      {disc.temp_name && (
-        <button
-          type="button"
-          className="copy-current-btn"
-          onClick={handleCopyCurrent}
-          title="Copy current working title"
-        >
-          ↻
-        </button>
-      )}
       {disc.type === "cd" && mbLookupStatus === "pending" && (
         <button type="button" className="mb-status-btn" disabled title="Looking up in MusicBrainz…">
           ···
@@ -282,16 +262,14 @@ function TempNameInput({ disc, onSaved, value, onChange, mbLookupStatus, onOpenM
         </button>
       )}
       <button
+        className={btnClass}
         onClick={handleSave}
-        disabled={saving || checking || !!conflict || !value.trim() || value.trim() === disc.temp_name}
-        title={
-          conflict ? "Already in use by another DVD" :
-          disc.status === "identifying" ? "This can't be changed once saved" :
-          undefined
-        }
+        disabled={btnDisabled}
+        title={conflict ? "Already in use by another DVD" : undefined}
       >
-        {saving ? "Saving…" : "Save"}
+        {btnLabel}
       </button>
+      {conflict && <span className="temp-name-conflict">{conflict.conflict_temp_name} (conflict)</span>}
     </div>
   );
 }
@@ -530,7 +508,7 @@ function DrivePanel({ drive, onRefresh }) {
   const [candidates, setCandidates] = useState(null);
 
   useEffect(() => {
-    setTempNameValue("");
+    setTempNameValue(disc?.temp_name || disc?.volume_label || "");
     setMbPopoverOpen(false);
     setCandidates(null);
   }, [disc?.id]);

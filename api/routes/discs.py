@@ -63,6 +63,7 @@ def _disc_to_dict(disc: Disc) -> dict:
         "mb_medium_count": disc.mb_medium_count,
         "mb_medium_title": disc.mb_medium_title,
         "mb_release_id": disc.mb_release_id,
+        "name_confirmed": disc.name_confirmed if disc.name_confirmed is not None else False,
     }
 
 
@@ -84,13 +85,15 @@ def identification_queue():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
-    _terminal = [DiscStatus.done, DiscStatus.error]
+    # Discs still ripping or in hard-failed state don't belong in the queue.
+    _in_progress = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building]
+    _hard_error = [DiscStatus.error]
     discs = session.scalars(
         select(Disc)
         .where(
-            Disc.temp_name.isnot(None),
-            Disc.status.notin_(_terminal),
+            Disc.status.notin_(_in_progress + _hard_error),
             or_(
+                Disc.name_confirmed == False,  # noqa: E712 — needs naming step
                 and_(Disc.type == DiscType.dvd, Disc.catalog_id.is_(None)),
                 and_(Disc.type == DiscType.cd,  Disc.album_title.is_(None)),
             ),
@@ -109,8 +112,11 @@ def identification_queue():
             "type": disc.type.value,
             "status": disc.status.value,
             "temp_name": disc.temp_name,
-            "disc_fingerprint": disc.disc_fingerprint,
             "volume_label": disc.volume_label,
+            "name_confirmed": disc.name_confirmed if disc.name_confirmed is not None else False,
+            "catalog_id": disc.catalog_id,
+            "album_title": disc.album_title,
+            "disc_fingerprint": disc.disc_fingerprint,
             "created_at": disc.created_at.isoformat() if disc.created_at else None,
             "ripped_at": disc.ripped_at.isoformat() if disc.ripped_at else None,
             "mb_lookup_status": disc.mb_lookup_status if disc.type == DiscType.cd else None,
@@ -384,6 +390,7 @@ def update_temp_name(disc_id):
             return jsonify({"error": "This working title is already used by another DVD - please choose a unique name"}), 409
 
     disc.temp_name = new_name
+    disc.name_confirmed = bool(new_name)
     if disc.temp_name and disc.status == DiscStatus.identifying:
         disc.status = DiscStatus.ripped
     session.commit()
