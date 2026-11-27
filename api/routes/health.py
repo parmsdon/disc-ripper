@@ -29,7 +29,14 @@ def health():
             q = q.where(*where)
         return session.scalar(q) or 0
 
-    disc_exists = select(Disc.id).where(Disc.catalog_id == Catalog.id).correlate(Catalog).exists()
+    # "Matched to ripped" = catalog entry has at least one disc with a usable ISO.
+    # A matched failed disc (error/protected) doesn't count — it has no ISO and
+    # the title still needs ripping.
+    _USABLE_STATUSES = [DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done]
+    disc_exists = select(Disc.id).where(
+        Disc.catalog_id == Catalog.id,
+        Disc.status.in_(_USABLE_STATUSES),
+    ).correlate(Catalog).exists()
     matched_count = session.scalar(
         select(func.count()).select_from(Catalog).where(disc_exists)
     ) or 0

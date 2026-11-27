@@ -307,13 +307,16 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
             # dup_roles is a dict of {catalog_id: DupRole(NamedTuple)} — safe outside session
             dup_roles = load_dup_roles(s)
 
-            # Qualifying DVD discs
+            # Qualifying DVD discs — include ripped/encoding/done in case the
+            # encoder ever updates disc.status (currently it doesn't, but the
+            # completeness guard below ensures only fully-encoded discs link out).
+            _has_iso = [DiscStatus.ripped, DiscStatus.encoding, DiscStatus.done]
             dvd_disc_ids = []
             for disc in s.scalars(
                 select(Disc).where(
                     Disc.type == DiscType.dvd,
                     Disc.catalog_id.isnot(None),
-                    Disc.status == DiscStatus.ripped,
+                    Disc.status.in_(_has_iso),
                 )
             ).all():
                 done_pids = {
@@ -333,7 +336,7 @@ def _run_library_gen(db_url: str, datastore_root: str) -> None:
                 select(Disc).where(
                     Disc.type == DiscType.cd,
                     Disc.album_title.isnot(None),
-                    Disc.status == DiscStatus.ripped,
+                    Disc.status.in_(_has_iso),
                 )
             ).all():
                 trackable = [t for t in disc.tracks if t.wav_filename is not None]
