@@ -88,11 +88,11 @@ def _check_dvd_fingerprint_match(rip_job_id: int, device_path: str, disc_id: int
         rip_job = session.get(RipJob, rip_job_id)
         disc = session.get(Disc, disc_id)
         if rip_job is not None:
-            rip_job.status = JobStatus.error
+            rip_job.status = JobStatus.cancelled
             rip_job.error_message = "Wrong disc in drive at job start (disc was swapped)"
         if disc is not None and disc.status == DiscStatus.ripping:
-            disc.status = DiscStatus.error
-            disc.needs_rerip = True
+            has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path
+            disc.status = DiscStatus.ripped if has_usable_iso else DiscStatus.cancelled
         session.commit()
     finally:
         session.close()
@@ -123,11 +123,11 @@ def _check_cd_fingerprint_match(rip_job_id: int, device_path: str, disc_id: int,
         rip_job = session.get(RipJob, rip_job_id)
         disc = session.get(Disc, disc_id)
         if rip_job is not None:
-            rip_job.status = JobStatus.error
+            rip_job.status = JobStatus.cancelled
             rip_job.error_message = "Wrong disc in drive at job start (disc was swapped)"
         if disc is not None and disc.status == DiscStatus.ripping:
-            disc.status = DiscStatus.error
-            disc.needs_rerip = True
+            has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path
+            disc.status = DiscStatus.ripped if has_usable_iso else DiscStatus.cancelled
         session.commit()
     finally:
         session.close()
@@ -197,11 +197,11 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
                 "disc ejected or swapped; cancelling stale job",
                 rip_job.id, disc.id, label, disc.drive_id,
             )
-            rip_job.status = JobStatus.error
+            rip_job.status = JobStatus.cancelled
             rip_job.error_message = "Disc ejected or swapped before rip could start"
             if disc.status == DiscStatus.queued:
-                disc.status = DiscStatus.error
-                disc.needs_rerip = True
+                has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path
+                disc.status = DiscStatus.ripped if has_usable_iso else DiscStatus.cancelled
             session.commit()
             continue
         inject_dirty = fake_dirty_mode and drive.label == _FAKE_DIRTY_DRIVE_LABEL

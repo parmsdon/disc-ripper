@@ -53,7 +53,7 @@ def create_missing_cd_encode_jobs():
     return jsonify({"jobs_created": created})
 
 
-_TERMINAL_STATUSES = [DiscStatus.ripped, DiscStatus.done, DiscStatus.error, DiscStatus.identifying]
+_TERMINAL_STATUSES = [DiscStatus.ripped, DiscStatus.done, DiscStatus.error, DiscStatus.identifying, DiscStatus.cancelled]
 _ACTIVE_STATUSES = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building]
 
 

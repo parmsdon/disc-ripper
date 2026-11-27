@@ -87,9 +87,9 @@ def identification_queue():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
-    # Discs still ripping or in hard-failed state don't belong in the queue.
+    # Discs still ripping, hard-failed, or cancelled don't belong in the queue.
     _in_progress = [DiscStatus.queued, DiscStatus.ripping, DiscStatus.building]
-    _hard_error = [DiscStatus.error]
+    _hard_error = [DiscStatus.error, DiscStatus.cancelled]
     discs = session.scalars(
         select(Disc)
         .where(
@@ -605,15 +605,16 @@ def cancel_rip(disc_id):
     if disc.status not in (DiscStatus.ripping, DiscStatus.building):
         return jsonify({"error": "Disc is not currently ripping or building"}), 400
 
-    disc.status = DiscStatus.error
-    disc.error_message = "Cancelled by user"
+    has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path
+    disc.status = DiscStatus.ripped if has_usable_iso else DiscStatus.cancelled
+    disc.error_message = None
 
     active_job = next(
         (j for j in disc.rip_jobs if j.status in (JobStatus.queued, JobStatus.running)),
         None,
     )
     if active_job is not None:
-        active_job.status = JobStatus.error
+        active_job.status = JobStatus.cancelled
         active_job.error_message = "Cancelled by user"
 
     if disc.drive_id is not None:

@@ -74,7 +74,7 @@ _ACTIVE_DISC_STATUSES = (DiscStatus.queued, DiscStatus.ripping, DiscStatus.build
 # user-initiated retry rather than auto-creating a new row.
 _COMPLETED_DISC_STATUSES = (
     DiscStatus.ripped, DiscStatus.identifying, DiscStatus.encoding,
-    DiscStatus.done, DiscStatus.error, DiscStatus.protected,
+    DiscStatus.done, DiscStatus.error, DiscStatus.protected, DiscStatus.cancelled,
 )
 
 _SERVICE_STATUS_KEY = "service_status"
@@ -92,7 +92,8 @@ def _cancel_queued_jobs_for_disc(session, disc) -> None:
     """Cancel any queued (not-yet-started) rip jobs for a disc being ejected.
 
     Rule 2: when a disc is ejected, its queued job must be cancelled so it
-    cannot start against whatever disc is next inserted.
+    cannot start against whatever disc is next inserted.  Keep-best-result:
+    if the disc already has a usable ISO, leave disc status as-is.
     """
     queued_jobs = session.scalars(
         select(RipJob).where(
@@ -101,15 +102,18 @@ def _cancel_queued_jobs_for_disc(session, disc) -> None:
         )
     ).all()
     for job in queued_jobs:
-        job.status = JobStatus.error
+        job.status = JobStatus.cancelled
         job.error_message = "Disc ejected before rip could start"
         logger.info(
             "Cancelled queued job %s for ejected disc #%s (%s)",
             job.id, disc.id, disc.disc_fingerprint,
         )
     if queued_jobs and disc.status == DiscStatus.queued:
-        disc.status = DiscStatus.error
-        disc.needs_rerip = True
+        has_usable_iso = disc.rip_quality in ("clean", "dirty") and disc.raw_path
+        if has_usable_iso:
+            disc.status = DiscStatus.ripped
+        else:
+            disc.status = DiscStatus.cancelled
 
 
 def _find_existing_disc(session, disc_fingerprint):
@@ -335,7 +339,7 @@ def run(cfg: dict) -> None:
                                         volume_label, disc_fingerprint, existing_active_disc.id, label,
                                     )
                                 elif existing_completed_disc is not None and (
-                                    existing_completed_disc.status in (DiscStatus.error, DiscStatus.protected)
+                                    existing_completed_disc.status in (DiscStatus.error, DiscStatus.protected, DiscStatus.cancelled)
                                     or existing_completed_disc.rip_quality == "dirty"
                                 ):
                                     existing_completed_disc.drive_id = drive_id
@@ -481,7 +485,7 @@ def run(cfg: dict) -> None:
                                                         existing_active_disc.id, mb_result.get("error"),
                                                     )
                                     elif existing_completed_disc is not None and (
-                                        existing_completed_disc.status == DiscStatus.error
+                                        existing_completed_disc.status in (DiscStatus.error, DiscStatus.cancelled)
                                         or existing_completed_disc.rip_quality == "dirty"
                                     ):
                                         existing_completed_disc.drive_id = drive_id

@@ -375,6 +375,9 @@ function DiscStatusZone({ disc }) {
   } else if (disc.status === "ripping" || disc.status === "building") {
     statusClass = "ripping";
     statusLabel = "Ripping";
+  } else if (disc.status === "cancelled") {
+    statusClass = "clean";
+    statusLabel = "Not ripped";
   } else if (disc.status === "error" || disc.status === "protected") {
     statusClass = "failed";
     statusLabel = "Failed";

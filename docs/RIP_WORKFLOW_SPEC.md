@@ -17,6 +17,7 @@ Changes to either must match what is described here.
    - **Unknown disc** → create new `Disc` row, queue rip job.
    - **Known disc, clean** → do nothing (eject or leave; no re-rip).
    - **Known disc, dirty or failed** → auto-queue a new rip job (re-rip from start).
+   - **Known disc, cancelled** → treat as dirty/failed: auto-queue a new rip job (rip from start).
 
 ### DVD rip decision tree
 
@@ -45,11 +46,36 @@ Protected scan (HandBrakeCLI)?
 
 ### Keep-best-result rule
 
-When a re-rip fails (any path → `_fail_job`):
+When a re-rip fails (any path → `_fail_job`) **or is cancelled**:
 - If `rip_quality = dirty` **and** the prior dirty ISO file still exists on disk
   → keep `status = ripped / rip_quality = dirty` (preserve the usable ISO).
 - If `rip_quality = dirty` but no ISO file on disk
   → clear `rip_quality`, set `status = error`.
+- If the rip was cancelled and no usable ISO exists
+  → `status = cancelled` (see Cancelled outcome below).
+
+### Cancelled outcome
+
+A job is **cancelled** (not errored) when it is stopped for a reason unrelated to the
+disc content itself:
+
+- The disc is ejected or swapped before the job starts (Rules 1 & 2 in the safety rules).
+- The user presses the **Cancel** button on the drive card while ripping.
+- A rollback cancels a job whose disc is no longer in the drive (Rule 3).
+- A fingerprint mismatch aborts the job at start (Rule 4).
+
+**`rip_jobs.status = 'cancelled'`** (a distinct value, not `'error'`).
+
+**`disc.status` after cancellation — keep-best-result applies:**
+- If the disc already has a usable rip (`rip_quality IN ('clean','dirty')` and
+  an ISO on disk) → keep disc status and ISO unchanged; only the job is cancelled.
+- Otherwise → `disc.status = 'cancelled'`.
+
+**Cancelled disc behaviour:**
+- Shown as a grey **"Not ripped"** pill (same shade as the Clean / Queued chip, not red).
+- Re-inserting a cancelled disc starts a fresh rip from the start (same as error/dirty).
+- Does **not** appear in the Identification queue.
+- **Excluded from all success/failure statistics** (Health, Audit, future Drive Health tab).
 
 ### Encode behaviour
 
@@ -167,16 +193,15 @@ this invariant:
 
 Before `start_eligible_rip_jobs` promotes a queued job to running it verifies
 `disc.drive_id == rip_job.drive_id`.  If the disc's `drive_id` is `None` (ejected)
-or points to a different drive, the job is set to `error`; `disc.status` is reset to
-`error` and `needs_rerip = TRUE`.
+or points to a different drive, the job is set to `cancelled`; `disc.status` follows
+the keep-best-result rule (cancelled if no usable ISO).
 
 ### Rule 2 — cancel queued jobs on ejection
 
 When the main detection loop detects that a disc has been removed from a drive it
 cancels any queued (not-yet-started) jobs for that disc before committing the
-`drive_id = NULL` update.  Cancelled jobs are set to `status = error` with an
-explanatory message.  If the disc was in `status = queued` it is reset to `error`
-with `needs_rerip = TRUE` so it is re-queued automatically on re-insertion.
+`drive_id = NULL` update.  Cancelled jobs are set to `status = cancelled`.  Disc
+status follows the keep-best-result rule.
 
 ### Rule 3 — cancel rather than re-queue if disc ejected during rollback
 
@@ -185,8 +210,7 @@ reduced) the rollback checks whether the disc is still physically in the drive
 (`disc.drive_id IS NOT NULL`).
 
 - **Still in drive** → job and disc reset to `queued` as before.
-- **Not in drive** → job set to `error`; disc set to `error` with
-  `needs_rerip = TRUE`.
+- **Not in drive** → job set to `cancelled`; disc follows keep-best-result rule.
 
 ### Rule 4 — fingerprint check at the moment of ripping
 
@@ -195,8 +219,8 @@ filesystem I/O, the service reads the actual disc fingerprint from the hardware
 (`compute_dvd_id` / `read_table_of_contents`) and compares it to
 `disc.disc_fingerprint`.
 
-A definite mismatch (both sides non-`None` and unequal) → job set to `error`;
-`disc.status` reset to `error`; rip does **not** proceed.
+A definite mismatch (both sides non-`None` and unequal) → job set to `cancelled`;
+`disc.status` reset to `cancelled` (keep-best-result applies); rip does **not** proceed.
 
 If either fingerprint is `None` (computation failed or not yet stored) the check
 is skipped and the rip proceeds — an inconclusive check never blocks a rip.

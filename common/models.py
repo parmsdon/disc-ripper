@@ -66,6 +66,7 @@ class DiscStatus(str, enum.Enum):
     done = "done"
     error = "error"
     protected = "protected"
+    cancelled = "cancelled"
 
 
 class JobStatus(str, enum.Enum):
@@ -73,6 +74,7 @@ class JobStatus(str, enum.Enum):
     running = "running"
     done = "done"
     error = "error"
+    cancelled = "cancelled"
 
 
 class RipQuality(str, enum.Enum):

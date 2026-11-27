@@ -114,6 +114,7 @@ def health():
             "currently_building": count(Disc, Disc.status == DiscStatus.building),
             "currently_identifying": count(Disc, Disc.status == DiscStatus.identifying),
             "error_discs": count(Disc, Disc.status == DiscStatus.error),
+            "cancelled_discs": count(Disc, Disc.status == DiscStatus.cancelled),
             "dvds_protected": count(Disc, Disc.type == DiscType.dvd, Disc.status == DiscStatus.protected),
         },
         "artwork": {

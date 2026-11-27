@@ -16,6 +16,7 @@ drives_bp = Blueprint("drives", __name__)
 _ACTIVE_STATUSES = [
     DiscStatus.queued, DiscStatus.ripping, DiscStatus.building, DiscStatus.identifying,
     DiscStatus.ripped, DiscStatus.encoding, DiscStatus.error, DiscStatus.protected,
+    DiscStatus.cancelled,
 ]
 
 
@@ -63,6 +64,7 @@ def list_drives():
             (Disc.status == DiscStatus.ripped,     4),
             (Disc.status == DiscStatus.error,      5),
             (Disc.status == DiscStatus.protected,  5),
+            (Disc.status == DiscStatus.cancelled,  5),
             (Disc.status == DiscStatus.queued,     6),
             else_=7,
         )
