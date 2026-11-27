@@ -2,13 +2,13 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
 import DiscDeleteDialog from "../components/DiscDeleteDialog";
 
-function ProgressBar({ percent, stage }) {
+function ProgressBar({ percent, stage, makemkv }) {
   const pct = percent ?? 0;
   const labelText = stage ? `${stage} ${pct}%` : `${pct}%`;
   return (
     <div className="progress-bar-row">
       <div className="progress-bar-track">
-        <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+        <div className={`progress-bar-fill${makemkv ? " makemkv" : ""}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="progress-bar-label" title={labelText}>{labelText}</span>
     </div>
@@ -427,7 +427,7 @@ function DiscStatusZone({ disc }) {
       </div>
 
       {(disc.status === "ripping" || disc.status === "building") && (
-        <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} />
+        <ProgressBar percent={disc.progress_percent} stage={disc.progress_stage} makemkv={makemkvActive} />
       )}
     </div>
   );

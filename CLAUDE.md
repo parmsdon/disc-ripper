@@ -28,6 +28,8 @@ alembic revision --autogenerate -m "description"   # generate new migration
 
 **Revision ID length**: `alembic_version.version_num` is `varchar(32)`. New revision IDs must be **32 characters or fewer** — Alembic uses the `revision:` string as the stored value. The convention `NNNN_short_description` is fine as long as the total stays within that limit.
 
+**No data fixes for specific record IDs in migrations**: disc IDs, job IDs, and other record IDs differ between dev and prod. Never put `WHERE id = <N>` or equivalent in a migration. Use a one-off script or give the user SQL instead.
+
 ### Seed reference data
 ```bash
 export DISCRIPPER_ENV=dev

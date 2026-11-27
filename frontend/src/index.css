@@ -844,6 +844,10 @@ button:disabled {
   transition: width 0.3s ease;
 }
 
+.progress-bar-fill.makemkv {
+  background: var(--good);
+}
+
 .progress-bar-label {
   font-size: 11px;
   color: var(--text-dim);

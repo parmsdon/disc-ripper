@@ -1,16 +1,14 @@
-"""fix discs stuck in queued with no queued rip job
+"""placeholder — no schema changes (rev reserved for safety-rules commit)
 
 Revision ID: 0032_fix_stuck_queued_discs
 Revises: 0031_name_confirmed_completed
 Create Date: 2026-11-27
 
-A disc can get stuck in status='queued' with no corresponding queued rip
-job if the disc was ejected just as the ripper created the job (the new
-safety rules introduced in this session will prevent future occurrences).
-On dev, disc #512 is in this state.  Reset such discs to 'error' with
-needs_rerip=TRUE so they are re-queued correctly when re-inserted.
+Schema anchor for the rip-job safety rules introduced in the same commit.
+No DDL or DML: the dev-only data fix was applied directly, not via
+migration (disc ids differ between environments).
 """
-from alembic import op
+from alembic import op  # noqa: F401 — keep import so Alembic env.py loads cleanly
 
 
 revision = "0032_fix_stuck_queued_discs"
@@ -20,17 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("""
-        UPDATE discs
-        SET    status     = 'error',
-               needs_rerip = TRUE
-        WHERE  status = 'queued'
-          AND  id NOT IN (
-                   SELECT disc_id
-                   FROM   rip_jobs
-                   WHERE  status IN ('queued', 'running')
-               )
-    """)
+    pass
 
 
 def downgrade() -> None:
