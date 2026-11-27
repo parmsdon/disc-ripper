@@ -415,6 +415,7 @@ class SyncState(Base):
     started_at = Column(DateTime, nullable=True)
     progress_current = Column(Integer, nullable=True)
     progress_total = Column(Integer, nullable=True)
+    progress_updated_at = Column(DateTime, nullable=True)  # last time progress was written to DB
     finished_at = Column(DateTime, nullable=True)
     last_synced = Column(Integer, nullable=True)
     last_inserted = Column(Integer, nullable=True)

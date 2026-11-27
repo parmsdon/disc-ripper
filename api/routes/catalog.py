@@ -21,9 +21,11 @@ logger = logging.getLogger(__name__)
 
 catalog_bp = Blueprint("catalog", __name__)
 
-# If running=TRUE and started_at is older than this, treat the lock as stale
-# (the worker that claimed it must have died mid-sync).
-_STALE_SYNC_MINUTES = 10
+# If running=TRUE and no progress has been written for this long, treat the lock
+# as stale (the worker that owned it must have died mid-sync). 5 minutes is well
+# above the ~2-minute full-sync time so normal syncs never look stale, but dead
+# processes are detected quickly enough to not block Sync Now indefinitely.
+_STALE_SYNC_MINUTES = 5
 
 
 def _catalog_to_dict(entry: Catalog, dup_roles: dict | None = None) -> dict:
@@ -133,7 +135,11 @@ def _run_sync_in_background(cfg: dict) -> None:
             s.execute(
                 update(SyncState)
                 .where(SyncState.id == 1)
-                .values(progress_current=current, progress_total=total)
+                .values(
+                    progress_current=current,
+                    progress_total=total,
+                    progress_updated_at=naive_utcnow(),
+                )
             )
             s.commit()
         except Exception:
@@ -152,6 +158,7 @@ def _run_sync_in_background(cfg: dict) -> None:
                 finished_at=naive_utcnow(),
                 progress_current=None,
                 progress_total=None,
+                progress_updated_at=None,
                 last_synced=result.get("synced"),
                 last_inserted=result.get("inserted"),
                 last_updated=result.get("updated"),
@@ -172,6 +179,7 @@ def _run_sync_in_background(cfg: dict) -> None:
                     finished_at=naive_utcnow(),
                     progress_current=None,
                     progress_total=None,
+                    progress_updated_at=None,
                     last_error_message=str(exc),
                 )
             )
@@ -346,22 +354,39 @@ def trigger_sync():
     cfg = current_app.config["DISCRIPPER_CFG"]
     session = Session()
 
-    stale_cutoff = naive_utcnow() - timedelta(minutes=_STALE_SYNC_MINUTES)
+    now = naive_utcnow()
+    stale_cutoff = now - timedelta(minutes=_STALE_SYNC_MINUTES)
 
-    # Atomic claim: flip running=TRUE only when not currently running (or lock is stale).
+    # Read first (non-locking) to detect a stale lock so we can log it.
+    # The subsequent UPDATE is still atomic — the read is advisory only.
+    state = session.get(SyncState, 1)
+    if state and state.running:
+        last_activity = state.progress_updated_at or state.started_at
+        if last_activity and last_activity >= stale_cutoff:
+            return jsonify({"status": "already_running"}), 409
+        logger.warning(
+            "Clearing stale My Movies sync lock (last activity %s, stale after %s min)",
+            last_activity.isoformat() if last_activity else "never",
+            _STALE_SYNC_MINUTES,
+        )
+
+    # Atomic claim: flip running=TRUE only when not currently running (or stale).
     # Postgres row-level locking ensures only one worker wins if two hit this simultaneously.
     result = session.execute(
         update(SyncState)
         .where(SyncState.id == 1)
         .where(
             (SyncState.running == False) |  # noqa: E712
-            (SyncState.started_at < stale_cutoff)
+            (SyncState.progress_updated_at < stale_cutoff) |
+            (SyncState.progress_updated_at.is_(None) & (SyncState.started_at < stale_cutoff)) |
+            SyncState.started_at.is_(None)
         )
         .values(
             running=True,
-            started_at=naive_utcnow(),
+            started_at=now,
             progress_current=None,
             progress_total=None,
+            progress_updated_at=None,
         )
         .returning(SyncState.id)
     )

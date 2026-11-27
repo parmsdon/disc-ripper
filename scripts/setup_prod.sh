@@ -291,8 +291,7 @@ _step "7. Systemd units"
 sudo mkdir -p /mnt/datastore/backup
 _done "ensured /mnt/datastore/backup exists"
 
-for unit in discripper-api discripper-encoder discripper-mymovies \
-            discripper-backup; do
+for unit in discripper-api discripper-encoder discripper-backup; do
     sudo cp "deploy/systemd/${unit}.service" /etc/systemd/system/
     _done "installed ${unit}.service"
 done
@@ -300,7 +299,7 @@ sudo cp deploy/systemd/discripper-backup.timer /etc/systemd/system/
 _done "installed discripper-backup.timer"
 sudo systemctl daemon-reload
 _done "daemon-reload"
-for unit in discripper-api discripper-encoder discripper-mymovies; do
+for unit in discripper-api discripper-encoder; do
     if systemctl is-enabled "$unit" &>/dev/null; then
         _skip "$unit already enabled"
     else
@@ -330,7 +329,7 @@ fi
 _step "8. Sudoers rule"
 
 SUDOERS_FILE=/etc/sudoers.d/discripper-deploy
-SUDOERS_CONTENT="ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder discripper-mymovies, /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/"
+SUDOERS_CONTENT="ripper ALL=(root) NOPASSWD: /usr/bin/systemctl restart discripper-api discripper-encoder, /usr/bin/rsync -a --delete /projects/ripper/frontend/dist/ /var/www/discripper/"
 SUDOERS_TMP=$(mktemp)
 echo "$SUDOERS_CONTENT" > "$SUDOERS_TMP"
 sudo visudo -c -f "$SUDOERS_TMP"
@@ -347,7 +346,7 @@ _step "9. Health check"
 
 sleep 3
 ALL_OK=1
-for unit in discripper-api discripper-encoder discripper-mymovies; do
+for unit in discripper-api discripper-encoder; do
     if systemctl is-active --quiet "$unit"; then
         _done "$unit is active"
     else
