@@ -61,21 +61,37 @@ def _rollback_one_job(session, rip_job: RipJob, cfg: dict) -> None:
         scratch_dir = str(Path(cfg["storage"]["scratch_dir"]) / str(disc.id))
         _cleanup_scratch_dir(scratch_dir)
 
-    rip_job.status = JobStatus.queued
     rip_job.started_at = None
     rip_job.scheduled_start = None
     rip_job.progress_percent = None
     rip_job.progress_stage = None
 
-    if disc is not None:
+    # Rule 3: only re-queue if the disc is still in the drive.
+    # If disc.drive_id is None the disc was physically removed while ripping —
+    # re-queuing would cause the job to start against whatever disc comes next.
+    disc_in_drive = disc is not None and disc.drive_id is not None
+    if disc_in_drive:
+        rip_job.status = JobStatus.queued
         disc.status = DiscStatus.queued
+    else:
+        rip_job.status = JobStatus.error
+        rip_job.error_message = "Disc ejected while ripping; re-insert to retry"
+        if disc is not None:
+            disc.status = DiscStatus.error
+            disc.needs_rerip = True
 
     session.commit()
 
-    logger.info(
-        "Rolled back rip job %s (disc %s) on %s - reset to queued",
-        rip_job.id, disc.id if disc else None, label,
-    )
+    if disc_in_drive:
+        logger.info(
+            "Rolled back rip job %s (disc %s) on %s — reset to queued",
+            rip_job.id, disc.id if disc else None, label,
+        )
+    else:
+        logger.info(
+            "Rolled back rip job %s (disc %s) on %s — disc no longer in drive, set to error",
+            rip_job.id, disc.id if disc else None, label,
+        )
 
 
 def _terminate_process(rip_job_id: int, label: str) -> None:

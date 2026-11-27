@@ -26,6 +26,7 @@ from common.encode_invalidation import invalidate_encode_jobs_for_rerip
 from common.encode_queue import create_encode_jobs
 from common.models import CDTrack, Disc, DiscStatus, DiscType, JobStatus, RipJob, RipQuality, Setting, naive_utcnow
 from ripper_service import active_jobs
+from ripper_service.cd_toc import read_table_of_contents
 from ripper_service.job_rollback import rollback_excess_jobs
 from ripper_service.log_writer import write_log_event
 from ripper_service.region_patcher import patch_region_if_needed
@@ -51,6 +52,86 @@ _DEFAULT_RIPPING_ENABLED = False
 # fake_dirty_mode only ever injects a simulated read error on this one
 # drive, so testing dirty-rip detection doesn't make every fake rip dirty.
 _FAKE_DIRTY_DRIVE_LABEL = "Drive 1"
+
+
+def _check_dvd_fingerprint_match(rip_job_id: int, device_path: str, disc_id: int, session_factory) -> bool:
+    """Rule 4: verify the disc in the drive matches the job's disc before ripping.
+
+    Returns True if fingerprints match or cannot be compared.  Returns False
+    (and marks the job as error) on a definite mismatch — meaning the disc was
+    swapped after the job was queued.
+    """
+    session = session_factory()
+    try:
+        disc = session.get(Disc, disc_id)
+        expected = disc.disc_fingerprint if disc is not None else None
+    finally:
+        session.close()
+
+    if not expected:
+        return True  # nothing stored to compare against; don't block
+
+    actual = compute_dvd_id(device_path)
+    if not actual:
+        return True  # fingerprint computation failed; don't block
+
+    if actual == expected:
+        return True
+
+    logger.error(
+        "Job %s aborted: disc in %s has fingerprint %r but disc #%s expects %r — "
+        "disc was swapped after job was queued",
+        rip_job_id, device_path, actual, disc_id, expected,
+    )
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        disc = session.get(Disc, disc_id)
+        if rip_job is not None:
+            rip_job.status = JobStatus.error
+            rip_job.error_message = "Wrong disc in drive at job start (disc was swapped)"
+        if disc is not None and disc.status == DiscStatus.ripping:
+            disc.status = DiscStatus.error
+            disc.needs_rerip = True
+        session.commit()
+    finally:
+        session.close()
+    return False
+
+
+def _check_cd_fingerprint_match(rip_job_id: int, device_path: str, disc_id: int,
+                                 expected_fp: str | None, session_factory) -> bool:
+    """Rule 4 for CDs: same contract as _check_dvd_fingerprint_match."""
+    if not expected_fp:
+        return True
+
+    toc = read_table_of_contents(device_path)
+    actual = toc.get("fingerprint")
+    if not actual:
+        return True
+
+    if actual == expected_fp:
+        return True
+
+    logger.error(
+        "Job %s aborted: CD in %s has fingerprint %r but disc #%s expects %r — "
+        "disc was swapped after job was queued",
+        rip_job_id, device_path, actual, disc_id, expected_fp,
+    )
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        disc = session.get(Disc, disc_id)
+        if rip_job is not None:
+            rip_job.status = JobStatus.error
+            rip_job.error_message = "Wrong disc in drive at job start (disc was swapped)"
+        if disc is not None and disc.status == DiscStatus.ripping:
+            disc.status = DiscStatus.error
+            disc.needs_rerip = True
+        session.commit()
+    finally:
+        session.close()
+    return False
 
 
 def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
@@ -105,6 +186,24 @@ def start_eligible_rip_jobs(session, cfg: dict, session_factory) -> None:
             continue
 
         label = drive.label or drive.device_path
+
+        # Rule 1: disc must still be associated with this job's drive.
+        # If disc.drive_id is None the disc was ejected; if it points elsewhere
+        # the drive now holds a different disc. Either way, cancel this job so it
+        # cannot start against the wrong physical disc.
+        if disc.drive_id != rip_job.drive_id:
+            logger.warning(
+                "Job %s: disc #%s not in drive %s (disc.drive_id=%r) — "
+                "disc ejected or swapped; cancelling stale job",
+                rip_job.id, disc.id, label, disc.drive_id,
+            )
+            rip_job.status = JobStatus.error
+            rip_job.error_message = "Disc ejected or swapped before rip could start"
+            if disc.status == DiscStatus.queued:
+                disc.status = DiscStatus.error
+                disc.needs_rerip = True
+            session.commit()
+            continue
         inject_dirty = fake_dirty_mode and drive.label == _FAKE_DIRTY_DRIVE_LABEL
 
         rip_job.status = JobStatus.running
@@ -317,6 +416,11 @@ def _run_job(rip_job_id, device_path, scratch_dir, disc_label, fake_rip_mode, se
     disc_id = _get_disc_id(rip_job_id, session_factory)
     if disc_id is None:
         logger.warning("RipJob %s has no disc — aborting DVD job", rip_job_id)
+        active_jobs.unregister(rip_job_id)
+        return
+
+    # Rule 4: abort if the disc in the drive doesn't match this job's disc.
+    if not _check_dvd_fingerprint_match(rip_job_id, device_path, disc_id, session_factory):
         active_jobs.unregister(rip_job_id)
         return
 
@@ -730,8 +834,24 @@ def _run_cd_job(rip_job_id, device_path, fake_rip_mode, label, cfg, inject_dirty
             logger.warning("RipJob %s has no disc - aborting CD job", rip_job_id)
             return
         disc_id = disc.id
+        expected_fp = disc.disc_fingerprint
         working_title = disc.temp_name
         expected_drive_id = rip_job.drive_id
+    finally:
+        session.close()
+
+    # Rule 4: abort if the disc in the drive doesn't match this job's disc.
+    if not _check_cd_fingerprint_match(rip_job_id, device_path, disc_id, expected_fp, session_factory):
+        active_jobs.unregister(rip_job_id)
+        return
+
+    session = session_factory()
+    try:
+        rip_job = session.get(RipJob, rip_job_id)
+        disc = rip_job.disc if rip_job else None
+        if disc is None:
+            logger.warning("RipJob %s vanished after fingerprint check - aborting CD job", rip_job_id)
+            return
 
         # Fresh disc: every track has rip_quality=None, so all of them
         # need ripping. Re-rip of a dirty disc: only the imperfect/failed

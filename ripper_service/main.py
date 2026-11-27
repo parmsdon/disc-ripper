@@ -88,6 +88,30 @@ _SERVICE_COMMAND_KEY = "service_command"
 _GENERIC_DISC_FINGERPRINTS = GENERIC_VOLUME_LABELS
 
 
+def _cancel_queued_jobs_for_disc(session, disc) -> None:
+    """Cancel any queued (not-yet-started) rip jobs for a disc being ejected.
+
+    Rule 2: when a disc is ejected, its queued job must be cancelled so it
+    cannot start against whatever disc is next inserted.
+    """
+    queued_jobs = session.scalars(
+        select(RipJob).where(
+            RipJob.disc_id == disc.id,
+            RipJob.status == JobStatus.queued,
+        )
+    ).all()
+    for job in queued_jobs:
+        job.status = JobStatus.error
+        job.error_message = "Disc ejected before rip could start"
+        logger.info(
+            "Cancelled queued job %s for ejected disc #%s (%s)",
+            job.id, disc.id, disc.disc_fingerprint,
+        )
+    if queued_jobs and disc.status == DiscStatus.queued:
+        disc.status = DiscStatus.error
+        disc.needs_rerip = True
+
+
 def _find_existing_disc(session, disc_fingerprint):
     """
     Look up an existing Disc by fingerprint alone - shared by the DVD and
@@ -565,6 +589,7 @@ def run(cfg: dict) -> None:
                             ).first()
                             if removed_disc is not None:
                                 removed_disc.drive_id = None
+                                _cancel_queued_jobs_for_disc(session, removed_disc)
                                 session.commit()
                                 logger.info(
                                     "Dissociated disc #%s (%s) from Drive %s on removal",

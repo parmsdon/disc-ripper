@@ -158,6 +158,51 @@ Discs already matched (`catalog_id IS NOT NULL`) do not appear in the queue.
 
 ---
 
+## Rip job safety rules
+
+A rip job may only run against the disc it was created for.  Four rules enforce
+this invariant:
+
+### Rule 1 — drive-association check at job start
+
+Before `start_eligible_rip_jobs` promotes a queued job to running it verifies
+`disc.drive_id == rip_job.drive_id`.  If the disc's `drive_id` is `None` (ejected)
+or points to a different drive, the job is set to `error`; `disc.status` is reset to
+`error` and `needs_rerip = TRUE`.
+
+### Rule 2 — cancel queued jobs on ejection
+
+When the main detection loop detects that a disc has been removed from a drive it
+cancels any queued (not-yet-started) jobs for that disc before committing the
+`drive_id = NULL` update.  Cancelled jobs are set to `status = error` with an
+explanatory message.  If the disc was in `status = queued` it is reset to `error`
+with `needs_rerip = TRUE` so it is re-queued automatically on re-insertion.
+
+### Rule 3 — cancel rather than re-queue if disc ejected during rollback
+
+When a running job is rolled back (ripper stopped, tray opened, `max_rippers`
+reduced) the rollback checks whether the disc is still physically in the drive
+(`disc.drive_id IS NOT NULL`).
+
+- **Still in drive** → job and disc reset to `queued` as before.
+- **Not in drive** → job set to `error`; disc set to `error` with
+  `needs_rerip = TRUE`.
+
+### Rule 4 — fingerprint check at the moment of ripping
+
+At the very start of `_run_job` (DVD) and `_run_cd_job` (CD), before any
+filesystem I/O, the service reads the actual disc fingerprint from the hardware
+(`compute_dvd_id` / `read_table_of_contents`) and compares it to
+`disc.disc_fingerprint`.
+
+A definite mismatch (both sides non-`None` and unequal) → job set to `error`;
+`disc.status` reset to `error`; rip does **not** proceed.
+
+If either fingerprint is `None` (computation failed or not yet stored) the check
+is skipped and the rip proceeds — an inconclusive check never blocks a rip.
+
+---
+
 ## What is not in the spec
 
 The following do not exist and must not be added without updating this document:
