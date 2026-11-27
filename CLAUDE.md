@@ -35,6 +35,10 @@ python3 scripts/seed.py
 # Idempotent — safe to re-run. Seeds encode_profiles and drives from config.
 ```
 
+## Services
+
+Do not start long-running services (API, encoder, Vite, ripper) yourself. Ask the user to restart them via the tmux start script. If you must start one for a quick check, stop it before finishing.
+
 ## Rip workflow and drive card
 
 Rip workflow and drive card behaviour must match `docs/RIP_WORKFLOW_SPEC.md`. Do not add statuses, pills or buttons not in the spec without asking.
