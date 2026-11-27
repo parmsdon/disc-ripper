@@ -144,6 +144,7 @@ def import_one_iso(
         disc.status = DiscStatus.ripped
         disc.error_message = None
         disc.temp_name = working_title
+        disc.name_confirmed = True
         disc.ripped_at = now
         disc.imported = True
     else:
@@ -153,6 +154,7 @@ def import_one_iso(
             imported=True,
             imported_filename=filename,
             temp_name=working_title,
+            name_confirmed=True,
             ripped_at=now,
         )
         session.add(disc)
