@@ -3047,3 +3047,219 @@ button:disabled {
   margin-top: 1rem;
 }
 
+/* ── Drive Health tab ───────────────────────────────────────────────────────── */
+
+.drive-health-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.drive-health-header .page-title {
+  margin: 0;
+}
+
+.drive-health-env-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.env-toggle-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.env-toggle-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.drive-health-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.drive-health-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drive-health-highlight {
+  border-left: 3px solid var(--warn);
+}
+
+.drive-health-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.drive-health-warn-icon {
+  color: var(--warn);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.drive-health-card-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.drive-health-card-device {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.drive-health-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drive-health-tiles .stat {
+  width: 130px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+}
+
+.drive-health-tiles .stat .value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.drive-health-tiles .stat .label {
+  font-size: 11px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drive-health-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drive-health-strip-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.outcome-strip {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.outcome-square {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.drive-health-rescue {
+  font-size: 12px;
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.drive-health-rescue-count {
+  font-weight: 700;
+}
+
+.drive-health-section-title {
+  margin: 20px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.drive-health-section-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+}
+
+.drive-health-retry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.drive-health-retry-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.drive-health-retry-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--text);
+}
+
+.drive-health-retry-table tr:last-child td {
+  border-bottom: none;
+}
+
+.drive-health-notes {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.drive-health-notes p {
+  margin: 0;
+}
+
+.drive-health-notes code {
+  font-style: normal;
+  font-size: 11px;
+  background: var(--bg);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.drive-health-loading,
+.drive-health-error,
+.drive-health-no-data {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 8px 0;
+}
+

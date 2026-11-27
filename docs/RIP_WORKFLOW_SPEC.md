@@ -248,6 +248,65 @@ is skipped and the rip proceeds — an inconclusive check never blocks a rip.
 
 ---
 
+---
+
+## Drive Health tab
+
+Read-only statistics tab showing per-drive rip quality and cross-drive retry analysis.
+An env selector (Prod / Dev, default Prod) filters the data by `drives.env`.
+
+### Per-drive statistics
+
+Each drive card shows:
+
+| Metric | Source | Notes |
+|---|---|---|
+| Total attempts | `rip_jobs` WHERE `status != 'cancelled'` | Cancelled jobs excluded everywhere |
+| Clean | `rip_jobs.status = done` AND `disc.rip_quality = clean` | |
+| Dirty | `rip_jobs.status = done` AND `disc.rip_quality = dirty` | |
+| Failed | `rip_jobs.status = error` | Includes protected |
+| Timed out (†) | `rip_log_events` WHERE `event_type = dvdbackup_failed` AND `detail LIKE 'Timed out%'` | Heuristic: if MakeMKV rescued the disc afterwards it still counts in Clean |
+| Success rate | `(clean + dirty) / total_attempts` | |
+| Avg clean rip time | `AVG(completed_at − started_at)` for clean done jobs | From `rip_jobs` timestamps |
+| Avg read speed (‡) | **Not available** — ISO size not in DB | |
+| Last 10 outcomes | Most-recent 10 terminal jobs (clean/dirty/failed) | Colour-coded strip, newest first |
+| Failed here, OK elsewhere | Distinct discs with an error job on this drive AND a later done job on a different drive | Strongest signal of a hardware problem |
+
+**† Timed out**: a first-class `timed_out` outcome does not exist in `rip_jobs`.
+The counter is a text heuristic only and may over-count if MakeMKV rescued the disc.
+
+**‡ Avg read speed**: ISO file size is not stored in the database (`disc.raw_path`
+is a directory path, not a file). To enable: add `iso_size_bytes` to the `discs`
+table and populate it when the ISO build completes in `_run_job`.
+
+### Highlighting
+
+A drive is highlighted (amber left border + ⚠ icon) when:
+- It has ≥ 5 attempts, **and**
+- Its success rate is ≥ 15 percentage points below the fleet average (computed
+  over all drives with ≥ 5 attempts on that env).
+
+No highlighting when there is only one drive (no comparison is possible).
+
+### Cross-drive retries
+
+A table of discs that failed on one drive and were later ripped clean on a
+different drive. One row per disc (most recent failure shown). Columns: disc
+title, failed drive, failure date, success drive, success date.
+
+The per-drive "Failed here, OK elsewhere" count tallies the same set of discs
+grouped by the failing drive.
+
+### Data not shown
+
+- **CDs**: the drive health tab covers DVD rip jobs only. CD track rip quality
+  is tracked in `cd_tracks.rip_quality` but drive-level CD stats are not yet
+  aggregated here.
+- **encode jobs**: not drive-specific; use the Health tab encode counters.
+- **cancelled jobs**: excluded from all counts and rates.
+
+---
+
 ## What is not in the spec
 
 The following do not exist and must not be added without updating this document:

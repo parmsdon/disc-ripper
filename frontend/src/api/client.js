@@ -113,6 +113,7 @@ export const api = {
   getPipelineIdentifying: () => request("/health/pipeline-identifying"),
   getPipelineErrors: () => request("/health/pipeline-errors"),
   getDvdsProtected: () => request("/health/dvds-protected"),
+  getDriveHealth: (env) => request(`/health/drive-health${env ? `?env=${env}` : ""}`),
   getLibraryStatus: () => request("/library/status"),
   generateLibrary: () => request("/library/generate", { method: "POST" }),
   getAudit: () => request("/audit/"),

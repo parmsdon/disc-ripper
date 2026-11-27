@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-do
 import { api } from "./api/client";
 
 import DriveStatus from "./pages/DriveStatus.jsx";
+import DriveHealth from "./pages/DriveHealth.jsx";
 import DvdEncoders from "./pages/DvdEncoders.jsx";
 import CdEncoders from "./pages/CdEncoders.jsx";
 import DbHealth from "./pages/DbHealth.jsx";
@@ -23,6 +24,7 @@ const TABS = [
   { path: "/data-editing", label: "Identification" },
   { path: "/library", label: "Library" },
   { path: "/db-health", label: "Health" },
+  { path: "/drive-health", label: "Drive Health" },
   { path: "/audit", label: "Audit" },
   { path: "/log", label: "Log" },
   { path: "/import", label: "Import" },
@@ -274,6 +276,7 @@ export default function App() {
             <Route path="/audit" element={<Audit />} />
             <Route path="/library" element={<Library />} />
             <Route path="/import" element={<Import />} />
+            <Route path="/drive-health" element={<DriveHealth />} />
           </Routes>
         </main>
       </div>
