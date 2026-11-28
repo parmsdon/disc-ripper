@@ -523,6 +523,19 @@ function DrivePanel({ drive, onRefresh }) {
         <span className="region-badge">
           REGION: {drive.region_known ? formatRegionDisplay(drive.region) : "?"}
         </span>
+        {!drive.region_known && drive.pending_action !== "read_region" && (
+          <button
+            className="region-read-btn"
+            onClick={async () => { await api.startRegionRead(drive.id); onRefresh(); }}
+            disabled={!drive.media_present}
+            title={drive.media_present ? "Read drive region" : "Insert a disc to read the drive region"}
+          >
+            Read region
+          </button>
+        )}
+        {drive.pending_action === "read_region" && (
+          <span className="pending-action-label">Reading…</span>
+        )}
       </div>
 
       <div className="drive-row-action">

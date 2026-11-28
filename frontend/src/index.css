@@ -722,7 +722,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 80px 100px minmax(160px, 1fr) 300px 36px;
+  grid-template-columns: 140px 160px 100px minmax(160px, 1fr) 300px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
@@ -746,6 +746,7 @@ button:disabled {
 .drive-row-region {
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 
 .drive-icon {
