@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Always commit and push at the end of every task, and report the commit hash. A change is not done until it is on origin/main.
+
 ## Commands
 
 ### Flask API

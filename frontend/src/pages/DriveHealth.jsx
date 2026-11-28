@@ -55,11 +55,11 @@ function OutcomeStrip({ outcomes }) {
 
 // ── Stat tile ──────────────────────────────────────────────────────────────
 
-function Tile({ value, label, accent }) {
+function Tile({ value, label, accent, tooltip }) {
   return (
-    <div className={`stat${accent ? ` stat-${accent}` : ""}`}>
+    <div className={`stat${accent ? ` stat-${accent}` : ""}`} title={tooltip}>
       <div className="value">{value}</div>
-      <div className="label">{label}</div>
+      <div className="label">{label}{tooltip && <span className="tile-hint"> ⓘ</span>}</div>
     </div>
   );
 }
@@ -90,12 +90,12 @@ function DriveCard({ drive }) {
         <Tile value={drive.dirty}          label="Dirty"    accent={drive.dirty > 0 ? "warn" : null} />
         <Tile value={drive.failed}         label="Failed"   accent={drive.failed > 0 ? "error" : null} />
         {drive.unknown > 0 && (
-          <Tile value={drive.unknown} label="Unknown" />
+          <Tile value={drive.unknown} label="Unknown" tooltip="Jobs ripped before outcome tracking was added. Excluded from success rate but counted in total attempts." />
         )}
         {drive.timed_out > 0 && (
-          <Tile value={drive.timed_out} label="Timed out" accent="warn" />
+          <Tile value={drive.timed_out} label="Timed out" accent="warn" tooltip="Jobs where dvdbackup exceeded the timeout. Not double-counted against other outcome totals." />
         )}
-        <Tile value={fmtPct(sr)} label="Success" accent={srAccent} />
+        <Tile value={fmtPct(sr)} label="Success" accent={srAccent} tooltip="Clean ÷ (Clean + Dirty + Failed). Jobs with unknown or imported outcomes are excluded." />
         {drive.avg_clean_dvdbackup_seconds != null && (
           <Tile value={fmtDuration(drive.avg_clean_dvdbackup_seconds)} label="dvdbackup avg" />
         )}
@@ -103,10 +103,10 @@ function DriveCard({ drive }) {
           <Tile value={fmtDuration(drive.avg_clean_makemkv_seconds)} label="MakeMKV avg" />
         )}
         {drive.avg_read_speed_dvdbackup_mbps != null && (
-          <Tile value={fmtSpeed(drive.avg_read_speed_dvdbackup_mbps)} label="dvdbackup MB/s" />
+          <Tile value={fmtSpeed(drive.avg_read_speed_dvdbackup_mbps)} label="dvdbackup MB/s" tooltip="Average read speed for clean dvdbackup jobs with a recorded disc size." />
         )}
         {drive.avg_read_speed_makemkv_mbps != null && (
-          <Tile value={fmtSpeed(drive.avg_read_speed_makemkv_mbps)} label="MakeMKV MB/s" />
+          <Tile value={fmtSpeed(drive.avg_read_speed_makemkv_mbps)} label="MakeMKV MB/s" tooltip="Average read speed for clean MakeMKV jobs with a recorded disc size." />
         )}
       </div>
 
@@ -194,22 +194,6 @@ export default function DriveHealth() {
           </p>
           <RetryTable retries={data.cross_drive_retries} />
 
-          <div className="drive-health-notes">
-            <p>
-              Outcome counts and success rate are sourced from <code>rip_jobs.outcome</code> (set at job
-              completion). Jobs ripped before migration 0036 show <code>outcome = unknown</code> and are
-              excluded from counts but still increment total attempts. Imported discs
-              (<code>outcome = imported</code>) are excluded from all counts and rates — they never used a
-              drive. Run <code>python3 scripts/backfill_rip_job_outcomes.py</code> to backfill historical
-              jobs; use <code>--fix-imports</code> to correct already-backfilled imported rows.
-            </p>
-            <p>
-              Read speed is computed from <code>iso_size_bytes</code> per job and shown separately for
-              dvdbackup and MakeMKV. Jobs without <code>iso_size_bytes</code> (pre-migration or failed)
-              are excluded from the average. Timed-out count is from{" "}
-              <code>dvdbackup_outcome = timed_out</code>; it is not double-counted against Clean totals.
-            </p>
-          </div>
         </>
       )}
     </div>

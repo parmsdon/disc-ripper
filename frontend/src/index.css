@@ -3206,26 +3206,11 @@ button:disabled {
   border-bottom: none;
 }
 
-.drive-health-notes {
-  font-size: 11px;
-  color: var(--text-dim);
-  font-style: italic;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.drive-health-notes p {
-  margin: 0;
-}
-
-.drive-health-notes code {
-  font-style: normal;
-  font-size: 11px;
-  background: var(--bg);
-  padding: 1px 3px;
-  border-radius: 2px;
+.tile-hint {
+  font-size: 9px;
+  opacity: 0.5;
+  margin-left: 2px;
+  cursor: default;
 }
 
 .drive-health-loading,
