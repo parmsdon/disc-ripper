@@ -231,7 +231,8 @@ def drive_health():
             d.label,
             d.device_path,
             COUNT(rj.id) FILTER (WHERE rj.outcome IS NULL
-                                    OR rj.outcome != 'cancelled')::int    AS total_attempts,
+                                    OR rj.outcome NOT IN ('cancelled', 'imported'))::int
+                                                                           AS total_attempts,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'clean')::int         AS clean_count,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'dirty')::int         AS dirty_count,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'failed')::int        AS failed_count,

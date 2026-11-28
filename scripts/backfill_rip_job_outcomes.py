@@ -7,6 +7,8 @@ Usage:
     DISCRIPPER_ENV=prod python3 scripts/backfill_rip_job_outcomes.py [--dry-run]
 
 Rows that already have outcome set are skipped.  Pass --force to overwrite them.
+Pass --fix-imports to also correct already-populated rows whose disc is imported
+(imported discs never used a drive; they get outcome=imported, not_run, NULL seconds).
 
 After running, use the query printed at the end to check how many jobs ended
 up with outcome=unknown (the caller decides whether to investigate further).
@@ -69,6 +71,16 @@ def _derive(job, events, datastore_root):
     if disc is None:
         result["outcome"] = "unknown"
         return result
+
+    # Imported discs were never ripped through a drive.
+    if disc.imported:
+        return {
+            "outcome":           "imported",
+            "dvdbackup_outcome": "not_run",
+            "makemkv_outcome":   "not_run",
+            "dvdbackup_seconds": None,
+            "makemkv_seconds":   None,
+        }
 
     is_cd = disc.type == DiscType.cd if disc.type else False
 
@@ -153,6 +165,16 @@ def _derive(job, events, datastore_root):
         if iso_path.is_file():
             result["iso_size_bytes"] = iso_path.stat().st_size
 
+    # ── Consistency: dirty outcome with no successful MakeMKV means dvdbackup
+    #    was the tool that ran and produced the dirty result. ──────────────────
+    if result.get("outcome") == "dirty" and result.get("makemkv_outcome") in ("not_run", "failed"):
+        result["dvdbackup_outcome"] = "dirty"
+
+    # ── Never record 0.0 as a real duration. ─────────────────────────────────
+    for _k in ("dvdbackup_seconds", "makemkv_seconds"):
+        if result.get(_k) == 0.0:
+            result[_k] = None
+
     return result
 
 
@@ -162,6 +184,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="Print changes but don't write to DB")
     parser.add_argument("--force", action="store_true", help="Overwrite already-populated outcome fields")
+    parser.add_argument("--fix-imports", action="store_true",
+                        help="Re-process already-populated rows whose disc is imported, "
+                             "correcting them to outcome=imported / not_run / NULL seconds")
     args = parser.parse_args()
 
     cfg = get_config()
@@ -177,7 +202,8 @@ def main():
     unknowns = 0
 
     for job in jobs:
-        if job.outcome is not None and not args.force:
+        disc_is_import = job.disc is not None and job.disc.imported
+        if job.outcome is not None and not args.force and not (args.fix_imports and disc_is_import):
             skipped += 1
             continue
 
@@ -228,7 +254,8 @@ def main():
     COUNT(*) FILTER (WHERE makemkv_outcome IS NULL
                         OR makemkv_outcome = 'unknown')            AS makemkv_unknown
   FROM rip_jobs
-  WHERE status != 'cancelled';
+  WHERE status != 'cancelled'
+    AND outcome IS DISTINCT FROM 'imported';
 """)
 
 

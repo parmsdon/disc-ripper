@@ -218,8 +218,10 @@ export default function DriveHealth() {
             <p>
               Outcome counts and success rate are sourced from <code>rip_jobs.outcome</code> (set at job
               completion). Jobs ripped before migration 0036 show <code>outcome = unknown</code> and are
-              excluded from counts but still increment total attempts. Run{" "}
-              <code>python3 scripts/backfill_rip_job_outcomes.py</code> to backfill historical jobs.
+              excluded from counts but still increment total attempts. Imported discs
+              (<code>outcome = imported</code>) are excluded from all counts and rates — they never used a
+              drive. Run <code>python3 scripts/backfill_rip_job_outcomes.py</code> to backfill historical
+              jobs; use <code>--fix-imports</code> to correct already-backfilled imported rows.
             </p>
             <p>
               Read speed is computed from <code>iso_size_bytes</code> per job and shown separately for
