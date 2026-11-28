@@ -520,9 +520,9 @@ function DrivePanel({ drive, onRefresh }) {
       </div>
 
       <div className="drive-row-region">
-        {disc && drive.region_known && (
-          <span className="region-badge">REGION: {formatRegionDisplay(drive.region)}</span>
-        )}
+        <span className="region-badge">
+          REGION: {drive.region_known ? formatRegionDisplay(drive.region) : "?"}
+        </span>
       </div>
 
       <div className="drive-row-action">

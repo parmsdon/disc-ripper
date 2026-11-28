@@ -96,11 +96,11 @@ invalidated (output files deleted), fresh encode jobs are queued.
 
 ### Region badge
 
-A neutral grey **`REGION: N`** badge is shown in the drive identity area (next to the drive
-name), but **only when a disc is in the drive**. When the drive's region code covers all
-eight regions (stored as `12345678`) the badge shows **`REGION: ALL`** instead.
-The badge is hidden when the tray is open, the drive is idle, or the drive region is not
-yet known.
+A neutral grey **`REGION: N`** badge shows the **drive's** region setting (which disc
+regions the drive can play). It is **always visible** on every drive card regardless of
+whether a disc is inserted. When the drive region has not yet been read it shows
+**`REGION: ?`**. When the drive is set to all eight regions (stored as `12345678`) it
+shows **`REGION: ALL`**.
 
 ### Disc label
 
