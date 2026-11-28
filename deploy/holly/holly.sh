@@ -1,31 +1,48 @@
 #!/usr/bin/env bash
-# Manage Samba and Plex containers on holly for one environment (dev or prod).
-# Usage: holly.sh {up|down|restart|status|logs [samba|plex]|pull}
+# Manage Samba and Plex containers on holly for one environment.
+# Usage: holly.sh {dev|prod} {up|down|restart|status|logs [samba|plex]|pull}
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/holly.env"
-SECRETS_FILE="${SCRIPT_DIR}/holly.secrets"
 
+ENV="${1:-}"
+case "$ENV" in
+    dev|prod) shift ;;
+    *)
+        echo "Usage: $(basename "$0") {dev|prod} {up|down|restart|status|logs [samba|plex]|pull}" >&2
+        exit 1
+        ;;
+esac
+
+# Env file: holly.env.<env>; fall back to holly.env for dev (backward compat)
+ENV_FILE="${SCRIPT_DIR}/holly.env.${ENV}"
+if [[ ! -f "$ENV_FILE" && "$ENV" == "dev" && -f "${SCRIPT_DIR}/holly.env" ]]; then
+    ENV_FILE="${SCRIPT_DIR}/holly.env"
+fi
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "Error: $ENV_FILE not found." >&2
-    echo "  cp ${SCRIPT_DIR}/holly.env.example $ENV_FILE  # then edit it" >&2
+    echo "  cp ${SCRIPT_DIR}/holly.env.${ENV}.example $ENV_FILE  # then edit it" >&2
     exit 1
+fi
+
+# Secrets file: holly.secrets.<env>; fall back to holly.secrets for dev (backward compat)
+SECRETS_FILE="${SCRIPT_DIR}/holly.secrets.${ENV}"
+if [[ ! -f "$SECRETS_FILE" && "$ENV" == "dev" && -f "${SCRIPT_DIR}/holly.secrets" ]]; then
+    SECRETS_FILE="${SCRIPT_DIR}/holly.secrets"
 fi
 
 # shellcheck source=/dev/null
 source "$ENV_FILE"
 
-: "${ENV:?ENV not set in holly.env}"
-: "${LIBRARY_PATH:?LIBRARY_PATH not set in holly.env}"
-: "${SAMBA_IP:?SAMBA_IP not set in holly.env}"
-: "${PLEX_IP:?PLEX_IP not set in holly.env}"
-: "${SAMBA_USER:?SAMBA_USER not set in holly.env}"
-: "${SAMBA_UID:?SAMBA_UID not set in holly.env}"
-: "${PLEX_CONFIG_PATH:?PLEX_CONFIG_PATH not set in holly.env}"
-: "${PLEX_TRANSCODE_PATH:?PLEX_TRANSCODE_PATH not set in holly.env}"
-: "${PLEX_ALLOWED_NETWORKS:?PLEX_ALLOWED_NETWORKS not set in holly.env}"
-: "${TZ:?TZ not set in holly.env}"
+: "${LIBRARY_PATH:?LIBRARY_PATH not set in $ENV_FILE}"
+: "${SAMBA_IP:?SAMBA_IP not set in $ENV_FILE}"
+: "${PLEX_IP:?PLEX_IP not set in $ENV_FILE}"
+: "${SAMBA_USER:?SAMBA_USER not set in $ENV_FILE}"
+: "${SAMBA_UID:?SAMBA_UID not set in $ENV_FILE}"
+: "${PLEX_CONFIG_PATH:?PLEX_CONFIG_PATH not set in $ENV_FILE}"
+: "${PLEX_TRANSCODE_PATH:?PLEX_TRANSCODE_PATH not set in $ENV_FILE}"
+: "${PLEX_ALLOWED_NETWORKS:?PLEX_ALLOWED_NETWORKS not set in $ENV_FILE}"
+: "${TZ:?TZ not set in $ENV_FILE}"
 
 SAMBA_CONTAINER="discripper-samba-${ENV}"
 PLEX_CONTAINER="discripper-plex-${ENV}"
@@ -48,7 +65,7 @@ validate_paths() {
     fi
     if [[ ! -f "$SECRETS_FILE" ]]; then
         echo "Error: $SECRETS_FILE not found." >&2
-        echo "  cp ${SCRIPT_DIR}/holly.secrets.example $SECRETS_FILE" >&2
+        echo "  cp ${SCRIPT_DIR}/holly.secrets.${ENV}.example $SECRETS_FILE" >&2
         echo "  # Edit it, set the real password, then:" >&2
         echo "  chmod 600 $SECRETS_FILE" >&2
         exit 1
@@ -74,6 +91,16 @@ cmd_up() {
         )
     fi
 
+    # Optional identity args: workgroup and NetBIOS hostname to distinguish dev vs prod.
+    samba_identity_args=()
+    if [[ -n "${SAMBA_WORKGROUP:-}" ]]; then
+        samba_identity_args+=(-e "SAMBA_GLOBAL_CONFIG_workgroup=${SAMBA_WORKGROUP}")
+    fi
+    samba_hostname_args=()
+    if [[ -n "${SAMBA_HOSTNAME:-}" ]]; then
+        samba_hostname_args=(--hostname "$SAMBA_HOSTNAME")
+    fi
+
     echo "Starting $SAMBA_CONTAINER ..."
     # Samba image: ghcr.io/servercontainers/samba (last changelog: 2026-07-11)
     # Configuration is entirely via environment variables; no separate config file needed.
@@ -84,6 +111,7 @@ cmd_up() {
         --net=staticnet \
         --ip="$SAMBA_IP" \
         --restart="$RESTART_POLICY" \
+        "${samba_hostname_args[@]}" \
         --env-file "$SECRETS_FILE" \
         -e "UID_${SAMBA_USER}=${SAMBA_UID}" \
         -e "SAMBA_VOLUME_CONFIG_flac=[flac]; path=/mnt/library/cd/flac; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
@@ -92,6 +120,7 @@ cmd_up() {
         -e "SAMBA_VOLUME_CONFIG_iphone=[iphone]; path=/mnt/library/dvd/iphone; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
         -e "SAMBA_VOLUME_CONFIG_plex=[plex]; path=/mnt/library/dvd/plex; valid users = ${SAMBA_USER}; guest ok = no; read only = yes; browseable = yes" \
         "${samba_protocol_args[@]}" \
+        "${samba_identity_args[@]}" \
         -v "${LIBRARY_PATH}:/mnt/library:ro" \
         ghcr.io/servercontainers/samba:a3.24.4-s4.23.8-r0
 
@@ -201,7 +230,7 @@ case "$CMD" in
     logs)     cmd_logs "$@" ;;
     pull)     cmd_pull ;;
     *)
-        echo "Usage: $(basename "$0") {up|down|restart|status|logs [samba|plex]|pull}" >&2
+        echo "Usage: $(basename "$0") {dev|prod} {up|down|restart|status|logs [samba|plex]|pull}" >&2
         exit 1
         ;;
 esac
