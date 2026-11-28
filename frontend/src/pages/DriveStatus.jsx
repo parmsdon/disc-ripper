@@ -69,7 +69,9 @@ function RippingToggle({ rippingEnabled, saving, onToggle }) {
 }
 
 function formatRegionDisplay(region) {
-  return region ? region.replace(/\s+/g, "") : region;
+  if (!region) return region;
+  const stripped = region.replace(/\s+/g, "");
+  return stripped === "12345678" ? "ALL" : stripped;
 }
 
 function RegionBadge({ drive, onRefresh }) {
@@ -541,6 +543,9 @@ function DrivePanel({ drive, onRefresh }) {
           <div className="drive-label">{drive.label || drive.device_path}</div>
           <div className="device-path">{drive.device_path}</div>
         </div>
+        {disc && drive.region_known && (
+          <span className="region-badge">REGION: {formatRegionDisplay(drive.region)}</span>
+        )}
       </div>
 
       <div className="drive-row-action">

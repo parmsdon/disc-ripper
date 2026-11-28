@@ -788,6 +788,19 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.region-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .drive-row-action {
   display: flex;
   flex-direction: column;

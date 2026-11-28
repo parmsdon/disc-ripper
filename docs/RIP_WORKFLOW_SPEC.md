@@ -94,6 +94,14 @@ invalidated (output files deleted), fresh encode jobs are queued.
 
 ## Drive card
 
+### Region badge
+
+A neutral grey **`REGION: N`** badge is shown in the drive identity area (next to the drive
+name), but **only when a disc is in the drive**. When the drive's region code covers all
+eight regions (stored as `12345678`) the badge shows **`REGION: ALL`** instead.
+The badge is hidden when the tray is open, the drive is idle, or the drive region is not
+yet known.
+
 ### Disc label
 
 The disc line shows **`#<id> · <temp_name>`**. The `volume_label` and `disc_fingerprint`
@@ -341,3 +349,4 @@ The following do not exist and must not be added without updating this document:
 - Method pills beyond the three listed above
 - Buttons on the drive card beyond Cancel
 - Auto-eject after rip completion
+- Additional badges on the drive card beyond the region badge
