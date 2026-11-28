@@ -105,7 +105,6 @@ export const api = {
   discDeletePreview: (discId) => request(`/discs/${discId}/delete-preview`),
   deleteDisc: (discId, moveToLegacy = false) =>
     request(`/discs/${discId}${moveToLegacy ? "?move_to_legacy=1" : ""}`, { method: "DELETE" }),
-  retryRip: (discId) => request(`/discs/${discId}/retry-rip`, { method: "POST" }),
   retryLookup: (discId) => request(`/discs/${discId}/retry-lookup`, { method: "POST" }),
   cancelRip: (discId) => request(`/discs/${discId}/cancel-rip`, { method: "POST" }),
   getMbNotFound: () => request("/health/mb-not-found"),

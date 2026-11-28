@@ -50,7 +50,6 @@ export default function CdCatalogue() {
   const [search, setSearch] = useState("");
   const [reidentifyDisc, setReidentifyDisc] = useState(null);
   const [reidentifyLoadingId, setReidentifyLoadingId] = useState(null);
-  const [retryRipLoadingId, setRetryRipLoadingId] = useState(null);
   const [retryLookupLoadingId, setRetryLookupLoadingId] = useState(null);
   const [retryLookupError, setRetryLookupError] = useState(null);
   const [artworkFetchingIds, setArtworkFetchingIds] = useState(new Set());
@@ -67,18 +66,6 @@ export default function CdCatalogue() {
     const handle = setTimeout(() => fetchRows(filter, dirty, search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [filter, dirty, search, fetchRows]);
-
-  async function handleRetryRip(discId) {
-    setRetryRipLoadingId(discId);
-    try {
-      await api.retryRip(discId);
-      fetchRows(filter, dirty, search);
-    } catch (e) {
-      console.error("Retry rip failed:", e);
-    } finally {
-      setRetryRipLoadingId(null);
-    }
-  }
 
   async function handleRetryLookup(discId) {
     setRetryLookupLoadingId(discId);
@@ -242,19 +229,6 @@ export default function CdCatalogue() {
                         : <span className="catalogue-dim">—</span>}
                     </td>
                     <td className="catalogue-actions-cell">
-                      {row.disc_id && (
-                        row.disc_status === "error" ||
-                        row.disc_rip_quality === "dirty"
-                      ) && (
-                        <button
-                          className="catalogue-reidentify-btn"
-                          onClick={() => handleRetryRip(row.disc_id)}
-                          disabled={retryRipLoadingId === row.disc_id}
-                          title="Retry the rip — re-insert the disc to trigger automatically, or click to queue now"
-                        >
-                          {retryRipLoadingId === row.disc_id ? "…" : "Retry Rip"}
-                        </button>
-                      )}
                       {row.identified && (
                         <button
                           className="catalogue-reidentify-btn"

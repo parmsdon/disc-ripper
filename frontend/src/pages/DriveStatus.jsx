@@ -317,32 +317,6 @@ function CancelRipButton({ disc, onRefresh }) {
   );
 }
 
-function RetryRipButton({ disc, onRefresh }) {
-  const [retrying, setRetrying] = useState(false);
-
-  async function handleClick() {
-    setRetrying(true);
-    try {
-      await api.retryRip(disc.id);
-      onRefresh();
-    } catch (e) {
-      console.error("Retry rip failed:", e);
-    } finally {
-      setRetrying(false);
-    }
-  }
-
-  return (
-    <button
-      className="retry-rip-btn"
-      onClick={handleClick}
-      disabled={retrying}
-      title="Retry the rip for this disc"
-    >
-      {retrying ? "Retrying…" : "Retry Rip"}
-    </button>
-  );
-}
 
 function DeleteDiscButton({ disc, onRefresh }) {
   const [open, setOpen] = useState(false);
@@ -543,6 +517,9 @@ function DrivePanel({ drive, onRefresh }) {
           <div className="drive-label">{drive.label || drive.device_path}</div>
           <div className="device-path">{drive.device_path}</div>
         </div>
+      </div>
+
+      <div className="drive-row-region">
         {disc && drive.region_known && (
           <span className="region-badge">REGION: {formatRegionDisplay(drive.region)}</span>
         )}

@@ -545,34 +545,6 @@ def get_cover(disc_id):
     return send_file(str(cover_path), mimetype="image/jpeg")
 
 
-@discs_bp.route("/<int:disc_id>/retry-rip", methods=["POST"])
-def retry_rip(disc_id):
-    Session = current_app.config["DB_SESSION"]
-    session = Session()
-
-    disc = session.get(Disc, disc_id)
-    if disc is None:
-        return jsonify({"error": "Disc not found"}), 404
-
-    if disc.status != DiscStatus.error and disc.rip_quality != "dirty":
-        return jsonify({"error": "Disc is not in a retryable state (must be status=error or rip_quality=dirty)"}), 400
-
-    disc.status = DiscStatus.queued
-    disc.error_message = None
-    disc.rip_quality = None
-    disc.needs_rerip = False
-    disc.rip_attempt_count = (disc.rip_attempt_count or 1) + 1
-
-    if disc.type == DiscType.cd:
-        for track in disc.tracks:
-            track.rip_quality = None
-
-    session.add(RipJob(disc_id=disc.id, drive_id=disc.drive_id, status=JobStatus.queued))
-    session.commit()
-    session.refresh(disc)
-    return jsonify(_disc_to_dict(disc))
-
-
 @discs_bp.route("/<int:disc_id>/retry-lookup", methods=["POST"])
 def retry_lookup(disc_id):
     Session = current_app.config["DB_SESSION"]

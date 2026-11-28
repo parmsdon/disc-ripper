@@ -157,7 +157,13 @@ Same lock behaviour in the Identification queue for discs ejected unconfirmed.
 ### Action buttons
 
 - **Cancel** (shown during `ripping` / `building` only).
-- No other buttons on the drive card. Delete and Retry Rip are in the catalogue pages.
+- No other buttons on the drive card.
+
+### Catalogue actions
+
+Catalogues have no rip actions. The only action on a disc row is **Delete**.
+Re-ripping happens by re-inserting the disc; the ripper service detects the
+dirty/failed state and queues a new rip job automatically.
 
 ### Eject
 
@@ -350,3 +356,4 @@ The following do not exist and must not be added without updating this document:
 - Buttons on the drive card beyond Cancel
 - Auto-eject after rip completion
 - Additional badges on the drive card beyond the region badge
+- Rip actions (Retry Rip or similar) in any catalogue view

@@ -634,25 +634,6 @@ body {
   cursor: not-allowed;
 }
 
-.retry-rip-btn {
-  font-size: 11px;
-  padding: 2px 8px;
-  background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.retry-rip-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.1);
-}
-
-.retry-rip-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 .error-hint {
   font-size: 11px;
@@ -741,7 +722,7 @@ button:disabled {
 
 .drive-row {
   display: grid;
-  grid-template-columns: 140px 100px minmax(160px, 1fr) 300px 36px;
+  grid-template-columns: 140px 80px 100px minmax(160px, 1fr) 300px 36px;
   align-items: center;
   gap: 14px;
   background: var(--panel);
@@ -760,6 +741,11 @@ button:disabled {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.drive-row-region {
+  display: flex;
+  align-items: center;
 }
 
 .drive-icon {
