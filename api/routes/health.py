@@ -220,9 +220,10 @@ def drive_health():
     Session = current_app.config["DB_SESSION"]
     session = Session()
 
-    env = flask_request.args.get("env", "prod")
+    app_env = current_app.config["DISCRIPPER_CFG"].get("environment", "prod")
+    env = flask_request.args.get("env", app_env)
     if env not in ("dev", "prod"):
-        env = "prod"
+        env = app_env
 
     # ── Per-drive aggregates ───────────────────────────────────────────────────
     drive_rows = session.execute(text("""

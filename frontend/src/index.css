@@ -736,7 +736,7 @@ button:disabled {
 .drive-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .drive-row {
@@ -747,11 +747,11 @@ button:disabled {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
-  padding: 8px 14px;
+  padding: 6px 14px;
   /* Fixed height: all states (idle, ripping, error, protected, etc.) share
      the same row height so 9 drives fit on a 1920×1080 screen without
      scrolling. overflow hidden clips anything that exceeds the box. */
-  height: 80px;
+  height: 68px;
   overflow: hidden;
 }
 
@@ -3060,32 +3060,10 @@ button:disabled {
   margin: 0;
 }
 
-.drive-health-env-toggle {
-  display: flex;
-  gap: 4px;
-}
-
-.env-toggle-btn {
-  padding: 4px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 4px;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.env-toggle-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
 .drive-health-cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 24px;
 }
 
@@ -3093,10 +3071,10 @@ button:disabled {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .drive-health-highlight {
@@ -3105,8 +3083,9 @@ button:disabled {
 
 .drive-health-card-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .drive-health-warn-icon {
@@ -3129,37 +3108,31 @@ button:disabled {
 
 .drive-health-tiles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 5px;
 }
 
 .drive-health-tiles .stat {
-  width: 130px;
+  width: 90px;
   flex-shrink: 0;
-  padding: 8px 10px;
+  padding: 6px 8px;
 }
 
 .drive-health-tiles .stat .value {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.1;
 }
 
 .drive-health-tiles .stat .label {
-  font-size: 11px;
+  font-size: 10px;
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.drive-health-strip-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  letter-spacing: 0.03em;
 }
 
 .drive-health-strip-label {

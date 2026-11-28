@@ -74,15 +74,14 @@ function DriveCard({ drive }) {
     : sr >= 0.7 ? "warn"
     : "error";
 
-  const hasDbSpeed = drive.avg_read_speed_dvdbackup_mbps != null
-                  || drive.avg_read_speed_makemkv_mbps != null;
-
   return (
     <div className={`drive-health-card${drive.highlight ? " drive-health-highlight" : ""}`}>
       <div className="drive-health-card-header">
         {drive.highlight && <span className="drive-health-warn-icon" title="Success rate notably below fleet average">⚠</span>}
         <span className="drive-health-card-label">{drive.label}</span>
         <span className="drive-health-card-device">{drive.device_path}</span>
+        <span className="drive-health-strip-label">Last {drive.last_10_outcomes.length}:</span>
+        <OutcomeStrip outcomes={drive.last_10_outcomes} />
       </div>
 
       <div className="drive-health-tiles">
@@ -96,27 +95,19 @@ function DriveCard({ drive }) {
         {drive.timed_out > 0 && (
           <Tile value={drive.timed_out} label="Timed out" accent="warn" />
         )}
-        <Tile value={fmtPct(sr)} label="Success rate" accent={srAccent} />
+        <Tile value={fmtPct(sr)} label="Success" accent={srAccent} />
         {drive.avg_clean_dvdbackup_seconds != null && (
-          <Tile value={fmtDuration(drive.avg_clean_dvdbackup_seconds)} label="Avg dvdbackup time" />
+          <Tile value={fmtDuration(drive.avg_clean_dvdbackup_seconds)} label="dvdbackup avg" />
         )}
         {drive.avg_clean_makemkv_seconds != null && (
-          <Tile value={fmtDuration(drive.avg_clean_makemkv_seconds)} label="Avg MakeMKV time" />
+          <Tile value={fmtDuration(drive.avg_clean_makemkv_seconds)} label="MakeMKV avg" />
         )}
         {drive.avg_read_speed_dvdbackup_mbps != null && (
-          <Tile value={fmtSpeed(drive.avg_read_speed_dvdbackup_mbps)} label="dvdbackup speed" />
+          <Tile value={fmtSpeed(drive.avg_read_speed_dvdbackup_mbps)} label="dvdbackup MB/s" />
         )}
         {drive.avg_read_speed_makemkv_mbps != null && (
-          <Tile value={fmtSpeed(drive.avg_read_speed_makemkv_mbps)} label="MakeMKV speed" />
+          <Tile value={fmtSpeed(drive.avg_read_speed_makemkv_mbps)} label="MakeMKV MB/s" />
         )}
-        {!hasDbSpeed && (
-          <Tile value="—" label="Read speed" />
-        )}
-      </div>
-
-      <div className="drive-health-strip-row">
-        <span className="drive-health-strip-label">Last {drive.last_10_outcomes.length}:</span>
-        <OutcomeStrip outcomes={drive.last_10_outcomes} />
       </div>
 
       {drive.failed_here_ok_elsewhere > 0 && (
@@ -164,7 +155,6 @@ function RetryTable({ retries }) {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function DriveHealth() {
-  const [env, setEnv] = useState("prod");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -172,26 +162,16 @@ export default function DriveHealth() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    api.getDriveHealth(env)
+    api.getDriveHealth()
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [env]);
+  }, []);
 
   return (
     <div className="page-content">
       <div className="drive-health-header">
         <h2 className="page-title">Drive Health</h2>
-        <div className="drive-health-env-toggle">
-          <button
-            className={`env-toggle-btn${env === "prod" ? " active" : ""}`}
-            onClick={() => setEnv("prod")}
-          >Prod</button>
-          <button
-            className={`env-toggle-btn${env === "dev" ? " active" : ""}`}
-            onClick={() => setEnv("dev")}
-          >Dev</button>
-        </div>
       </div>
 
       {loading && <p className="drive-health-loading">Loading…</p>}
@@ -200,7 +180,7 @@ export default function DriveHealth() {
       {data && !loading && (
         <>
           {data.drives.length === 0 ? (
-            <p className="drive-health-no-data">No active drives found for {env}.</p>
+            <p className="drive-health-no-data">No active drives found.</p>
           ) : (
             <div className="drive-health-cards">
               {data.drives.map((d) => <DriveCard key={d.drive_id} drive={d} />)}

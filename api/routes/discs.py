@@ -718,8 +718,11 @@ def delete_disc(disc_id):
     imported_filename = disc.imported_filename
     encode_output_paths = [j.output_path for j in disc.encode_jobs if j.output_path]
 
-    # Delete disc row; cascade removes rip_jobs, encode_jobs, tracks, lookup_candidates.
-    # rip_log_events FK uses ondelete="SET NULL" so log entries are kept, unlinked.
+    # Delete disc row.
+    # rip_jobs.disc_id FK uses ondelete="SET NULL" — rip history is kept, disc_id becomes
+    # NULL, so Drive Health counts are unaffected by disc deletes.
+    # rip_log_events FK also uses ondelete="SET NULL".
+    # encode_jobs, tracks, lookup_candidates are removed by cascade.
     session.delete(disc)
     session.commit()
 

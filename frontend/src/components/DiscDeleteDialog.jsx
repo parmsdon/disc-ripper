@@ -83,9 +83,6 @@ export default function DiscDeleteDialog({ discId, onClose, onDeleted }) {
               {!isBlocked && (
                 <>
                   <ul className="delete-disc-list">
-                    {preview.rip_job_count > 0 && (
-                      <li>{preview.rip_job_count} rip job{preview.rip_job_count !== 1 ? "s" : ""}</li>
-                    )}
                     {preview.encode_job_count > 0 && (
                       <li>
                         {preview.encode_job_count} encode job{preview.encode_job_count !== 1 ? "s" : ""}
@@ -109,7 +106,12 @@ export default function DiscDeleteDialog({ discId, onClose, onDeleted }) {
                     )}
                   </ul>
 
-                  <p className="delete-disc-note">Rip log entries are kept.</p>
+                  <p className="delete-disc-note">
+                    Rip log entries are kept.
+                    {preview.rip_job_count > 0 && (
+                      <> Rip history ({preview.rip_job_count} job{preview.rip_job_count !== 1 ? "s" : ""}) is kept — drive stats are preserved.</>
+                    )}
+                  </p>
 
                   {preview.legacy_option && (
                     <div className="delete-disc-legacy">

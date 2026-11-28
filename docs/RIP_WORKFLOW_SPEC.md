@@ -253,7 +253,8 @@ is skipped and the rip proceeds — an inconclusive check never blocks a rip.
 ## Drive Health tab
 
 Read-only statistics tab showing per-drive rip quality and cross-drive retry analysis.
-An env selector (Prod / Dev, default Prod) filters the data by `drives.env`.
+Each app deployment shows only its own environment's drives (filtered by `drives.env`
+matching the server's `DISCRIPPER_ENV`). No env toggle — the app always shows itself.
 
 ### Per-job outcome columns on `rip_jobs`
 
@@ -261,7 +262,7 @@ The Drive Health tab is based on first-class columns added in migration 0036:
 
 | Column | Values | Populated by |
 |---|---|---|
-| `outcome` | `clean / dirty / failed / cancelled` | Ripper service at job completion |
+| `outcome` | `clean / dirty / failed / cancelled / imported` | Ripper service at job completion; backfill script for historical rows |
 | `dvdbackup_outcome` | `clean / dirty / timed_out / failed / not_run / unknown` | Ripper service at job completion |
 | `makemkv_outcome` | `clean / failed / not_run / unknown` | Ripper service at job completion |
 | `dvdbackup_seconds` | float, nullable | Time from job start to MakeMKV fallback (or job end), null if dvdbackup not run |
@@ -275,7 +276,9 @@ shows `outcome = failed` on the first job and `outcome = clean` on the second.
 **Backfill**: run `python3 scripts/backfill_rip_job_outcomes.py` once per environment
 to populate historical jobs as far as the `rip_log_events` record allows.  Jobs that
 cannot be determined get `outcome = unknown` and are excluded from count totals (but
-still increment `total_attempts`).
+still increment `total_attempts`).  Imported discs get `outcome = imported` and are
+excluded from all counts and rates.  Use `--fix-imports` to correct rows that were
+already backfilled before this logic was added.
 
 ### Per-drive statistics
 
@@ -283,7 +286,7 @@ Each drive card shows:
 
 | Metric | Source | Notes |
 |---|---|---|
-| Total attempts | `rip_jobs WHERE outcome != 'cancelled'` | Cancelled excluded everywhere |
+| Total attempts | `rip_jobs WHERE outcome NOT IN ('cancelled', 'imported')` | Cancelled and imported excluded everywhere |
 | Clean | `rip_jobs.outcome = clean` | |
 | Dirty | `rip_jobs.outcome = dirty` | |
 | Failed | `rip_jobs.outcome = failed` | |
@@ -321,6 +324,11 @@ grouped by the failing drive.
   aggregated here.
 - **encode jobs**: not drive-specific; use the Health tab encode counters.
 - **cancelled jobs**: excluded from all counts and rates.
+- **imported discs**: jobs with `outcome = imported` are excluded from all counts and
+  rates — they were never ripped through a physical drive.
+- **deleted discs**: deleting a disc sets `rip_jobs.disc_id = NULL` (FK is ON DELETE
+  SET NULL). The rip_job rows are kept with their `drive_id`, `outcome`, and timing
+  data intact, so Drive Health counts are not affected by disc deletes.
 
 ---
 

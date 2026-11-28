@@ -254,7 +254,7 @@ class Disc(Base):
     catalog = relationship("Catalog", back_populates="discs")
     tracks = relationship("CDTrack", back_populates="disc", cascade="all, delete-orphan")
     lookup_candidates = relationship("LookupCandidate", back_populates="disc", cascade="all, delete-orphan")
-    rip_jobs = relationship("RipJob", back_populates="disc", cascade="all, delete-orphan")
+    rip_jobs = relationship("RipJob", back_populates="disc", passive_deletes=True)
     encode_jobs = relationship("EncodeJob", back_populates="disc", cascade="all, delete-orphan")
 
 
@@ -323,7 +323,7 @@ class RipJob(Base):
     __tablename__ = "rip_jobs"
 
     id = Column(Integer, primary_key=True)
-    disc_id = Column(Integer, ForeignKey("discs.id"), nullable=False)
+    disc_id = Column(Integer, ForeignKey("discs.id", ondelete="SET NULL"), nullable=True)
     drive_id = Column(Integer, ForeignKey("drives.id"), nullable=True)
 
     status = Column(Enum(JobStatus), default=JobStatus.queued, nullable=False)
