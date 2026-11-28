@@ -102,12 +102,17 @@ whether a disc is inserted. When the drive region has not yet been read it shows
 **`REGION: ?`**. When the drive is set to all eight regions (stored as `12345678`) it
 shows **`REGION: ALL`**.
 
-When the region is unknown, a small **"Read region"** button appears next to the badge.
-The button is disabled (with tooltip "Insert a disc to read the drive region") when the
-drive is empty, because reading the drive region requires a disc to be present. Once the
-region is known the button disappears. The button queues a `read_region` pending action
-picked up by the ripper service on its next poll; while the read is in progress a
-"Reading…" label replaces the button.
+A small read-region button appears next to the badge **only when ripping is stopped**
+(`ripping_enabled = false`). It is hidden while ripping is enabled.
+
+- Label is **"Read region"** when the drive region is unknown, **"Re-read region"** when
+  a region is already known.
+- Disabled with tooltip "Insert a disc to read the drive region" when the drive is empty,
+  because reading the drive region requires a disc to be present.
+- While the pending action is in progress (`pending_action = read_region`) a **"Reading…"**
+  label replaces the button (shown regardless of `ripping_enabled`).
+- The button queues a `read_region` pending action picked up by the ripper service on its
+  next poll; once the region is known the button returns to its normal (non-pending) state.
 
 ### Disc label
 

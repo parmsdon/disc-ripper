@@ -485,7 +485,7 @@ function MbPopover({ candidates, onSelect, onClose }) {
   );
 }
 
-function DrivePanel({ drive, onRefresh }) {
+function DrivePanel({ drive, onRefresh, rippingEnabled }) {
   // An open tray can't have a disc actually loaded, no matter what
   // current_disc the backend still has on record for it (e.g. ejection
   // is in flight, or the disc was removed before the next API refresh) -
@@ -523,18 +523,24 @@ function DrivePanel({ drive, onRefresh }) {
         <span className="region-badge">
           REGION: {drive.region_known ? formatRegionDisplay(drive.region) : "?"}
         </span>
-        {!drive.region_known && drive.pending_action !== "read_region" && (
+        {drive.pending_action === "read_region" ? (
+          <span className="pending-action-label">Reading…</span>
+        ) : !rippingEnabled && (
           <button
             className="region-read-btn"
-            onClick={async () => { await api.startRegionRead(drive.id); onRefresh(); }}
+            onClick={async () => {
+              await (drive.region_known
+                ? api.rereadRegion(drive.id)
+                : api.startRegionRead(drive.id));
+              onRefresh();
+            }}
             disabled={!drive.media_present}
-            title={drive.media_present ? "Read drive region" : "Insert a disc to read the drive region"}
+            title={drive.media_present
+              ? (drive.region_known ? "Re-read drive region" : "Read drive region")
+              : "Insert a disc to read the drive region"}
           >
-            Read region
+            {drive.region_known ? "Re-read region" : "Read region"}
           </button>
-        )}
-        {drive.pending_action === "read_region" && (
-          <span className="pending-action-label">Reading…</span>
         )}
       </div>
 
@@ -670,6 +676,7 @@ export default function DriveStatus() {
             key={drive.id}
             drive={drive}
             onRefresh={fetchDrives}
+            rippingEnabled={rippingEnabled}
           />
         ))}
       </div>
