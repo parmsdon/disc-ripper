@@ -202,6 +202,12 @@ def main():
     unknowns = 0
 
     for job in jobs:
+        # Disc was deleted (migration 0037: disc_id SET NULL). Outcome is already
+        # finalised on the rip_job row; there is no disc to derive from, so skip.
+        if job.disc_id is None:
+            skipped += 1
+            continue
+
         disc_is_import = job.disc is not None and job.disc.imported
         if job.outcome is not None and not args.force and not (args.fix_imports and disc_is_import):
             skipped += 1
