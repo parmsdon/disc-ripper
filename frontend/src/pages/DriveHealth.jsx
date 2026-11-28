@@ -90,6 +90,9 @@ function DriveCard({ drive }) {
         <Tile value={drive.clean}          label="Clean"    accent="good" />
         <Tile value={drive.dirty}          label="Dirty"    accent={drive.dirty > 0 ? "warn" : null} />
         <Tile value={drive.failed}         label="Failed"   accent={drive.failed > 0 ? "error" : null} />
+        {drive.unknown > 0 && (
+          <Tile value={drive.unknown} label="Unknown" />
+        )}
         {drive.timed_out > 0 && (
           <Tile value={drive.timed_out} label="Timed out" accent="warn" />
         )}

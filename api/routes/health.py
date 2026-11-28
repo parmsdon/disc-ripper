@@ -230,11 +230,13 @@ def drive_health():
             d.id               AS drive_id,
             d.label,
             d.device_path,
-            COUNT(rj.id) FILTER (WHERE rj.outcome != 'cancelled'
-                                    OR rj.outcome IS NULL)::int           AS total_attempts,
+            COUNT(rj.id) FILTER (WHERE rj.outcome IS NULL
+                                    OR rj.outcome != 'cancelled')::int    AS total_attempts,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'clean')::int         AS clean_count,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'dirty')::int         AS dirty_count,
             COUNT(rj.id) FILTER (WHERE rj.outcome = 'failed')::int        AS failed_count,
+            COUNT(rj.id) FILTER (WHERE rj.outcome IS NULL
+                                    OR rj.outcome = 'unknown')::int       AS unknown_count,
             COUNT(rj.id) FILTER (WHERE rj.dvdbackup_outcome = 'timed_out')::int
                                                                            AS timed_out_count,
             AVG(rj.dvdbackup_seconds)
@@ -336,12 +338,14 @@ def drive_health():
 
     drives = []
     for r in drive_rows:
-        total  = r["total_attempts"] or 0
-        clean  = r["clean_count"]  or 0
-        dirty  = r["dirty_count"]  or 0
-        failed = r["failed_count"] or 0
-        good   = clean + dirty
-        success_rate = round(good / total, 3) if total > 0 else None
+        total   = r["total_attempts"] or 0
+        clean   = r["clean_count"]   or 0
+        dirty   = r["dirty_count"]   or 0
+        failed  = r["failed_count"]  or 0
+        unknown = r["unknown_count"] or 0
+        good    = clean + dirty
+        denom   = clean + dirty + failed
+        success_rate = round(good / denom, 3) if denom > 0 else None
 
         drives.append({
             "drive_id": r["drive_id"],
@@ -351,6 +355,7 @@ def drive_health():
             "clean": clean,
             "dirty": dirty,
             "failed": failed,
+            "unknown": unknown,
             "timed_out": r["timed_out_count"] or 0,
             "failed_here_ok_elsewhere": rescued_by_drive.get(r["drive_id"], 0),
             "success_rate": success_rate,
